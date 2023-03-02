@@ -1,1580 +1,2384 @@
-(with-basic-clients (1 2 3)
-  (let* ((d0 (basic-depot))
-         (d1 (basic-depot 1))
-         (obj1 (make-instance 'has-one-depot :depot d0))
-         (obj2 (make-instance 'has-an-end-depot
-                              :depot d0
-                              :end-depot d1))
+(with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                            (5 0 6 7 2 4)  ;1
+                                            (1 8 0 3 9 1)  ;2
+                                            (4 5 1 0 5 7)  ;3
+                                            (4 5 1 5 0 6)  ;4
+                                            (1 5 7 6 9 0)) ;5
+                                            ;0 1 2 3 4 5 
+                                :demands '(20 10 15 40 30)
+                                :capacity 40)
+  (let* ((s1 nil))
+
+    (setf s1 (make-initial-solution-for-cvrp-deterministic p1))
+    (format t "Type-of s1: ~a~%" (type-of s1))
+    (format t "Infinite-fleet s1: ~a~%" (subtypep (type-of s1)
+                                                  'has-infinite-fleet))
+    (pp-solution s1 t) (terpri)))
+
+(with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                            (5 0 6 7 2 4)  ;1
+                                            (1 8 0 3 9 1)  ;2
+                                            (4 5 1 0 5 7)  ;3
+                                            (4 5 1 5 0 6)  ;4
+                                            (1 5 7 6 9 0)) ;5
+                                            ;0 1 2 3 4 5 
+                                :demands '(20 10 15 40 30)
+                                :capacity 40)
+  (let* ((s1 nil))
+
+    (setf s1 (make-initial-solution-for-cvrp-random p1))
+    (format t "Type-of s1: ~a~%" (type-of s1))
+    (format t "Infinite-fleet s1: ~a~%" (subtypep (type-of s1)
+                                                  'has-infinite-fleet))
+    (pp-solution s1 t) (terpri)))
+
+(with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                            (5 0 6 7 2 4)  ;1
+                                            (1 8 0 3 9 1)  ;2
+                                            (4 5 1 0 5 7)  ;3
+                                            (4 5 1 5 0 6)  ;4
+                                            (1 5 7 6 9 0)) ;5
+                                            ;0 1 2 3 4 5 
+                                :demands '(20 10 15 40 30)
+                                :capacity 40)
+  (let* ((s1 nil))
+
+    (setf s1 (make-initial-random-cvrp-solution p1))
+    (pp-solution s1 t) (terpri)))
+
+(with-finite-fleet-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                                 (5 0 6 7 2 4)  ;1
+                                                 (1 8 0 3 9 1)  ;2
+                                                 (4 5 1 0 5 7)  ;3
+                                                 (4 5 1 5 0 6)  ;4
+                                                 (1 5 7 6 9 0)) ;5
+                                                 ;0 1 2 3 4 5 
+                                    :demands '(20 10 15 40 30)
+                                    :capacities `(40 40 50))
+  (let* ((s1 nil))
+
+    (setf s1 (make-initial-solution-for-finite-fleet-cvrp-deterministic
+              p1))
+    (pp-solution s1 t) (terpri)))
+
+(let* ((s1 nil)
+       (action (basic-cvrp-action)))
+
+    (setf s1 (make-initial-solution-for-finite-fleet-cvrp-deterministic
+              ff-a-n33-k6-problem))
+    (pp-solution s1 t) (terpri)
+    ;; let's simulate the solution
+    (simulate-solution s1 ff-a-n33-k6-problem action)
+    (format t "Distance: ~a~%Penalty: ~a~%"
+            (total-distance action)
+            (total-penalty action)))
+
+(with-finite-fleet-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                                 (5 0 6 7 2 4)  ;1
+                                                 (1 8 0 3 9 1)  ;2
+                                                 (4 5 1 0 5 7)  ;3
+                                                 (4 5 1 5 0 6)  ;4
+                                                 (1 5 7 6 9 0)) ;5
+                                                 ;0 1 2 3 4 5 
+                                    :demands '(20 10 15 40 30)
+                                    :capacities `(40 40 50))
+  (let* ((s1 nil))
+
+    (setf s1 (make-initial-solution-for-finite-fleet-cvrp-random
+              p1))
+    (pp-solution s1 t) (terpri)))
+
+(with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                    (5 0 6 7 2 4)  ;1
+                                    (1 8 0 3 9 1)  ;2
+                                    (4 5 1 0 5 7)  ;3
+                                    (4 5 1 5 0 6)  ;4
+                                    (1 5 7 6 9 0)) ;5
+                                    ;0 1 2 3 4 5 
+                                    :demands '(10 10 15 40 20)
+                                    :capacity 40)
+  (with-basic-cvrp-solution (s1 ((2 4 5) (3) (1)) p1)
+    (let* ((best-solution-exhaustive nil)
+           (action (delta-cvrp-action))
+           (results nil)
+           (cvrp-action (basic-cvrp-action 
+                         :penalty-factor 1000))
+           (criterion-code `((select-route r1)
+                             (select-client c1 from r1)
+                             (select-route r2)
+                             (select-client c2 from r2)
+                             (swap-clients c1 c2)))
+
+           (rarac-exhaustive
+            (make-neighborhood-criterion
+             criterion-code
+             +exhaustive-search-strategy+
+             +best-improvement+))
+           )
+
+      (bformat t "Testing DNS")
+
+
+
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (+ (total-distance cvrp-action)
+                         (total-penalty cvrp-action)))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-solution s1 t)
+
+      (setf results (descent-neighborhood-search 
+                     p1 s1 ref-best
+                     :max-iter 30
+                     :action action))
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))      
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through exhaustive: ~a~%"
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor through exhaustive search:~%")
+            (pp-solution best-solution-exhaustive t)
+
+            ;; (format t "Best value through Yoel's: ~a~%"
+            ;;         (solution-cost best-solution-exhaustive
+            ;;                        p1 cvrp-action))
+            ;; (format t "action: ~a~%" cvrp-action)
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))
+
+      ;; (if best-solution-first-improvement
+      ;;     (then
+      ;;       (format t "Best value through 1st: ~a~%"
+      ;;               (cost best-solution-first-improvement))
+      ;;       (format t "Best neighbor through 1st:~%")
+      ;;       (pp-working-copy
+      ;;        (prepare-solution-for-neighborhood-exploration
+      ;;         best-solution-first-improvement) t) (terpri)))
+
+      ;; (if best-solution-random-improvement
+      ;;     (then
+      ;;       (format t "Best value through random: ~a~%"
+      ;;               (cost best-solution-first-improvement))
+      ;;       (format t "Best neighbor through random::~%")
+      ;;       (pp-working-copy
+      ;;        (prepare-solution-for-neighborhood-exploration
+      ;;         best-solution-random-improvement) t) (terpri)))
+
+
+          )))
+
+(with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                    (5 0 6 7 2 4)  ;1
+                                    (1 8 0 3 9 1)  ;2
+                                    (4 5 1 0 5 7)  ;3
+                                    (4 5 1 5 0 6)  ;4
+                                    (1 5 7 6 9 0)) ;5
+                                    ;0 1 2 3 4 5 
+                                    :demands '(10 10 15 40 20)
+                                    :capacity 40)
+  (with-basic-cvrp-solution (s1 ((2) (4) (5) (3) (1)) p1)
+    (let* ((best-solution-exhaustive nil)
+           (action (delta-cvrp-action))
+           (results nil)
+           (cvrp-action (basic-cvrp-action 
+                         :penalty-factor 1000))
+           (criterion-code `((select-route r1)
+                             (select-client c1 from r1)
+                             (select-route r2)
+                             (insert-client c1 into r2)))
+
+           (rarac-exhaustive
+            (make-neighborhood-criterion
+             criterion-code
+             +exhaustive-search-strategy+
+             +best-improvement+)))
+
+      (bformat t "Testing DNS")
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (+ (total-distance cvrp-action)
+                         (total-penalty cvrp-action)))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-solution s1 t)
+
+      (setf results (descent-neighborhood-search  
+                     p1 s1 rarac-exhaustive
+                     :max-iter 30
+                     :action action))
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))      
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through exhaustive: ~a~%"
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor through exhaustive search:~%")
+            (pp-solution best-solution-exhaustive t)
+
+            ;; (format t "Best value through Yoel's: ~a~%"
+            ;;         (solution-cost best-solution-exhaustive
+            ;;                        p1 cvrp-action))
+            ;; (format t "action: ~a~%" cvrp-action)
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))
+
+      ;; (if best-solution-first-improvement
+      ;;     (then
+      ;;       (format t "Best value through 1st: ~a~%"
+      ;;               (cost best-solution-first-improvement))
+      ;;       (format t "Best neighbor through 1st:~%")
+      ;;       (pp-working-copy
+      ;;        (prepare-solution-for-neighborhood-exploration
+      ;;         best-solution-first-improvement) t) (terpri)))
+
+      ;; (if best-solution-random-improvement
+      ;;     (then
+      ;;       (format t "Best value through random: ~a~%"
+      ;;               (cost best-solution-first-improvement))
+      ;;       (format t "Best neighbor through random::~%")
+      ;;       (pp-working-copy
+      ;;        (prepare-solution-for-neighborhood-exploration
+      ;;         best-solution-random-improvement) t) (terpri)))
+
+
+          )))
+
+(with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                    (5 0 6 7 2 4)  ;1
+                                    (1 8 0 3 9 1)  ;2
+                                    (4 5 1 0 5 7)  ;3
+                                    (4 5 1 5 0 6)  ;4
+                                    (1 5 7 6 9 0)) ;5
+                                    ;0 1 2 3 4 5 
+                                    :demands '(10 10 15 40 20)
+                                    :capacity 40)
+  (with-basic-cvrp-solution (s1 ((3 2 4) (1 5)) p1)
+    (let* ((best-solution-exhaustive nil)
+           (action (delta-cvrp-action))
+           (results nil)
+           (cvrp-action (basic-cvrp-action 
+                         :penalty-factor 1000))
+           (criterion-code `((select-route r1)
+                             (select-client c1 from r1)
+                             (select-route r2)
+                             (insert-client c1 into r2)))
+
+           (rarac-exhaustive
+            (make-neighborhood-criterion
+             criterion-code
+             +exhaustive-search-strategy+
+             +best-improvement+)))
+
+      (bformat t "Testing DNS")
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (+ (total-distance cvrp-action)
+                         (total-penalty cvrp-action)))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-solution s1 t)
+
+      (setf results (descent-neighborhood-search  
+                     p1 s1 rarac-exhaustive
+                     :max-iter 30
+                     :action action))
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))      
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through exhaustive: ~a~%"
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor through exhaustive search:~%")
+            (pp-solution best-solution-exhaustive t)
+
+            ;; (format t "Best value through Yoel's: ~a~%"
+            ;;         (solution-cost best-solution-exhaustive
+            ;;                        p1 cvrp-action))
+            ;; (format t "action: ~a~%" cvrp-action)
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))
+
+      ;; (if best-solution-first-improvement
+      ;;     (then
+      ;;       (format t "Best value through 1st: ~a~%"
+      ;;               (cost best-solution-first-improvement))
+      ;;       (format t "Best neighbor through 1st:~%")
+      ;;       (pp-working-copy
+      ;;        (prepare-solution-for-neighborhood-exploration
+      ;;         best-solution-first-improvement) t) (terpri)))
+
+      ;; (if best-solution-random-improvement
+      ;;     (then
+      ;;       (format t "Best value through random: ~a~%"
+      ;;               (cost best-solution-first-improvement))
+      ;;       (format t "Best neighbor through random::~%")
+      ;;       (pp-working-copy
+      ;;        (prepare-solution-for-neighborhood-exploration
+      ;;         best-solution-random-improvement) t) (terpri)))
+
+
+          )))
+
+(with-cvrp-problem (p1 :distances `((0 2 3 4 5 6 8)  ;0
+                                    (5 0 6 7 2 4 9)  ;1
+                                    (1 8 0 3 9 1 2)  ;2
+                                    (4 5 1 0 5 7 4)  ;3
+                                    (4 5 1 5 0 6 5)  ;4
+                                    (1 5 7 6 9 0 8)  ;5
+                                    (3 5 8 2 7 9 0)) ;6
+                                    ;0 1 2 3 4 5 
+                                    :demands '(10 10 15 40 20 20)
+                                    :capacity 40)
+  (with-cvrp-solution ;;(s1 ((1 3 2 5) (6) (4)) p1)
+                      (s1 ((1 4 5) (2) (6 3)) p1)
+    (let* ((best-solution-exhaustive nil)
+           (action (delta-cvrp-action))
+           (strategy (penalty-obj-function 1000))
+           (results nil)
+           ;(search :first-improvement)
+           (search :exhaustive)
+           ;(search :random-improvement)
+           (cvrp-action (cvrp-action-with-penalty
+                         :vehicle-capacity-violation 0
+                         :current-distance 0
+                         :factor 1000))
+           (criterion-code `((select-route route1)
+                             (select-client client1 from route1) 
+                             (select-route route2)
+                             (select-client client2 from route2)
+                             (select-route route3)
+                             (select-client client3 from route3)
+                             (insert-client client1 into route2)
+                             (swap client2 client3)))
+           (neighborhood-exhaustive
+            (generate-code-for-neighborhood-with-strategy
+             criterion-code search)))
+
+      (format t "~%======================~%")
+
+      ;; first we compute the cost of the solution
+      (solution-cost s1 p1 cvrp-action)
+      (format t "Action: ~a~%" cvrp-action)
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-working-copy s1 t)
+
+      (setf results (descent-neighborhood-search
+                     p1 s1 neighborhood-exhaustive
+                     :max-iter 30
+                     :action action
+                     :strategy strategy))
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through ~a: ~a~%" search
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor through ~a:~%" search)
+            (pp-working-copy best-solution-exhaustive t)
+
+            (solution-cost best-solution-exhaustive p1 cvrp-action)
+
+            (setf best-solution-exhaustive (first results))
+            (format t "Best value through Yoel's: ~a~%"
+                    (cost best-solution-exhaustive)))
+
+          (else
+            (format t "Initial solution was optimum!~%")))
+
+
+
+          )))
+
+(let* ((p1 a-n33-k6-problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action))
+       (results nil)
+
+       ;(selection-strategy +first-improvement+)
+       (selection-strategy +random-improvement+)
+       ;(selection-strategy +best-improvement+)
+       (max-iterations 150)
+
+       (cvrp-action (basic-cvrp-action))
+
+       (criterion-code '((select-route r1)
+                         (select-client c1 from r1)
+                         (select-route r2)
+                         (select-client c2 from r2)
+                         (swap-clients c1 c2)))
+
+       (neighborhood-exhaustive
+        (make-neighborhood-criterion
+         criterion-code
+         +exhaustive-search-strategy+
+         selection-strategy)))
+
+      (bformat t "Testing DNS with a-n33-k6")
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (+ (total-distance cvrp-action)
+                         (total-penalty cvrp-action)))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-solution s1 t)
+
+      (setf results (descent-neighborhood-search
+                     p1 s1 neighborhood-exhaustive
+                     :max-iter max-iterations
+                     :action action))
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through ~a: ~a~%"
+                    selection-strategy
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor through ~a:~%"
+                    selection-strategy)
+            (pp-solution best-solution-exhaustive t)
+
+            ;; (solution-cost best-solution-exhaustive p1 cvrp-action)
+
+            ;; (setf best-solution-exhaustive (first results))
+            ;; (format t "Best value through Yoel's: ~a~%"
+            ;;         (cost best-solution-exhaustive))
+            ;; (format t "action: ~a~%" cvrp-action)
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))
+
+
+
+      )
+
+(with-basic-cvrp-solution (s1 ((1 2 3)
+                               (4 5 6)
+                               (7 8 9)
+                               (10 11 12)
+                               (13 14 15)
+                               (16 17 18)
+                               (19 20 21)
+                               (22 23 24)
+                               (25 26 27)
+                               (28 29 30)
+                               (31 32)) a-n33-k6-problem)
+    (let* ((p1 a-n33-k6-problem)
+        (best-solution-exhaustive nil)
+        (action (delta-cvrp-action))
+        (results nil)
+
+        ;;(selection-strategy +first-improvement+)
+        (selection-strategy +random-improvement+)
+        ;;(selection-strategy +best-improvement+)
+        (max-iterations 150)
+
+        (cvrp-action (basic-cvrp-action))
+
+        (criterion-code '((select-route r1)
+                          (select-client c1 from r1)
+                          (select-route r2)
+                          (insert-client c1 into r2)))
+
+        (neighborhood-exhaustive
+         (make-neighborhood-criterion
+          criterion-code
+          +exhaustive-search-strategy+
+          selection-strategy)))
+
+   (bformat t "Testing DNS with a-n33-k6")
+
+   ;; first we compute the cost of the solution
+   (simulate-solution s1 p1 cvrp-action)
+   (setf (cost s1) (+ (total-distance cvrp-action)
+                      (total-penalty cvrp-action)))
+
+   (format t "Original solution (with cost ~a):~%"
+           (cost s1))
+   (pp-solution s1 t)
+
+   (setf results (descent-neighborhood-search
+                  p1 s1 neighborhood-exhaustive
+                  :max-iter max-iterations
+                  :action action))
+
+   (format t "Iterations: ~a. Optimum found ~a.~%"
+           (second results) (third results))
+
+   (setf best-solution-exhaustive (first results))
+
+   (if best-solution-exhaustive
+       (then
+         (format t "Best value through ~a: ~a~%"
+                 selection-strategy
+                 (cost best-solution-exhaustive))
+         (format t "Best neighbor through ~a:~%"
+                 selection-strategy)
+         (pp-solution best-solution-exhaustive t)
+
+         ;; (solution-cost best-solution-exhaustive p1 cvrp-action)
+
+         ;; (setf best-solution-exhaustive (first results))
+         ;; (format t "Best value through Yoel's: ~a~%"
+         ;;         (cost best-solution-exhaustive))
+         ;; (format t "action: ~a~%" cvrp-action)
          )
 
-    (bformat t "Testing end-depot...")
+       (else
+         (format t "Initial solution was optimum!~%")))
 
 
-    (format t "Depot for obj1 (expect d0): ~a~%" (depot obj1))
-    (format t "Depot for obj2 (expect d0): ~a~%" (depot obj2))
-    (format t "End depot for obj1 (expect d0): ~a~%" (end-depot obj1))
-    (format t "End depot for obj2 (expect d1): ~a~%" (end-depot obj2))))
 
-(let* ((c1 (basic-product 1 "oil"))
-       (c2 (basic-product 2 "water"))
-       (c3 (clone c1))
-       (c4 (clone c2)))
-  (bformat t "Testing basic-product...")
+   ))
 
-  (format t "Printing the objects:~%")
-  (loop for e in (list c1 c2 c3 c4)
-        doing (format t "   basic-product with id ~a: ~a~%"
-                      (id e) e))
+(let* ((p1 a33problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action))
+       (strategy (penalty-obj-function 1000))
+       (results nil)
+       (maximum-iterations 200)
+       (search :first-improvement)
+       ;(search :exhaustive)
+       ;(search :random-improvement)
+       (cvrp-action (cvrp-action-with-penalty
+                     :vehicle-capacity-violation 0
+                     :current-distance 0
+                     :factor 1000))
+       (criterion-code '((select-route r1)
+                         (select-client c1 from r1)
+                         (select-route r2)
+                         (insert-client c1 into r2)))
+       (neighborhood-exhaustive
+        (generate-code-for-neighborhood-with-strategy
+         criterion-code search)))
 
-  (deftests "Testing obj="
-    (check-t (obj= c1 c1))
-    (check-t (obj= c2 c2))
-    (check-t (obj= c1 c3))
-    (check-t (obj= c2 c4))
+      (format t "~%======================~%")
 
-    (check-nil (obj= c1 c2))
-    (check-nil (obj= c2 c3))
-    (check-nil (obj= c3 c4))))
+      ;; first we compute the cost of the solution
+      (solution-cost s1 p1 cvrp-action)
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-working-copy s1 t)
 
-(let* ((c1 (basic-client 1))
-       (c2 (basic-client 2))
-       (c3 (clone c1))
-       (c4 (clone c2)))
-  (format t "~%=======================
-Testing basic-client...
-=======================~2%")
+      (setf results (descent-neighborhood-search
+                     p1 s1 neighborhood-exhaustive
+                     :max-iter maximum-iterations
+                     :action action
+                     :strategy strategy))
 
-  (format t "Printing the objects:~%")
-  (loop for e in (list c1 c2 c3 c4)
-        doing (format t "   basic-client with id ~a: ~a~%"
-                      (id e) e))
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
 
-  (deftests "Testing obj="
-    (check-t (obj= c1 c1))
-    (check-t (obj= c2 c2))
-    (check-t (obj= c1 c3))
-    (check-t (obj= c2 c4))
+      (setf best-solution-exhaustive (first results))
 
-    (check-nil (obj= c1 c2))
-    (check-nil (obj= c2 c3))
-    (check-nil (obj= c3 c4))))
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through ~a: ~a~%" search
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor through ~a:~%" search)
+            (pp-working-copy best-solution-exhaustive t))
 
-(let* ((c1 (basic-cvrp-client 1 10))
-       (c2 (basic-cvrp-client 2 10))
-       (c3 (basic-cvrp-client 1 20))
-       (c4 (clone c1))
-       (c5 (clone c2)))
-  (format t "~%=======================
-Testing basic-cvrp-client...
-=======================~2%")
+          (else
+            (format t "Initial solution was optimum!~%"))))
 
-  (format t "Printing the objects:~%")
-  (loop for e in (list c1 c2 c3 c4 c5)
-        doing (format t "   basic-cvrp-client with id ~a: ~a~%"
-                      (id e) e))
+(let* ((p1 a33problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action))
+       (strategy (penalty-obj-function 1000))
+       (results nil)
+       (maximum-iterations 200)
+       ;(search :first-improvement)
+       (search :exhaustive)
+       ;(search :random-improvement)
+       (cvrp-action (cvrp-action-with-penalty
+                     :vehicle-capacity-violation 0
+                     :current-distance 0
+                     :factor 1000))
+       (criterion-code `((select-route route1)
+                         (select-client client1 from route1) 
+                         (select-route route2)
+                         (select-client client2 from route2)
+                         (select-route route3)
+                         (select-client client3 from route3)
+                         (insert-client client1 into route2)
+                         (swap client2 client3)))
+       (neighborhood-exhaustive
+        (generate-code-for-neighborhood-with-strategy
+         criterion-code search)))
 
-  (deftests "Testing obj="
-    (check-t (obj= c1 c1))
-    (check-t (obj= c1 c4))
-    (check-t (obj= c2 c5))
+      (format t "~%======================~%")
 
-    (check-nil (obj= c1 c2))
-    (check-nil (obj= c1 c3))
-    (check-nil (obj= c2 c4))
-    (check-nil (obj= c3 c5))))
+      ;; first we compute the cost of the solution
+      (solution-cost s1 p1 cvrp-action)
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-working-copy s1 t)
 
-(let* ((c1 (basic-cupet-client 1))
-       (c2 (basic-cupet-client 2))
-       (c3 (clone c1))
-       (c4 (clone c2)))
-  (format t "Testing basic-cvrp-client...")
+      (setf results (descent-neighborhood-search
+                     p1 s1 neighborhood-exhaustive
+                     :max-iter maximum-iterations
+                     :action action
+                     :strategy strategy))
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through ~a: ~a~%" search
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor through ~a:~%" search)
+            (pp-working-copy best-solution-exhaustive t))
+
+          (else
+            (format t "Initial solution was optimum!~%"))))
+
+(let* ((p1 a33problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action))
+       (strategy (penalty-obj-function 1000))
+       (results nil)
+       (maximum-iterations 200)
+       ;(search :first-improvement)
+       (search :exhaustive)
+       ;(search :random-improvement)
+       (cvrp-action (cvrp-action-with-penalty
+                     :vehicle-capacity-violation 0
+                     :current-distance 0
+                     :factor 1000))
+       (criterion-code `((select-route route1)
+                         (select-client client1 from route1) 
+                         (select-route route2)
+                         (select-client client2 from route2)
+                         (select-route route3)
+                         (select-route route4)
+                         (insert-client client1 into route3)
+                         (insert-client client2 into route4)))
+       (neighborhood-exhaustive
+        (generate-code-for-neighborhood-with-strategy
+         criterion-code search)))
+
+      (format t "~%======================~%")
+
+      ;; first we compute the cost of the solution
+      (solution-cost s1 p1 cvrp-action)
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-working-copy s1 t)
+
+      (setf results (descent-neighborhood-search
+                     p1 s1 neighborhood-exhaustive
+                     :max-iter maximum-iterations
+                     :action action
+                     :strategy strategy))
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through ~a: ~a~%" search
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor through ~a:~%" search)
+            (pp-working-copy best-solution-exhaustive t))
+
+          (else
+            (format t "Initial solution was optimum!~%"))))
+
+(let* ((p1 a33problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action))
+       (strategy (penalty-obj-function 1000))
+       (results nil)
+       (maximum-iterations 50)
+       ;(search :first-improvement)
+       ;(search :exhaustive)
+       (search :random-improvement)
+       (cvrp-action (cvrp-action-with-penalty
+                     :vehicle-capacity-violation 0
+                     :current-distance 0
+                     :factor 1000))
+       (criterion-code `((select-route route1)
+              (select-subroute subroute1 from route1 size 3)
+              (select-route route2)
+              (insert-subroute subroute1 into route2)))
+
+       ;; (criterion-code `((select-route route1)
+       ;;                   (select-client client1 from route1) 
+       ;;                   (select-route route2)
+       ;;                   (select-client client2 from route2)
+       ;;                   (select-route route3)
+       ;;                   (select-route route4)
+       ;;                   (insert-client client1 into route3)
+       ;;                   (insert-client client2 into route4)))
+       (neighborhood-exhaustive
+        (generate-code-for-neighborhood-with-strategy
+         criterion-code search)))
+
+      (format t "~%======================~%")
+
+      ;; first we compute the cost of the solution
+      (solution-cost s1 p1 cvrp-action)
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-working-copy s1 t)
+
+      (setf results (descent-neighborhood-search
+                     p1 s1 neighborhood-exhaustive
+                     :max-iter maximum-iterations
+                     :action action
+                     :strategy strategy))
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through ~a: ~a~%" search
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor through ~a:~%" search)
+            (pp-working-copy best-solution-exhaustive t))
+
+          (else
+            (format t "Initial solution was optimum!~%"))))
+
+(let* ((p1 a-n65-k9-problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action))
+       (results nil)
+
+       (selection-strategy +first-improvement+)
+       ;(selection-strategy +best-improvement+)
+       ;(selection-strategy +random-improvement+)
+       (max-iterations 150)
+
+       (cvrp-action (basic-cvrp-action))
+
+       (criterion-code '((select-route r1)
+                         (select-client c1 from r1)
+                         (select-route r2)
+                         (select-client c2 from r2)
+                         (swap-clients c1 c2)))
+
+       (neighborhood-exhaustive
+        (make-neighborhood-criterion
+         criterion-code
+         +exhaustive-search-strategy+
+         selection-strategy)))
+
+      (bformat t "Testing DNS with a-n33-k6")
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (+ (total-distance cvrp-action)
+                         (total-penalty cvrp-action)))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-solution s1 t)
+
+      (setf results (descent-neighborhood-search
+                     p1 s1 neighborhood-exhaustive
+                     :max-iter max-iterations
+                     :action action))
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through ~a: ~a~%"
+                    selection-strategy
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor through ~a:~%"
+                    selection-strategy)
+            (pp-solution best-solution-exhaustive t)
+
+            ;; (solution-cost best-solution-exhaustive p1 cvrp-action)
+
+            ;; (setf best-solution-exhaustive (first results))
+            ;; (format t "Best value through Yoel's: ~a~%"
+            ;;         (cost best-solution-exhaustive))
+            ;; (format t "action: ~a~%" cvrp-action)
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))
 
 
-  (deftests "Testing obj="
-    (check-t (obj= c1 c1))
-    (check-t (obj= c2 c2))
-    (check-t (obj= c1 c3))
-    (check-t (obj= c2 c4))
 
-    (check-nil (obj= c1 c2))
-    (check-nil (obj= c2 c3))
-    (check-nil (obj= c3 c4)))
-  ;; (format t "Printing the objects:~%")
-  ;; (loop for e in (list c1 c2 c3 c4 )
-  ;;       doing (format t "   basic-cupet-client with id ~a: ~a~%"
-  ;;                     (id e) e))
+      )
+
+(let* ((p1 a-n80-k10-problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action*))
+       (results nil)
+
+       ;(selection-strategy +first-improvement+)
+       ;(selection-strategy +best-improvement+)
+       (selection-strategy *random-improvement*)
+       (max-iterations 150)
+
+       (cvrp-action (basic-cvrp-action))
+
+       (criterion-code rereehf)
+       ;; (criterion-code rab)
+
+       (neighborhood-exhaustive
+        (make-neighborhood-criterion
+         criterion-code
+         *exhaustive-search-strategy*
+         selection-strategy)))
+
+      (bformat t "Testing DNS with a-n33-k6")
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (get-cost-from-action cvrp-action))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-solution s1 t)
+
+      (setf results (descent-neighborhood-search
+                     p1
+                     s1
+                     neighborhood-exhaustive
+                     :max-iter max-iterations
+                     :action action))
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through ~a: ~a~%"
+                    selection-strategy
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor through ~a:~%"
+                    selection-strategy)
+            (pp-solution best-solution-exhaustive t)
+
+            (cost best-solution-exhaustive)
+
+            (setf best-solution-exhaustive (first results))
+            (format t "Best value through Yoel's: ~a~%"
+                    (cost best-solution-exhaustive))
+            ;; (format t "action: ~a~%" cvrp-action)
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))
+
+
+
+      )
+
+(let* ((p1 a-n80-k10-problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action*))
+       (results nil)
+
+       ;(selection-strategy +first-improvement+)
+       (selection-strategy +best-improvement+)
+       ;(selection-strategy *random-improvement*)
+       (max-iterations 1)
+
+       (cvrp-action (basic-cvrp-action))
+
+       (criterion-code rehrehgs*)
+       ;; (criterion-code rab)
+
+       (neighborhood-exhaustive
+        (make-neighborhood-criterion
+         criterion-code
+         *exhaustive-search-strategy*
+         selection-strategy)))
+
+      (bformat t "Testing DNS with a-n33-k6")
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (get-cost-from-action cvrp-action))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-solution s1 t)
+
+      (time
+       (setf results (descent-neighborhood-search
+                      p1
+                      s1
+                      neighborhood-exhaustive
+                      :max-iter max-iterations
+                      :action action)))
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through ~a: ~a~%"
+                    selection-strategy
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor through ~a:~%"
+                    selection-strategy)
+            (pp-solution best-solution-exhaustive t)
+
+            (cost best-solution-exhaustive)
+
+            (setf best-solution-exhaustive (first results))
+            (format t "Best value through Yoel's: ~a~%"
+                    (cost best-solution-exhaustive))
+            ;; (format t "action: ~a~%" cvrp-action)
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))
+
+
+
+      )
+
+(let* ((s1 (make-initial-solution-for-finite-fleet-cvrp-deterministic
+            ff-a-n33-k6-problem))
+       (p1 ff-a-n33-k6-problem)
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action))
+       (results nil)
+       (cvrp-action (basic-cvrp-action 
+                     :penalty-factor 1000))
+       (criterion-code `((select-route r1)
+                         (select-client c1 from r1)
+                         (select-route r2)
+                         (insert-client c1 into r2)))
+
+       (neighborhood-exploration
+        (make-neighborhood-criterion
+         criterion-code
+         +exhaustive-search-strategy+
+         +best-improvement+)))
+
+  (bformat t "Testing DNS")
+
+  ;; first we compute the cost of the solution
+  (simulate-solution s1 p1 cvrp-action)
+  (setf (cost s1) (+ (total-distance cvrp-action)
+                     (total-penalty cvrp-action)))
+
+  (format t "Original solution (with cost ~a):~%"
+          (cost s1))
+  (pp-solution s1 t)
+
+  (setf results (funcall neighborhood-exploration s1 p1 action))
+
+  ;; (format t "Cost: ~a~%" (cost results))
+  ;; (pp-solution results t) (terpri)
+
+  (setf results (descent-neighborhood-search  
+                 p1 s1 neighborhood-exploration
+                 :max-iter 300
+                 :action action))
+
+  ;; (format t "Cost: ~a~%" (cost (first results)))
+  ;; (pp-solution (first results) t) (terpri)
+
+
+  (format t "Iterations: ~a. Optimum found ~a.~%"
+          (second results) (third results))      
+  (setf best-solution-exhaustive (first results))
+
+  (if best-solution-exhaustive
+      (then
+        (format t "Best value through exhaustive: ~a~%"
+                (cost best-solution-exhaustive))
+        (format t "Best neighbor through exhaustive search:~%")
+        (pp-solution best-solution-exhaustive t)
+
+        ;; (format t "Best value through Yoel's: ~a~%"
+        ;;         (solution-cost best-solution-exhaustive
+        ;;                        p1 cvrp-action))
+        ;; (format t "action: ~a~%" cvrp-action)
+        )
+
+      (else
+        (format t "Initial solution was optimum!~%")))
+
+  ;; (if best-solution-first-improvement
+  ;;     (then
+  ;;       (format t "Best value through 1st: ~a~%"
+  ;;               (cost best-solution-first-improvement))
+  ;;       (format t "Best neighbor through 1st:~%")
+  ;;       (pp-working-copy
+  ;;        (prepare-solution-for-neighborhood-exploration
+  ;;         best-solution-first-improvement) t) (terpri)))
+
+  ;; (if best-solution-random-improvement
+  ;;     (then
+  ;;       (format t "Best value through random: ~a~%"
+  ;;               (cost best-solution-first-improvement))
+  ;;       (format t "Best neighbor through random::~%")
+  ;;       (pp-working-copy
+  ;;        (prepare-solution-for-neighborhood-exploration
+  ;;         best-solution-random-improvement) t) (terpri)))
+
+
   )
 
-(let* ((c1 (basic-vehicle 1))
-       (c2 (basic-vehicle 2))
-       (c3 (clone c1))
-       (c4 (clone c2)))
-  (format t "~%=======================
-Testing basic-vehicle...
-=======================~2%")
+(let* ((*vrp-unit-testing-display-output* nil)
+       (*vrp-unit-testing-display-results* t)
+       (c1 (basic-cvrp-client 1 30))
+       (c2 (basic-cvrp-client 2 20))
+       (c3 (basic-cvrp-client 3 40))
+       (c4 (basic-cvrp-client 4 50))
+       (d0 (basic-depot))
+       (d1 (basic-depot 5))
+       (v1 (cvrp-vehicle 1 70))
+       (v2 (cvrp-vehicle 2 70))
+
+       (distance #2A ((0 1 2 3 5 6)
+                      (1 0 4 5 6 7)
+                      (2 4 0 6 7 9)
+                      (3 5 6 0 8 9)
+                      (5 6 7 8 0 1)
+                      (3 5 6 4 8 0)))
+       (p1 (make-instance 'finite-fleet-end-depot-cvrp-problem
+                          :depot d0
+                          :end-depot d1
+                          :id 1
+                          :clients (list c1 c2 c3 c4)
+                          :fleet (list v1 v2)
+                          :distance-matrix distance))
+
+       ;; now the algorithms related data
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action))
+       (results nil)
+       (cvrp-action (basic-cvrp-action 
+                     :penalty-factor 1000))
+       (criterion-code `((select-route r1)
+                         (select-client c1 from r1)
+                         (select-route r2)
+                         (insert-client c1 into r2)))
+
+       (neighborhood-exploration
+        (make-neighborhood-criterion
+         criterion-code
+         +exhaustive-search-strategy+
+         +best-improvement+))
+
+       (*vrp-logging* 0))
+
+  (bformat t "Testing VND with end-depot")
+
+  (with-finite-fleet-end-depot-cvrp-solution (s1 ((1 1 2) (2 3 4)) p1)
+
+    ;; first we compute the cost of the solution
+    (simulate-solution s1 p1 cvrp-action)
+    (setf (cost s1) (+ (total-distance cvrp-action)
+                       (total-penalty cvrp-action)))
+
+    (format t "Original solution (with cost ~a):~%"
+            (cost s1))
+    (pp-solution s1 t)
+
+    (setf results (descent-neighborhood-search  
+                   p1 s1 neighborhood-exploration
+                   :max-iter 300
+                   :action action))
+
+    (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))      
+      (setf best-solution-exhaustive (first results))
+
+
+    (if best-solution-exhaustive
+          (then
+            (format t "Best value through exhaustive: ~a~%"
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor through exhaustive search:~%")
+            (pp-solution best-solution-exhaustive t)
+
+            ;; (format t "Best value through Yoel's: ~a~%"
+            ;;         (solution-cost best-solution-exhaustive
+            ;;                        p1 cvrp-action))
+            ;; (format t "action: ~a~%" cvrp-action)
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))))
+
+(with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                    (5 0 6 7 2 4)  ;1
+                                    (1 8 0 3 9 1)  ;2
+                                    (4 5 1 0 5 7)  ;3
+                                    (4 5 1 5 0 6)  ;4
+                                    (1 5 7 6 9 0)) ;5
+                                    ;0 1 2 3 4 5 
+                                    :demands '(10 10 15 40 20)
+                                    :capacity 40)
+  (with-basic-cvrp-solution (s1 ((2 4 5) (3) (1)) p1)
+    (let* ((best-solution-exhaustive nil)
+           (action (delta-cvrp-action))
+           (results nil)
+           (cvrp-action (basic-cvrp-action 
+                         :penalty-factor 1000))
+
+           )
+
+      (bformat t "Testing VNS")
 
-  (format t "Printing the objects:~%")
-  (loop for e in (list c1 c2 c3 c4)
-        doing (format t "   basic-vehicle with id ~a: ~a~%"
-                      (id e) e))
 
-  (deftests "Testing obj="
-    (check-t (obj= c1 c1))
-    (check-t (obj= c2 c2))
-    (check-t (obj= c1 c3))
-    (check-t (obj= c2 c4))
 
-    (check-nil (obj= c1 c2))
-    (check-nil (obj= c2 c3))
-    (check-nil (obj= c3 c4))))
 
-(let* ((v1 (cvrp-vehicle 1 20))
-       (v2 (cvrp-vehicle 1 30))
-       (v3 (cvrp-vehicle 1 20 5))
-       (v4 (cvrp-vehicle 2 20))
-       (v6 (clone v1))
-       (v7 (clone v2)))
-  (format t "~%=======================
-Testing cvrp-vehicle...
-=======================~2%")
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (+ (total-distance cvrp-action)
+                         (total-penalty cvrp-action)))
 
-  (format t "Printing the objects:~%")
-  (loop for e in (list v1 v2 v3 v4 v6 v7)
-        doing (format t "   cvrp-vehicle with id ~a: ~a~%"
-                      (id e) e))
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-solution s1 t)
 
-  (deftests "Testing obj="
-    (check-t (obj= v1 v1))
-    (check-t (obj= v1 v6))
-    (check-t (obj= v2 v7))
+      (setf results (vns 
+                     p1 s1 (list rab-best
+                                 rarb-best
+                                 rarac-best)
+                     :max-iter 150
+                     :action action))
 
-    (check-nil (obj= v1 v2))
-    (check-nil (obj= v1 v3))
-    (check-nil (obj= v1 v4))
-    (check-nil (obj= v1 v2))
-    (check-nil (obj= v1 v7))
-    (check-nil (obj= v2 v6))))
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))      
+      (setf best-solution-exhaustive (first results))
 
-(let* ((v1 (cvrp-vehicle 1 20))
-       (v2 (cvrp-vehicle 1 30))
-       (v3 (cvrp-vehicle 1 20 5))
-       (v4 (cvrp-vehicle 2 20))
-       (v6 (clone v1))
-       (v7 (clone v2)))
-  (format t "~%=======================
-Testing cvrp-vehicle...
-=======================~2%")
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through exhaustive: ~a~%"
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor through exhaustive search:~%")
+            (pp-solution best-solution-exhaustive t)
 
-  (format t "Printing the objects:~%")
-  (loop for e in (list v1 v2 v3 v4 v6 v7)
-        doing (format t "   cvrp-vehicle with id ~a: ~a~%"
-                      (id e) e))
+            ;; (format t "Best value through Yoel's: ~a~%"
+            ;;         (solution-cost best-solution-exhaustive
+            ;;                        p1 cvrp-action))
+            ;; (format t "action: ~a~%" cvrp-action)
+            )
 
-  (deftests "Testing obj="
-    (check-t (obj= v1 v1))
-    (check-t (obj= v1 v6))
-    (check-t (obj= v2 v7))
+          (else
+            (format t "Initial solution was optimum!~%")))
 
-    (check-nil (obj= v1 v2))
-    (check-nil (obj= v1 v3))
-    (check-nil (obj= v1 v4))
-    (check-nil (obj= v1 v2))
-    (check-nil (obj= v1 v7))
-    (check-nil (obj= v2 v6))))
+          )))
 
-(let* ((c0 (basic-depot))
-       (c1 (basic-depot 1))
-       (c2 (basic-depot 2))
-       (c3 (clone c0))
-       (c4 (clone c1))
-       (c5 (clone c2)))
-  (format t "~%======================
-Testing basic-depot...
-======================~2%")
+(let* ((p1 a-n33-k6-problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action))
+       (results nil)
 
-  (format t "Printing the objects:~%")
-  (loop for e in (list c0 c1 c2 c3 c4 c5)
-        doing (format t "   basic-depot with id ~a: ~a~%"
-                      (id e) e))
+       ;(selection-strategy +first-improvement+)
+       (selection-strategy +random-improvement+)
+       ;(selection-strategy +best-improvement+)
+       (max-iterations 550)
 
-  (deftests "Testing obj="
-    (check-t (obj= c0 c0))
-    (check-t (obj= c1 c1))
-    (check-t (obj= c2 c2))
-    (check-t (obj= c1 c4))
-    (check-t (obj= c2 c5))
-    (check-t (obj= c3 c0))
-
-    (check-nil (obj= c1 c2))
-    (check-nil (obj= c2 c3))
-    (check-nil (obj= c3 c4))
-    (check-nil (obj= c0 c1))))
-
-(let* ((c1 (g-depot 1 10 10))
-       (c2 (g-depot 2 0 0))
-       (c3 (g-depot 3 0 0))
-       (c4 (clone c1))
-       (c5 (clone c2))
-       (c6 (clone c3)))
-  (format t "~%======================
-Testing g-depot...
-======================~2%")
-
-  (format t "Printing the objects:~%")
-  (loop for e in (list c1 c2 c3 c4 c5 c6)
-        doing (format t "   g-depot with id ~a and coords (~a ~a): ~a~%"
-                      (id e) (x-coord e) (y-coord e) e))
-
-  (deftests "Testing obj="
-    (check-t (obj= c1 c1))
-    (check-t (obj= c2 c2))
-    (check-t (obj= c1 c4))
-    (check-t (obj= c2 c5))
-    (check-t (obj= c3 c6))
-
-    (check-nil (obj= c1 c2))
-    (check-nil (obj= c1 c3))
-    (check-nil (obj= c2 c3))
-    (check-nil (obj= c6 c1))))
-
-(with-basic-clients (1 2 3 4 5 6)
-  (let* ((v1 (basic-vehicle 1))
-         (v2 (basic-vehicle 2))
-         (d0 (basic-depot))
-         (d1 (basic-depot 1))
-         (r1 (basic-route :id 1 :vehicle v1 :depot d0
-                          :clients (list c1 c2 c3)))
-         (r2 (basic-route :id 2 :vehicle v2 :depot d0
-                          :clients (list c4 c5 c6)))
-         (r3 (basic-route :id 1 :vehicle v2 :depot d0
-                          :clients (list c1 c2 c3)))
-         (r4 (basic-route :id 1 :vehicle v1 :depot d1
-                          :clients (list c1 c2 c3)))
-         (r5 (basic-route :id 2 :vehicle v1 :depot d0
-                          :clients (list c1 c2 c3)))
-         (r6 (clone r1)))
-
-    (bformat t "Testing basic-route")
-
-    (format t "Printing the objects:~%")
-    (loop for e in (list r1 r2 r3 r4 r5 r6)
-          doing (format t "   basic-route with id ~a: ~a~%"
-                        (id e) e))
-
-    (deftests "Testing obj="
-      (check-t (obj= r1 r1))
-      (check-t (obj= r1 r6))
-
-      (check-nil (obj= r1 r2))
-      (check-nil (obj= r1 r2))
-      (check-nil (obj= r1 r3))
-      (check-nil (obj= r1 r4))
-      (check-nil (obj= r2 r5)))))
-
-(with-basic-clients (1 2 3 4 5 6)
-  (let* ((v1 (basic-vehicle 1))
-         (v2 (basic-vehicle 2))
-         (d0 (basic-depot))
-         (d1 (basic-depot 1))
-         (r1 (route-for-simulation :id 1 :vehicle v1 :depot d0
-                          :clients (list c1 c2 c3)))
-         (r2 (route-for-simulation :id 2 :vehicle v2 :depot d0
-                          :clients (list c4 c5 c6)))
-         (r3 (route-for-simulation :id 1 :vehicle v2 :depot d0
-                          :clients (list c1 c2 c3)))
-         (r4 (route-for-simulation :id 1 :vehicle v1 :depot d1
-                          :clients (list c1 c2 c3)))
-         (r5 (route-for-simulation :id 2 :vehicle v1 :depot d0
-                          :clients (list c1 c2 c3)))
-         (r6 (clone r1)))
-
-    (format t "~%===============================
-Testing route-for-simulation...
-===============================~2%")
-
-    (format t "Printing the objects:~%")
-    (loop for e in (list r1 r2 r3 r4 r5 r6)
-          doing (format t "   route-for-simulation with id ~a: ~a~%"
-                        (id e) e))
-
-    (deftests "Testing obj="
-      (check-t (obj= r1 r1))
-      (check-t (obj= r1 r6))
-
-      (check-nil (obj= r1 r2))
-      (check-nil (obj= r1 r2))
-      (check-nil (obj= r1 r3))
-      (check-nil (obj= r1 r4))
-      (check-nil (obj= r2 r5)))))
-
-(with-basic-clients (1 2 3 4 5 6)
-  (let* ((v1 (basic-vehicle 1))
-         (v2 (basic-vehicle 2))
-         (d0 (basic-depot))
-         (d1 (basic-depot 7))
-         (r1 (route-for-simulation-with-end-depot
-              :id 1
-              :vehicle v1
-              :depot d0
-              :end-depot d1
-              :clients (list c1 c2 c3)))
-         (r2 (route-for-simulation-with-end-depot
-              :id 2
-              :vehicle v2
-              :depot d0
-              :end-depot d1
-              :clients (list c4 c5 c6)))
-         (r3 (route-for-simulation-with-end-depot
-              :id 1
-              :vehicle v2
-              :depot d0
-              :end-depot d1
-              :clients (list c1 c2 c3)))
-         (r4 (route-for-simulation-with-end-depot
-              :id 1
-              :vehicle v1
-              :depot d1
-              :end-depot d1
-              :clients (list c1 c2 c3)))
-         (r5 (route-for-simulation-with-end-depot
-              :id 2
-              :vehicle v1
-              :depot d0
-              :end-depot d1
-              :clients (list c1 c2 c3)))
-         (r6 (clone r1)))
-
-    (bformat t "Testing route-for-simulation-with-end-depot...")
-
-    (format t "Printing the objects:~%")
-    (loop for e in (list r1 r2 r3 r4 r5 r6)
-          doing (format t "   route-for-simulation with id ~a: ~a~%"
-                        (id e) e))
-
-    (deftests "Testing obj="
-      (check-t (obj= r1 r1))
-      (check-t (obj= r1 r6))
-
-      (check-nil (obj= r1 r2))
-      (check-nil (obj= r1 r2))
-      (check-nil (obj= r1 r3))
-      (check-nil (obj= r1 r4))
-      (check-nil (obj= r2 r5)))
-
-    (format t "end-depot of r1 (expect d7): ~a~%" (end-depot r1))
-    (format t "depot of r1 (expect d0): ~a~%" (depot r1))))
-
-(with-basic-clients (1 2 3 4 5 6)
-  (let* ((v1 (basic-vehicle 1))
-         (v2 (basic-vehicle 2))
-         (d0 (basic-depot))
-         (r1 (basic-route :id 1 :vehicle v1 :depot d0
-                          :clients (list c1 c2 c3)))
-         (r2 (basic-route :id 2 :vehicle v2 :depot d0
-                          :clients (list c4 c5 c6)))
-         (s1 (basic-solution :id 1 :routes (list r1 r2)))
-         (s2 (basic-solution :id 2 :routes (list r1 r2)))
-         (s3 (basic-solution :id 1 :routes (list r2 r1)))
-         (s4 (clone s1))
-         (s5 (basic-solution :id 1 :routes (list r1 r2) :cost 1)))
-
-    (bformat t "Testing basic-solution")
-
-    (format t "Printing the objects:~%")
-    (loop for e in (list s1 s2 s3 s4)
-          doing (format t "   basic-solution with id ~a:~% ~a~%"
-                        (id e) e))
-
-    (deftests "Testing obj="
-      (check-t (obj= s1 s1))
-      (check-t (obj= s1 s4))
-
-      (check-nil (obj= s1 s2))
-      (check-nil (obj= s1 s3))
-      (check-nil (obj= s1 s5))
-      (check-nil (obj= s2 s3))
-      (check-nil (obj= s2 s4)))))
-
-(with-basic-clients (1 2 3 4 5 6)
-  (let* ((v1 (basic-vehicle 1))
-         (v2 (basic-vehicle 2))
-         (d0 (basic-depot))
-         (r1 (basic-route :id 1 :vehicle v1 :depot d0
-                          :clients (list c1 c2 c3)))
-         (r2 (basic-route :id 2 :vehicle v2 :depot d0
-                          :clients (list c4 c5 c6)))
-         (s1 (basic-cvrp-solution :id 1 :routes (list r1 r2)))
-         (s2 (basic-cvrp-solution :id 2 :routes (list r1 r2)))
-         (s3 (basic-cvrp-solution :id 1 :routes (list r2 r1)))
-         (s4 (clone s1))
-         (s5 (basic-cvrp-solution :id 1 :routes (list r1 r2) :cost 1))
-         (s6 (basic-solution :id 1 :routes (list r1 r2) :cost 1)))
-
-    (bformat t "Testing basic-solution")
-
-    (format t "Printing the objects:~%")
-    (loop for e in (list s1 s2 s3 s4)
-          doing (format t "   basic-solution with id ~a:~% ~a~%"
-                        (id e) e))
-
-    (deftests "Testing obj="
-      (check-t (obj= s1 s1))
-      (check-t (obj= s1 s4))
-
-      (check-nil (obj= s1 s2))
-      (check-nil (obj= s1 s3))
-      (check-nil (obj= s1 s5))
-      (check-nil (obj= s2 s3))
-      (check-nil (obj= s2 s4))
-      (check-nil (obj= s5 s6)))))
-
-(with-basic-clients (1 2 3 4 5 6)
-  (let* ((d0 (basic-depot))
-         (d1 (basic-depot 1))
-         (p1 (basic-problem :id 1 :depot d0
-                            :clients (list c1 c2 c3 c4 c5 c6)))
-         (p2 (basic-problem :id 2 :depot d0
-                            :clients (list c1 c2 c3 c4 c5 c6)))
-         (p3 (basic-problem :id 1 :depot d1
-                            :clients (list c1 c2 c3 c4 c5 c6)))
-         (p4 (basic-problem :id 1 :depot d1
-                            :clients (list c1 c2 c3 c4 c5)))
-         (p5 (clone p1)))
-
-    (bformat t "Testing basic-problem...")
-
-    (format t "Printing the objects:~%")
-    (loop for e in (list p1 p2 p3 p4 p5)
-          doing (format t "   basic-problem with id ~a:~% ~a~%"
-                        (id e) e))
-
-    (deftests "Testing obj="
-      (check-t (obj= p1 p1))
-      (check-t (obj= p1 p5))
-
-      (check-nil (obj= p1 p2))
-      (check-nil (obj= p1 p3))
-      (check-nil (obj= p2 p4))
-      (check-nil (obj= p2 p4)))))
-
-(with-basic-clients (1 2 3)
-  (let* ((d0 (basic-depot))
-         (d1 (basic-depot 1))
-         (c1 (basic-client 1))
-         (c2 (basic-client 2))
-         (c3 (basic-client 3))
-         (p1 (basic-product 1 "p1"))
-         (p2 (basic-product 2 "p2"))
-         (p3 (basic-product 3 "p3"))
-         (pr1 (cupet-problem :id 1 :depot d0
-                             :clients (list c1 c2 c3)
-                             :products (list p1 p2)
-                             :distance-matrix #2A((0 1 2 3)
-                                                  (1 0 4 6)
-                                                  (2 4 0 2)
-                                                  (3 6 2 0))))
-         (pr2 (cupet-problem :id 2 :depot d0
-                             :clients (list c1 c2 c3)
-                             :products (list p1 p2 p3)
-                             :distance-matrix #2A((0 1 2 3)
-                                                  (1 0 4 6)
-                                                  (2 4 0 2)
-                                                  (3 6 2 0))))
-
-         (pr3 (clone pr1)))
-
-    (bformat t "Testing")
-
-    (format t "Printing the objects:~%")
-    (loop for e in (list pr1 pr2 pr3)
-          doing (format t "   cupet-problem with id ~a:~%      ~a~%"
-                        (id e) e))
-
-    (deftests "Testing obj="
-      (check-t (obj= pr1 pr1))
-      (check-t (obj= pr1 pr3))
-
-      (check-nil (obj= pr1 pr2))
-      (check-nil (obj= pr2 pr3)))))
-
-(with-basic-clients (1 2 3)
-  (let* ((d0 (basic-depot))
-         (d1 (basic-depot 1))
-         (p1 (cvrp-problem :id 1 :depot d0
-                           :clients (list c1 c2 c3)
-                           :capacity 40
-                           :distance-matrix #2A((0 1 2 3)
-                                                (1 0 4 6)
-                                                (2 4 0 2)
-                                                (3 6 2 0))))
-         (p2 (cvrp-problem :id 2 :depot d0
-                           :clients (list c1 c2 c3)
-                           :capacity 40
-                           :distance-matrix #2A((0 1 2 3)
-                                                (1 0 4 6)
-                                                (2 4 0 2)
-                                                (3 6 2 0))))
-         (p3 (cvrp-problem :id 1 :depot d0
-                           :clients (list c1 c3 c2)
-                           :capacity 40
-                           :distance-matrix #2A((0 1 2 3)
-                                                (1 0 4 6)
-                                                (2 4 0 2)
-                                                (3 6 2 0))))
-         (p4 (cvrp-problem :id 1 :depot d0
-                           :clients (list c1 c2 c3)
-                           :capacity 10
-                           :distance-matrix #2A((0 1 2 3)
-                                                (1 0 4 6)
-                                                (2 4 0 2)
-                                                (3 6 2 0))))
-         (p5 (cvrp-problem :id 1 :depot d0
-                           :clients (list c1 c2 c3)
-                           :capacity 10
-                           :distance-matrix #2A((0 1 2 3)
-                                                (1 0 4 6)
-                                                (2 4 0 2)
-                                                (3 6 2 8))))
-         (p6 (clone p1)))
-
-    (format t "~%=======================
-    Testing cvrp-problem...
-    =======================~2%")
-
-    (format t "Printing the objects:~%")
-    (loop for e in (list p1 p2 p3 p4 p5 p6)
-          doing (format t "   cvrp-problem with id ~a:~% ~a~%"
-                        (id e) e))
-
-    (deftests "Testing obj="
-      (check-t (obj= p1 p1))
-      (check-t (obj= p1 p6))
-
-      (check-nil (obj= p1 p2))
-      (check-nil (obj= p1 p3))
-      (check-nil (obj= p1 p4))
-      (check-nil (obj= p1 p5)))))
-
-(with-basic-clients (1 2 3)
-  (let* ((d0 (basic-depot))
-         (v1 (cvrp-vehicle 1 10))
-         (v2 (cvrp-vehicle 2 20))
-         (v3 (cvrp-vehicle 3 30))
-         (v4 (cvrp-vehicle 4 40))
-         (p1 (finite-fleet-cvrp-problem :id 1 :depot d0
-                           :clients (list c1 c2 c3)
-                           :distance-matrix #2A((0 1 2 3)
-                                                (1 0 4 6)
-                                                (2 4 0 2)
-                                                (3 6 2 0))
-                           :fleet (list v1 v2 v3 v4)))
-         (p2 (finite-fleet-cvrp-problem :id 2 :depot d0
-                           :clients (list c1 c2 c3)
-                           :distance-matrix #2A((0 1 2 3)
-                                                (1 0 4 6)
-                                                (2 4 0 2)
-                                                (3 6 2 0))
-                           :fleet (list v1 v2 v3 v4)))
-         (p3 (finite-fleet-cvrp-problem :id 1 :depot d0
-                           :clients (list c1 c3 c2)
-                           :distance-matrix #2A((0 1 2 3)
-                                                (1 0 4 6)
-                                                (2 4 0 2)
-                                                (3 6 2 0))
-                           :fleet (list v1 v2 v3 v4)))
-         (p4 (finite-fleet-cvrp-problem :id 1 :depot d0
-                           :clients (list c1 c2 c3)
-                           :distance-matrix #2A((0 1 2 3)
-                                                (1 0 4 6)
-                                                (2 4 0 2)
-                                                (3 6 2 0))
-                           :fleet (list v1 v2 v3)))
-         (p5 (finite-fleet-cvrp-problem :id 1 :depot d0
-                           :clients (list c1 c2 c3)
-                           :distance-matrix #2A((0 1 2 3)
-                                                (1 0 4 6)
-                                                (2 4 0 2)
-                                                (3 6 2 8))
-                           :fleet (list v1 v2 v3 v4)))
-
-         (p6 (clone p1)))
-
-    (bformat t "Testing finite-fleet-cvrp-problem...")
-
-    (format t "Printing the objects:~%")
-    (loop for e in (list p1 p2 p3 p4 p5 p6)
-          doing (format t "   finite-fleet-cvrp-problem with id ~a:~% ~a~%"
-                        (id e) e))
-
-    (deftests "Testing obj="
-      (check-t (obj= p1 p1))
-      (check-t (obj= p1 p6))
-
-      (check-nil (obj= p1 p2))
-      (check-nil (obj= p1 p3))
-      (check-nil (obj= p1 p4))
-      (check-nil (obj= p1 p5)))))
-
-(with-basic-clients (1 2 3)
-  (let* ((d0 (basic-depot))
-         (d1 (basic-depot 5))
-         (v1 (cvrp-vehicle 1 10))
-         (v2 (cvrp-vehicle 2 20))
-         (v3 (cvrp-vehicle 3 30))
-         (v4 (cvrp-vehicle 4 40))
-         (p1 (finite-fleet-end-depot-cvrp-problem
-              :id 1
-              :depot d0
-              :end-depot d1
-              :clients (list c1 c2 c3)
-              :distance-matrix #2A((0 1 2 3 4)
-                                   (1 0 4 6 1)
-                                   (2 4 0 2 3)
-                                   (3 6 2 0 2)
-                                   (8 2 1 4 0))
-              :fleet (list v1 v2 v3 v4)))
-         (p2 (finite-fleet-end-depot-cvrp-problem
-              :id 2
-              :depot d0
-              :end-depot d1
-              :clients (list c1 c2 c3)
-              :distance-matrix #2A((0 1 2 3 4)
-                                   (1 0 4 6 1)
-                                   (2 4 0 2 3)
-                                   (3 6 2 0 2)
-                                   (8 2 1 4 0))
-              :fleet (list v1 v2 v3 v4)))
-         (p3 (finite-fleet-end-depot-cvrp-problem
-              :id 1
-              :depot d0
-              :end-depot d1
-              :clients (list c1 c3 c2)
-              :distance-matrix #2A((0 1 2 3 4)
-                                   (1 0 4 6 1)
-                                   (2 4 0 2 3)
-                                   (3 6 2 0 2)
-                                   (8 2 1 4 0))
-              :fleet (list v1 v2 v3 v4)))
-         (p4 (finite-fleet-end-depot-cvrp-problem
-              :id 1
-              :depot d0
-              :end-depot d1
-              :clients (list c1 c2 c3)
-              :distance-matrix #2A((0 1 2 3 4)
-                                   (1 0 4 6 1)
-                                   (2 4 0 2 3)
-                                   (3 6 2 0 2)
-                                   (8 2 1 4 0))
-              :fleet (list v1 v2 v3)))
-         (p5 (finite-fleet-end-depot-cvrp-problem
-              :id 1
-              :depot d0
-              :end-depot d0
-              :clients (list c1 c2 c3)
-              :distance-matrix #2A((0 1 2 3 4)
-                                   (1 0 4 6 1)
-                                   (2 4 0 2 3)
-                                   (3 6 2 0 2)
-                                   (8 2 1 4 0))
-              :fleet (list v1 v2 v3 v4)))
-
-         (p6 (clone p1)))
-
-    (bformat t "Testing finite-fleet-with-cvrp-problem...")
-
-    (format t "d0: ~a, d1: ~a~%" d0 d1 )
-    (format t "p1: ~a, p5: ~a~%" (end-depot p1) (end-depot p5) )
-    (format t "d1 == d0: ~a~%" (obj= (end-depot p1) (end-depot p5)))
-
-    (format t "Printing the objects:~%")
-    (loop for e in (list p1 p2 p3 p4 p5 p6)
-          doing (format t "   finite-fleet-end-depot-cvrp-problem with id ~a:~% ~a~%"
-                        (id e) e))
-
-    (deftests "Testing obj="
-      (check-t (obj= p1 p1))
-      (check-t (obj= p1 p6))
-
-      (check-nil (obj= p1 p2))
-      (check-nil (obj= p1 p3))
-      (check-nil (obj= p1 p4))
-      (check-nil (obj= p1 p5)))))
-
-(let* ((c1 (route-distance-action 1 10))
-       (c2 (route-distance-action 2 10))
-       (c3 (route-distance-action 1 20))
-       (c4 (clone c1))
-       (c5 (clone c2)))
-  (format t "~%===============================
-Testing route-distance-action...
-================================~2%")
-
-  (format t "Printing the objects:~%")
-  (loop for e in (list c1 c2 c3 c4 c5)
-        doing (format t "   route-distance-action with id ~a: ~a~%"
-                      (id e) e))
-
-  (deftests "Testing obj="
-    (check-t (obj= c1 c1))
-    (check-t (obj= c1 c4))
-    (check-t (obj= c2 c5))
-
-    (check-nil (obj= c1 c2))
-    (check-nil (obj= c1 c3))
-    (check-nil (obj= c2 c4))
-    (check-nil (obj= c3 c5))))
-
-(let* ((c1 (basic-vehicle-capacity-action 1 0))
-       (c2 (basic-vehicle-capacity-action 2 0))
-       (c3 (basic-vehicle-capacity-action 1 20))
-       (c4 (clone c1))
-       (c5 (clone c2)))
-  (format t "~%=======================================
-Testing basic-vehicle-capacity-action...
-========================================~2%")
-
-  (format t "Printing the objects:~%")
-  (loop for e in (list c1 c2 c3 c4 c5)
-        doing (format t "   basic-vehicle-capacity-action with id ~a: ~a~%"
-                      (id e) e))
-
-  (deftests "Testing obj="
-    (check-t (obj= c1 c1))
-    (check-t (obj= c1 c4))
-    (check-t (obj= c2 c5))
-
-    (check-nil (obj= c1 c2))
-    (check-nil (obj= c1 c3))
-    (check-nil (obj= c2 c4))
-    (check-nil (obj= c3 c5))))
-
-(let* ((a (simulate-load-action)))
-
-  (format t "===============================
-Testing simulate-load-action...
-===============================~2%")
-
-(format t "A simulate-load-action: ~a~%" a))
-
-(let* ((c1 (basic-solution-distance-action ))
-       (c2 (basic-solution-distance-action 10))
-       (c3 (clone c1))
-       (c4 (clone c2)))
-  (format t "~%=========================================
-Testing basic-solution-distance-action...
-=========================================~2%")
-
-  (format t "Printing the objects:~%")
-  (loop for e in (list c1 c2 c3 c4)
-        doing (format t "   basic-solution-distance-action ~a:~%" e))
-
-  (deftests "Testing obj="
-    (check-t (obj= c1 c1))
-    (check-t (obj= c1 c3))
-    (check-t (obj= c2 c4))
-
-    (check-nil (obj= c1 c2))
-    (check-nil (obj= c2 c3))
-    (check-nil (obj= c3 c4))))
-
-(let* ((c1 (basic-capacity-penalty-action ))
-       (c2 (basic-capacity-penalty-action :id 1 :penalty-factor 100))
-       (c3 (basic-capacity-penalty-action :id 1 :capacity-violation 5))
-       (c4 (basic-capacity-penalty-action :id 2))
-       (c5 (clone c1)))
-  (format t "~%=======================================
-Testing basic-capacity-penalty-action...
-========================================~2%")
-
-  (format t "Printing the objects:~%")
-  (loop for e in (list c1 c2 c3 c4 c5)
-        doing (format t "   basic-capacity-penalty-action with id ~a: ~a~%"
-                      (id e) e))
-
-  (deftests "Testing obj="
-    (check-t (obj= c1 c1))
-    (check-t (obj= c1 c5))
-
-    (check-nil (obj= c1 c2))
-    (check-nil (obj= c1 c3))
-    (check-nil (obj= c1 c4))
-    (check-nil (obj= c2 c3))
-    (check-nil (obj= c3 c4))
-    (check-nil (obj= c4 c5))
-    ))
-
-(let* ((c1 (basic-capacity-penalty-action ))
-       (c2 (basic-capacity-penalty-action :id 1 :penalty-factor 100))
-       (c3 (basic-capacity-penalty-action :id 1 :capacity-violation 5))
-       (c4 (basic-capacity-penalty-action :id 2))
-       (c5 (clone c1)))
-  (format t "~%=======================================
-Testing basic-capacity-penalty-action...
-========================================~2%")
-
-  (format t "Printing the objects:~%")
-  (loop for e in (list c1 c2 c3 c4 c5)
-        doing (format t "   basic-capacity-penalty-action with id ~a: ~a~%"
-                      (id e) e))
-
-  (deftests "Testing obj="
-    (check-t (obj= c1 c1))
-    (check-t (obj= c1 c5))
-
-    (check-nil (obj= c1 c2))
-    (check-nil (obj= c1 c3))
-    (check-nil (obj= c1 c4))
-    (check-nil (obj= c2 c3))
-    (check-nil (obj= c3 c4))
-    (check-nil (obj= c4 c5))
-    ))
-
-(let* ((c1 (delta-distance-action ))
-       (c2 (delta-distance-action :id 1 :delta-distance 0))
-       (c3 (delta-distance-action :id 2 ))
-       (c4 (delta-distance-action :id 1 :delta-distance 10))
-       (c5 (clone c1)))
-  (format t "~%=======================================
-Testing delta-distance-action...
-========================================~2%")
-
-  (format t "Printing the objects:~%")
-  (loop for e in (list c1 c2 c3 c4 c5)
-        doing (format t "   delta-distance-action with id ~a: ~a~%"
-                      (id e) e))
-
-  (deftests "Testing obj="
-    (check-t (obj= c1 c1))
-    (check-t (obj= c1 c5))
-
-    (check-nil (obj= c1 c2))
-    (check-nil (obj= c1 c3))
-    (check-nil (obj= c1 c4))
-    (check-nil (obj= c2 c3))
-    (check-nil (obj= c3 c4))
-    (check-nil (obj= c4 c5))))
-
-(let* ((c1 (delta-basic-capacity-action 3))
-       (c2 (delta-basic-capacity-action 3 :id 1))
-       (c3 (delta-basic-capacity-action
-            3 :id 1 :routes-feasibility #(0 0 0 0) ))
-       (c4 (delta-basic-capacity-action 4))
-       (c5 (delta-basic-capacity-action 3 :id 2))
-       (c6 (delta-basic-capacity-action
-            3 :id 1 :routes-feasibility #(0 1 0 0)))
-       (c7 (clone c1)))
-  (format t "~%=======================================
-Testing delta-basic-capacity-action...
-========================================~2%")
-
-  (format t "Printing the objects:~%")
-  (loop for e in (list c1 c2 c3 c4 c5 c6 c7)
-        doing (format t "   delta-basic-capacity-action with id ~a: ~a~%"
-                      (id e) e))
-
-  (deftests "Testing obj="
-    (check-t (obj= c1 c1))
-    (check-t (obj= c1 c2))
-    (check-t (obj= c1 c3))
-    (check-t (obj= c1 c7))
-
-    (check-nil (obj= c1 c4))
-    (check-nil (obj= c1 c5))
-    (check-nil (obj= c1 c6))
-    (check-nil (obj= c3 c5))))
-
-(let* ((c1 (delta-basic-capacity-penalty-action))
-       (c2 (delta-basic-capacity-penalty-action
-            :penalty-factor 200))
-       (c3 (delta-basic-capacity-penalty-action
-            :delta-routes-feasibility #(0 3 0 0)))
-       (c4 (delta-basic-capacity-penalty-action
-            :original-routes-feasibility #(1 3)))
-       (c5 (delta-basic-capacity-penalty-action
-            :total-penalty 500))
-       (c6 (delta-basic-capacity-penalty-action
-            :total-penalty 3
-            :id 2
-            :penalty-factor 4
-            :delta-routes-feasibility #(0 1 0 0)
-            :original-routes-feasibility #(0)))
-       (c7 (clone c1)))
-  (format t "~%=======================================
-Testing delta-basic-cvrp-action...
-========================================~2%")
-
-  (format t "Printing the objects:~%")
-  (loop for e in (list c1 c2 c3 c4 c5 c6 c7)
-        doing (format t "   delta-basic-cvrp-action with id ~a: ~a~%"
-                      (id e) e))
-
-  (deftests "Testing obj="
-    (check-t (obj= c1 c1))
-    (check-t (obj= c1 c7))
-
-    (check-nil (obj= c1 c2))
-    (check-nil (obj= c1 c3))
-    (check-nil (obj= c1 c4))
-    (check-nil (obj= c1 c5))
-    (check-nil (obj= c1 c6))
-    (check-nil (obj= c3 c5))))
-
-(let* ((c1 (delta-cvrp-action))
-       (c2 (delta-cvrp-action :delta-distance 1))
-       (c3 (delta-cvrp-action :delta-routes-feasibility #(0 0 0 0) ))
-       (c3 (delta-cvrp-action
-            :original-routes-feasibility #(0 0 0 0) ))
-       (c4 (delta-cvrp-action :id 2))
-       (c5 (delta-cvrp-action :total-penalty 2))
-       (c6 (delta-cvrp-action :penalty-factor 2))
-       (c7 (delta-cvrp-action
-            :delta-distance 3
-            :id 1
-            :delta-routes-feasibility #(0 1 0 0)))
-       (c8 (clone c1)))
-  (format t "~%=======================================
-Testing delta-basic-cvrp-action...
-========================================~2%")
-
-  (format t "Printing the objects:~%")
-  (loop for e in (list c1 c2 c3 c4 c5 c6 c7)
-        doing (format t "   delta-basic-cvrp-action with id ~a: ~a~%"
-                      (id e) e))
-
-  (deftests "Testing obj="
-    (check-t (obj= c1 c1))
-    (check-t (obj= c1 c8))
-
-    (check-nil (obj= c1 c2))
-    (check-nil (obj= c1 c3))
-    (check-nil (obj= c1 c4))
-    (check-nil (obj= c1 c5))
-    (check-nil (obj= c1 c6))
-    (check-nil (obj= c1 c7))
-    (check-nil (obj= c3 c5))))
-
-(with-cvrp-problem (p1 :distances `((0 2 3 4 5)
-                                    (5 0 6 7 2 )
-                                    (1 8 0 3 9)
-                                    (4 5 1 0 5)
-                                    (4 5 1 5 0))
-                       :demands '(20 10 15 40)
-                       :capacity 40)
-  (with-basic-cvrp-solution (s1 ((1 2) (3) (4)) p1)
-    (let* ((wc1 (basic-working-copy s1))
-           (c1 (delta-cvrp-action
-                :delta-distance 3
-                :id 1
-                :total-penalty 400
-                :penalty-factor 300
-                :original-routes-feasibility nil
-                :delta-routes-feasibility #(0 1 0))))
-      (bformat t "Testing delta-basic-cvrp-action initialization")
-      (check-= 3 (delta-distance c1))
-      (check-obj= #(0 1 0) (delta-routes-feasibility c1))
-      (check-obj= #(0 1 2) (delta-routes-feasibility c1))
-      (check-nil (original-routes-feasibility c1))
-      (check-= 300 (penalty-factor c1))
-      (check-= 400 (total-penalty c1))
-
-      ;; let's initialize
-      (initialize-action-for-delta-cost-computation wc1 p1 c1)
-
-      ;; after initialization
-      (check-= 0 (delta-distance c1))
-      (check-obj= #(0 0 0 0) (delta-routes-feasibility c1))
-      (check-obj= #(0 10 25 0) (original-routes-feasibility c1))
-      (check-= 300 (penalty-factor c1))
-      (check-= 0 (total-penalty c1)))))
-
-(let* ((c1 (delta-distance-action* ))
-       (c2 (delta-distance-action* :id 1 :delta-distance 0
-                                   :delta-distance-stack nil))
-       (c3 (delta-distance-action* :id 2))
-       (c4 (delta-distance-action* :id 1 :delta-distance 10))
-       (c5 (delta-distance-action* :id 1 :delta-distance 0
-                                   :delta-distance-stack (list 0)))
-       (c6 (clone c1)))
-  (bformat t "Testing delta-distance-action")
-
-  (format t "Printing the objects:~%")
-  (loop for e in (list c1 c2 c3 c4 c5)
-        doing (format t "   delta-distance-action with id ~a: ~a~%"
-                      (id e) e))
-
-  (deftests "Testing obj="
-    (check-t (obj= c1 c1))
-    (check-t (obj= c1 c2))
-    (check-t (obj= c1 c6))
-
-    (check-nil (obj= c1 c3))
-    (check-nil (obj= c1 c4))
-    (check-nil (obj= c1 c5))
-    (check-nil (obj= c2 c3))
-    (check-nil (obj= c3 c4))
-    (check-nil (obj= c4 c5))))
-
-(let* ((c1 (delta-basic-capacity-action* 3))
-       (c2 (delta-basic-capacity-action* 3 :id 1))
-       (c3 (delta-basic-capacity-action*
-            3 :id 1 :routes-feasibility #(0 0 0 0) ))
-       (c4 (delta-basic-capacity-action*
-            3
-            :id 1
-            :routes-feasibility #(0 0 0 0)
-            :delta-routes-feasibility-stack nil))
-       (c5 (delta-basic-capacity-action* 4))
-       (c6 (delta-basic-capacity-action* 3 :id 2))
-       (c7 (delta-basic-capacity-action*
-            3
-            :id 1
-            :routes-feasibility #(0 1 0 0)))
-       (c8 (clone c1))
+       (cvrp-action (basic-cvrp-action))
        )
-  (format t "~%=======================================
-Testing delta-basic-capacity-action...
-========================================~2%")
-
-  (format t "Printing the objects:~%")
-  (loop for e in (list c1 c2 c3 c4
-                       c5 c6 c7 c8)
-        doing (format t "   delta-basic-capacity-action* ~a: ~a~%"
-                       (id e) e))
-
-  (deftests "Testing obj="
-    (check-t (obj= c1 c1))
-    (check-t (obj= c1 c2))
-    (check-t (obj= c1 c3))
-    (check-t (obj= c1 c4))
-    (check-t (obj= c1 c8))
-
-    (check-nil (obj= c1 c5))
-    (check-nil (obj= c1 c6))
-    (check-nil (obj= c3 c5))))
-
-(let* ((c1 (delta-basic-capacity-penalty-action*))
-       (c2 (delta-basic-capacity-penalty-action*
-            :penalty-factor 200))
-       (c3 (delta-basic-capacity-penalty-action*
-            :delta-routes-feasibility #(0 3 0 0)))
-       (c4 (delta-basic-capacity-penalty-action*
-            :original-routes-feasibility #(1 3)))
-       (c5 (delta-basic-capacity-penalty-action*
-            :total-penalty 500))
-       (c6 (delta-basic-capacity-penalty-action*
-            :total-penalty 3
-            :id 2
-            :penalty-factor 4
-            :delta-routes-feasibility #(0 1 0 0)
-            :original-routes-feasibility #(0)))
-       (c7 (clone c1))
-       (c8 (delta-basic-capacity-penalty-action*
-            :total-penalty 0
-            :id 1
-            :penalty-factor 1000
-            :delta-routes-feasibility nil
-            :original-routes-feasibility nil
-            :delta-routes-feasibility-stack nil
-            :total-penalty-stack nil))
-       (c9 (delta-basic-capacity-penalty-action*
-            :total-penalty 0
-            :id 1
-            :penalty-factor 1000
-            :delta-routes-feasibility nil
-            :original-routes-feasibility nil
-            :delta-routes-feasibility-stack `((1 2 0))
-            :total-penalty-stack nil))
-       (c10 (delta-basic-capacity-penalty-action*
-            :total-penalty 0
-            :id 1
-            :penalty-factor 1000
-            :delta-routes-feasibility nil
-            :original-routes-feasibility nil
-            :delta-routes-feasibility-stack `((1 ,(+ 1 1) 0))
-            :total-penalty-stack nil)))
-  (bformat t "Testing delta-basic-cvrp-action")
-
-  (format t "Printing the objects:~%")
-  (loop for e in (list c1 c2 c3 c4 c5 c6 c7)
-        doing (format t "   delta-basic-cvrp-action with id ~a: ~a~%"
-                      (id e) e))
-
-  (deftests "Testing obj="
-    (check-t (obj= c1 c1))
-    (check-t (obj= c1 c7))
-    (check-t (obj= c1 c8))
-    (check-t (obj= c9 c10))
-
-    (check-nil (obj= c1 c2))
-    (check-nil (obj= c1 c3))
-    (check-nil (obj= c1 c4))
-    (check-nil (obj= c1 c5))
-    (check-nil (obj= c1 c6))
-    (check-nil (obj= c3 c5))
-    (check-nil (obj= c1 c9))))
-
-(let* ((c1 (delta-cvrp-action*))
-       (c2 (delta-cvrp-action* :delta-distance 1))
-       (c3 (delta-cvrp-action* :delta-routes-feasibility #(0 0 0 0) ))
-       (c3 (delta-cvrp-action*
-            :original-routes-feasibility #(0 0 0 0) ))
-       (c4 (delta-cvrp-action* :id 2))
-       (c5 (delta-cvrp-action* :total-penalty 2))
-       (c6 (delta-cvrp-action* :penalty-factor 2))
-       (c7 (delta-cvrp-action*
-            :delta-distance 3
-            :id 1
-            :delta-routes-feasibility #(0 1 0 0)))
-       (c8 (clone c1)))
-  (format t "~%=======================================
-Testing delta-basic-cvrp-action...
-========================================~2%")
-
-  (format t "Printing the objects:~%")
-  (loop for e in (list c1 c2 c3 c4 c5 c6 c7)
-        doing (format t "   delta-basic-cvrp-action with id ~a: ~a~%"
-                      (id e) e))
-
-  (deftests "Testing obj="
-    (check-t (obj= c1 c1))
-    (check-t (obj= c1 c8))
-
-    (check-nil (obj= c1 c2))
-    (check-nil (obj= c1 c3))
-    (check-nil (obj= c1 c4))
-    (check-nil (obj= c1 c5))
-    (check-nil (obj= c1 c6))
-    (check-nil (obj= c1 c7))
-    (check-nil (obj= c3 c5))))
-
-(with-cvrp-problem (p1 :distances `((0 2 3 4 5)
-                                    (5 0 6 7 2 )
-                                    (1 8 0 3 9)
-                                    (4 5 1 0 5)
-                                    (4 5 1 5 0))
-                       :demands '(20 10 15 40)
-                       :capacity 40)
-  (with-basic-cvrp-solution (s1 ((1 2) (3) (4)) p1)
-    (let* ((wc1 (basic-working-copy s1))
-           (c1 (delta-cvrp-action
-                :delta-distance 3
-                :id 1
-                :total-penalty 400
-                :penalty-factor 300
-                :original-routes-feasibility nil
-                :delta-routes-feasibility #(0 1 0))))
-      (bformat t "Testing delta-basic-cvrp-action initialization")
-      (check-= 3 (delta-distance c1))
-      (check-obj= #(0 1 0) (delta-routes-feasibility c1))
-      (check-obj= #(0 1 2) (delta-routes-feasibility c1))
-      (check-nil (original-routes-feasibility c1))
-      (check-= 300 (penalty-factor c1))
-      (check-= 400 (total-penalty c1))
-
-      ;; let's initialize
-      (initialize-action-for-delta-cost-computation wc1 p1 c1)
-
-      ;; after initialization
-      (check-= 0 (delta-distance c1))
-      (check-obj= #(0 0 0 0) (delta-routes-feasibility c1))
-      (check-obj= #(0 10 25 0) (original-routes-feasibility c1))
-      (check-= 300 (penalty-factor c1))
-      (check-= 0 (total-penalty c1)))))
-
-(let* ((c1 (op-select-client 1 1 0))
-       (c2 (op-select-client 1 1 1))
-       (c3 (op-select-client 1 2 0))
-       (c4 (op-select-client 2 1 0))
-       (c5 (clone c1)))
-  (format t "~%===========================
-Testing op-select-client...
-===========================~2%")
-
-  (format t "Printing the objects:~%")
-  (loop for e in (list c1 c2 c3 c4 c5)
-        doing (format t "   op-select-client: ~a~%" e))
-
-  (deftests "Testing obj="
-    (check-t (obj= c1 c1))
-    (check-t (obj= c1 c5))
-
-    (check-nil (obj= c1 c2))
-    (check-nil (obj= c1 c3))
-    (check-nil (obj= c1 c4))
-    (check-nil (obj= c2 c3))
-    (check-nil (obj= c3 c4))
-    (check-nil (obj= c4 c5))))
-
-(let* ((c1 (op-insert-client 1 1 0))
-       (c2 (op-insert-client 1 1 1))
-       (c3 (op-insert-client 1 2 0))
-       (c4 (op-insert-client 2 1 0))
-       (c5 (clone c1)))
-  (format t "~%===========================
-Testing op-insert-client...
-===========================~2%")
-
-  (format t "Printing the objects:~%")
-  (loop for e in (list c1 c2 c3 c4 c5)
-        doing (format t "   op-insert-client: ~a~%" e))
-
-  (deftests "Testing obj="
-    (check-t (obj= c1 c1))
-    (check-t (obj= c1 c5))
-
-    (check-nil (obj= c1 c2))
-    (check-nil (obj= c1 c3))
-    (check-nil (obj= c1 c4))
-    (check-nil (obj= c2 c3))
-    (check-nil (obj= c3 c4))
-    (check-nil (obj= c4 c5))))
-
-(with-basic-solution (s1 ((1 2 3) (4 5)))
-  (with-basic-solution (s2 ((1 2 3) (5 4)))
-    (let* ((wc1 (basic-working-copy s1))
-           (wc2 (basic-working-copy s2))
-           (wc3 (clone wc1))
-           (wc4 (clone wc2)))
-      (format t "~%==========================
-Testing basic-working-copy
-==========================~2%")
-
-      (format t "Printing the objects:~%")
-      (loop for e in (list wc1 wc2 wc3 wc4)
-            doing (format t "   basic-working-copy: ~a~%" e))
-
-      (deftests "Testing obj="
-        (check-t (obj= wc1 wc1))
-        (check-t (obj= wc1 wc3))
-        (check-t (obj= wc2 wc4))
-
-        (check-nil (obj= wc1 wc2))
-        (check-nil (obj= wc1 wc4))
-        (check-nil (obj= wc2 wc3))))))
-
-(with-basic-solution (s1 ((1 2 3) (4 5)))
-  (let* ((wc (basic-working-copy s1)))
-
-    (bformat t "Checking cost in the working-copy")
-    (check-= 0 (cost s1))
-    (check-= 0 (cost wc))
-    (setf (cost s1) 100)
-    (check-= 100 (cost wc))
-    (setf (cost wc) 200)
-    (check-= 200 (cost wc))
-    (check-= 200 (cost (solution wc)))))
-
-(with-basic-solution (s1 ((1 2 3) (4 5)))
-  (let* ((wc (basic-working-copy s1)))
-
-    (bformat t "Checking depot in the working-copy")
-    (check-obj= (basic-depot) (depot wc))))
-
-(with-basic-solution (s1 ((1 2 3) (4 5)))
-  (let* ((wc (basic-working-copy s1)))
-
-    (bformat t "Checking depot in the working-copy")
-    (check-obj= (basic-depot) (depot wc))))
-
-(with-basic-solution (s1 ((1 2 3) (4 5)))
-  (with-basic-solution (s2 ((1 2 3) (5 4)))
-    (let* ((wc1 (working-copy-with-infinite-fleet s1))
-           (wc2 (working-copy-with-infinite-fleet s2))
-           (wc3 (clone wc1))
-           (wc4 (clone wc2)))
-      (format t "Testing working-copy-with-infinite-fleet")
-
-      (format t "Printing the objects:~%")
-      (loop for e in (list wc1 wc2 wc3 wc4)
-            doing (format t "   working-copy-with-infinite-fleet: ~a~%" e))
-
-      (deftests "Testing obj="
-        (check-t (obj= wc1 wc1))
-        (check-t (obj= wc1 wc3))
-        (check-t (obj= wc2 wc4))
-
-        (check-nil (obj= wc1 wc2))
-        (check-nil (obj= wc1 wc4))
-        (check-nil (obj= wc2 wc3))))))
-
-(with-basic-solution (s1 ((1 2 3) (4 5 6)))
-  (let* ((wc (make-working-copy s1)))
-    (format t "Expect basic-working-copy: ~a~%"
-            (type-of wc))))
-
-(with-basic-cvrp-solution (s1 ((1 2 3) (4 5 6)) a-n33-k6-problem )
-  (let* ((wc (make-working-copy s1)))
-    (format t "What is s1: ~a~%"
-            (subtypep (type-of s1) 'has-infinite-fleet))
-    (format t "Expect working-copy-with-inifinite-fleet: ~a~%"
-            (type-of wc))))
-
-(with-basic-clients (1 2 3 4 5 6)
-
-  (format t "===========================
-Testing get-client-with-id:
-===========================~2%")
-  (let* ((d1 (basic-depot 1))
-         (p1 (basic-problem
-              :id 1 :clients (list c1 c2 c3 c4 c5 c6) :depot d1)))
-    (loop for i from 1 to 6
-          doing (format t "With id ~a: ~a~%" i
-                        (get-client-with-id i p1)))
-
-    (format t "~%A client that is not there (7): ~a~%"
-            (get-client-with-id 7 p1))))
-
-(with-basic-clients (1 2 3 4 5 6)
-
-  (bformat t "Testing get-vehicle-with-id:")
-  (let* ((d1 (basic-depot 1))
-         (v1 (basic-vehicle 1))
-         (v2 (basic-vehicle 2))
-         (v3 (basic-vehicle 3))
-         (p1 (finite-fleet-cvrp-problem 
-              :id 1
-              :clients (list c1 c2 c3 c4 c5 c6)
-              :depot d1
-              :fleet (list v1 v2 v3))))
-    (loop for i from 1 to 3
-          doing (format t "With id ~a: ~a~%" i
-                        (get-vehicle-with-id i p1)))
-
-    (format t "~%A vehicle that is not there (4): ~a~%"
-            (get-vehicle-with-id 7 p1))))
-
-(let* ((distance #2A ((0 1 2 3)
-                      (1 0 4 5)
-                      (2 4 0 6)
-                      (3 5 6 0)))
-       (dp (make-instance 'distance-problem
-                          :distance-matrix distance))
-       (d0 (basic-depot))
-       (c1 (basic-client 1))
-       (c2 (basic-client 2))
-       (c3 (basic-client 3)))
-  (format t "=============================
-Testing get-distance-from-to:
-=============================~2%")
-  (check-= 0 (get-distance-from-to d0 d0 dp))
-  (check-= 1 (get-distance-from-to d0 c1 dp))
-  (check-= 2 (get-distance-from-to d0 c2 dp))
-  (check-= 3 (get-distance-from-to d0 c3 dp))
-
-  (check-= 1 (get-distance-from-to c1 d0 dp))
-  (check-= 0 (get-distance-from-to c1 c1 dp))
-  (check-= 4 (get-distance-from-to c1 c2 dp))
-  (check-= 5 (get-distance-from-to c1 c3 dp)))
-
-(let* ((p1 (basic-product 1 "oil"))
-       (p2 (basic-product 2 "gas"))
-       (p3 (basic-product 3 "bread"))
-       (p4 (basic-product 4 "meat"))
-       (plist (list p1 p2 p3 p4))
-       (c1 (make-instance 'multi-product-demand-client
-                          :products (list p1 p2 p3 p4))))
-  ;; let's initialize the demands
-  (loop for p in plist
-        for i from 1
-        doing (setf (gethash (id p) (products-demand c1)) (* 10 i)))
-
-  (bformat t "Testing products-demand")
-
-  (loop for p in plist
-        for i from 1
-        doing (check-= (* 10 i) (product-demand p c1))))
-
-(let* ((p1 (basic-product 1 "oil"))
-       (p2 (basic-product 2 "gas"))
-       (p3 (basic-product 3 "bread"))
-       (p4 (basic-product 4 "meat"))
-       (plist (list p1 p2 p3 p4))
-       (c1 (make-instance 'multi-product-demand-client
-                          :products (list p1 p2 p3 p4))))
-  ;; let's initialize the demands
-  (loop for p in plist
-        for i from 1 to 3
-        doing (set-product-demand p c1 (* 10 i)))
-
-  (bformat t "Testing set-products-demand")
-
-  (loop for p in plist
-        for i from 1 to 3
-        doing (check-= (* 10 i) (product-demand p c1)))
-
-  (check-nil (product-demand p4 c1)))
-
-(let* ((p1 (basic-product 1 "oil"))
-       (p2 (basic-product 2 "gas"))
-       (p3 (basic-product 3 "bread"))
-       (p4 (basic-product 4 "meat"))
-       (plist (list p1 p2 p3 p4))
-       (v1 (make-instance 'multi-compartment-vehicle
-                          :number-of-compartments 4)))
-  ;; let's initialize the demands
-  (loop for p in plist
-        for i from 1 to 3
-        doing (setf (gethash (id p) (compartments-capacity v1)) (* 10 i)))
-
-  (bformat t "Testing compartment-capacity")
-
-  (loop for p in plist
-        for i from 1 to 3
-        doing (check-= (* 10 i) (compartment-capacity p v1)))
-
-  (check-nil (compartment-capacity p4 v1)))
-
-(let* ((p1 1)
-       (p2 2)
-       (p3 3)
-       (p4 4)
-       (plist (list p1 p2 p3 p4))
-       (v1 (make-instance 'multi-compartment-vehicle
-                          :number-of-compartments 4)))
-  ;; let's initialize the demands
-  (loop for p in plist
-        for i from 1 to 3
-        doing (setf (gethash p (compartments-capacity v1)) (* 10 i)))
-
-  (bformat t "Testing compartment-capacity with numbers")
-
-  (loop for p in plist
-        for i from 1 to 3
-        doing (check-= (* 10 i) (compartment-capacity p v1)))
-
-  (check-nil (compartment-capacity p4 v1)))
-
-(let* ((p1 1)
-       (p2 2)
-       (p3 3)
-       (p4 4)
-       (plist (list p1 p2 p3 p4))
-       (v1 (make-instance 'multi-compartment-vehicle
-                          :number-of-compartments 4)))
-  ;; let's initialize the demands
-  (loop for p in plist
-        for i from 1 to 3
-        doing (setf (gethash p (compartments-capacity v1)) (* 10 i)))
-
-  (bformat t "Testing compartment-capacity with numbers")
-
-  (loop for p in plist
-        for i from 1 to 3
-        doing (check-= (* 10 i) (compartment-capacity p v1)))
-
-  (check-nil (compartment-capacity p4 v1)))
-
-(let* ((p1 1)
-       (p2 2)
-       (p3 3)
-       (p4 4)
-       (plist (list p1 p2 p3 p4))
-       (v1 (make-instance 'multi-compartment-vehicle
-                          :number-of-compartments 4)))
-  ;; let's initialize the demands
-  (loop for p in plist
-        for i from 1 to 3
-        doing (setf (gethash p (compartments-capacity v1)) (* 10 i)))
-
-  (bformat t "Testing compartment-capacity with numbers")
-
-  (loop for p in plist
-        for i from 1 to 3
-        doing (check-= (* 10 i) (compartment-capacity p v1)))
-
-  (check-nil (compartment-capacity p4 v1)))
-
-(let* ((p1 (basic-product 1 "oil"))
-       (p2 (basic-product 2 "gas"))
-       (p3 (basic-product 3 "bread"))
-       (p4 (basic-product 4 "meat"))
-       (plist (list p1 p2 p3 p4))
-       (v1 (make-instance 'multi-compartment-vehicle
-                          :number-of-compartments 4)))
-  ;; let's initialize the demands
-  (loop for p in plist
-        for i from 1 to 3
-        doing (set-compartment-capacity p v1  (* 10 i)))
-
-  (bformat t "Testing set-compartment-capacity")
-
-  (loop for p in plist
-        for i from 1 to 3
-        doing (check-= (* 10 i) (compartment-capacity p v1)))
-
-  (check-nil (compartment-capacity p4 v1)))
-
-(let* ((p1 1)
-       (p2 2)
-       (p3 3)
-       (p4 4)
-       (plist (list p1 p2 p3 p4))
-       (v1 (make-instance 'multi-compartment-vehicle
-                          :number-of-compartments 4)))
-  ;; let's initialize the demands
-  (loop for p in plist
-        for i from 1 to 3
-        doing (setf (gethash p (compartments-capacity v1)) (* 10 i)))
-
-  (bformat t "Testing compartment-capacity with numbers")
-
-  (loop for p in plist
-        for i from 1 to 3
-        doing (check-= (* 10 i) (compartment-capacity p v1)))
-
-  (check-nil (compartment-capacity p4 v1)))
-
-(let* ((c1 (basic-client 1))
-       (c2 (basic-client 2))
-       (c3 (basic-client 3))
-       (c4 (basic-client 4))
-       (v1 (make-instance 'clients-constrained-vehicle
-                          :compatible-clients (list c1 c3)))
-       (v2 (make-instance 'clients-constrained-vehicle
-                          :compatible-clients (list c1 c2 c3))))
-  ;; let's initialize the demands
-
-
-  (bformat t "Testing client-is-compatible-with-vehicle")
-
-  (check-non-nil (client-is-compatible-with-vehicle c1 v1))
-  (check-non-nil (client-is-compatible-with-vehicle c3 v1))
-  (check-non-nil (client-is-compatible-with-vehicle c1 v2))
-  (check-non-nil (client-is-compatible-with-vehicle c2 v2))
-  (check-non-nil (client-is-compatible-with-vehicle c3 v2))
-  (check-nil     (client-is-compatible-with-vehicle c2 v1)))
-
-(with-basic-solution (s1 ((1 2 3)))
-  (let* ((wc (basic-working-copy s1))
-         (op1 (op-select-client 1 1 0))
-         (op2 (op-insert-client 1 1 1)))
-    (check-obj= (list op1) (get-simpler-operations-from op1 wc))
-    (check-obj= (list op2) (get-simpler-operations-from op2 wc))))
-
-(progn
-  (bformat t "Testing with-basic-clients")
-  (with-basic-clients (1 2 3 4 5)
-    (format t "  ~a~%" c1)
-    (format t "  ~a~%" c2)
-    (format t "  ~a~%" c3)
-    (format t "  ~a~%" c4)
-    (format t "  ~a~%" c5)))
-
-(print (make-basic-route-from-list 1 '(1 2 3) 1))
-(print (make-basic-route-from-list 2 '(4 5) 2))
-(print (make-basic-route-from-list 3 '(6) 3))
-(print (make-basic-route-from-list 3 '(6) 3 2))
-
-(print (make-basic-solution-from-list 1 '((1 2 3) (4 5) (6))))
-(print (make-basic-solution-from-list 2 '((1 3) (2 4 5) (6))))
-
-(with-basic-solution (s1 ((1 2 3) (4 5) (6)))
-  (format t "~%Id of the solution: ~a" (id s1))
-  (print s1))
-
-(with-basic-solution (s3 ((1 2 3) (4 5) (6)) 2)
-  (format t "~%Id of the solution: ~a" (id s3))
-  (print s3))
+
+
+      (bformat t "Testing DNS with a-n33-k6")
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (+ (total-distance cvrp-action)
+                         (total-penalty cvrp-action)))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-solution s1 t)
+
+      (setf results (vns
+                     p1 s1
+                     (list rab-random
+                           rehrf-random
+                           rarac-random
+                           ref-random
+                           rereg-random
+                           rerf-random
+                           rehf-random
+                           rarb-random
+                           )
+                     :max-iter max-iterations
+                     :action action))
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through ~a: ~a~%"
+                    selection-strategy
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor through ~a:~%"
+                    selection-strategy)
+            (pp-solution best-solution-exhaustive t)
+
+            (simulate-solution best-solution-exhaustive p1 cvrp-action)
+
+            (setf best-solution-exhaustive (first results))
+            (format t "Best value through Yoel's: ~a~%"
+                    (+ (total-distance cvrp-action)
+                       (total-penalty cvrp-action)))
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))
+
+
+
+      )
+
+(let* ((p1 a-n33-k6-problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action))
+       (results nil)
+
+       ;(search-strategy +exhaustive-search-strategy+)
+       (search-strategy (random-neighborhood-search-strategy 100))
+
+       (selection-strategy +first-improvement+)
+       ;(selection-strategy +random-improvement+)
+       ;(selection-strategy +best-improvement+)
+       (max-iterations 550)
+
+       (rarac-r-ex (make-neighborhood-criterion
+                    rarac-description
+                    search-strategy
+                    selection-strategy))
+
+       (rab-r-ex (make-neighborhood-criterion
+                  rab-description
+                  search-strategy
+                  selection-strategy))
+
+       (rereg-r-ex (make-neighborhood-criterion
+                    rereg-description
+                    search-strategy
+                    selection-strategy))
+
+
+       (cvrp-action (basic-cvrp-action))
+       )
+
+
+      (bformat t "Testing DNS with a-n33-k6")
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (+ (total-distance cvrp-action)
+                         (total-penalty cvrp-action)))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-solution s1 t)
+
+      (setf results (vns
+                     p1 s1
+                     (list
+                      rarac-r-ex
+                      rab-r-ex
+                      rereg-r-ex
+                           )
+                     :max-iter max-iterations
+                     :action action))
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through ~a: ~a~%"
+                    selection-strategy
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor through ~a:~%"
+                    selection-strategy)
+            (pp-solution best-solution-exhaustive t)
+
+            (simulate-solution best-solution-exhaustive p1 cvrp-action)
+
+            (setf best-solution-exhaustive (first results))
+            (format t "Best value through Yoel's: ~a~%"
+                    (+ (total-distance cvrp-action)
+                       (total-penalty cvrp-action)))
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))
+
+
+
+      )
+
+(let* ((p1 a-n65-k9-problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action))
+       (results nil)
+
+       ;(selection-strategy +first-improvement+)
+       (selection-strategy +random-improvement+)
+       ;(selection-strategy +best-improvement+)
+       (max-iterations 550)
+
+       (cvrp-action (basic-cvrp-action))
+
+       )
+
+
+      (bformat t "Testing DNS with a-n33-k6")
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (+ (total-distance cvrp-action)
+                         (total-penalty cvrp-action)))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-solution s1 t)
+
+      (setf results (vns-fn
+                     p1 s1
+                     (list rab-random
+                           rarac-random
+                           ref-random
+                           rereg-first
+                           rerf-first
+                           rarb-random
+                           )
+                     :max-iter max-iterations
+                     :action action))
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through ~a: ~a~%"
+                    selection-strategy
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor through ~a:~%"
+                    selection-strategy)
+            (pp-solution best-solution-exhaustive t)
+
+            (simulate-solution best-solution-exhaustive p1 cvrp-action)
+
+            (setf best-solution-exhaustive (first results))
+            (format t "Best value through Yoel's: ~a~%"
+                    (+ (total-distance cvrp-action)
+                       (total-penalty cvrp-action)))
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))
+
+      )
+
+(with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                    (5 0 6 7 2 4)  ;1
+                                    (1 8 0 3 9 1)  ;2
+                                    (4 5 1 0 5 7)  ;3
+                                    (4 5 1 5 0 6)  ;4
+                                    (1 5 7 6 9 0)) ;5
+                                    ;0 1 2 3 4 5 
+                                    :demands '(10 10 15 40 20)
+                                    :capacity 40)
+  (with-basic-cvrp-solution (s1 ((1 2 3 4 5)) p1)
+    (let* ((best-solution-exhaustive nil)
+           (action (delta-cvrp-action))
+           (results nil)
+           (cvrp-action (basic-cvrp-action 
+                         :penalty-factor 1000))
+           )
+
+      (bformat t "Testing VNS with add-route")
+
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (get-cost-from-action cvrp-action))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-solution s1 t)
+
+      (setf results (vns-shake 
+                     p1 s1 (list
+                            rab   ; 0
+                            rarb  ; 1
+                            rarac ; 2
+                            rad   ; 3   
+                            )
+                     :max-iter 150
+                     :action action
+                     :selection-strategy +best-improvement+))
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))      
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through exhaustive: ~a~%"
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor through exhaustive search:~%")
+            (pp-solution best-solution-exhaustive t)
+
+            ;; (format t "Best value through Yoel's: ~a~%"
+            ;;         (solution-cost best-solution-exhaustive
+            ;;                        p1 cvrp-action))
+            ;; (format t "action: ~a~%" cvrp-action)
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))
+
+          )))
+
+(let* ((p1 a-n65-k9-problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action*))
+       (results nil)
+
+       (max-iterations 1000)
+       (no-of-jumps 4)
+
+       (cvrp-action (basic-cvrp-action))
+       )
+
+
+      (bformat t "Testing DNS with a-n33-k6")
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (+ (total-distance cvrp-action)
+                         (total-penalty cvrp-action)))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-solution s1 t)
+
+      (time
+       (setf results (vns-code
+                      p1 s1
+                      (list rabs*     ;1
+                            rarbs*   ;2
+                            raracs*   ;3
+                            refs*     ;4
+                            reregs*   ;5
+                            rehfs*    ;6
+                            rerfs*    ;7
+                            rehrfs*   ;8
+                            rerehgs*  ;9
+                            rehregs*  ;10
+                            rehrehgs* ;11
+                            )
+                      ;; :inner-search-max-iter max-iterations
+                      :action action
+                      :max-iter max-iterations
+                      :selection-strategy
+                      ;; (random-improvement-smart 0.5 )
+                      *random-improvement-with-candidates*
+                      ;; +first-improvement+
+                      :search-strategy *exhaustive-search-strategy*)))
+
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through: ~a~%"
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor:~%")
+            (pp-solution best-solution-exhaustive t)
+
+            (simulate-solution best-solution-exhaustive p1 cvrp-action)
+
+            (setf best-solution-exhaustive (first results))
+            (format t "Best value through Yoel's: ~a~%"
+                    (+ (total-distance cvrp-action)
+                       (total-penalty cvrp-action)))
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))
+
+
+
+      )
+
+(let* ((p1 a-n65-k9-problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action))
+       (results nil)
+
+       (max-iterations 1000)
+       ;; (no-of-jumps 4)
+
+       (cvrp-action (basic-cvrp-action))
+       )
+
+
+      (bformat t "Testing DNS with a-n33-k6")
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (+ (total-distance cvrp-action)
+                         (total-penalty cvrp-action)))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-solution s1 t)
+
+      ;; (time
+      ;;  (setf results (vns-code
+      ;;                 p1 s1
+      ;;                 (list rab         ;1
+      ;;                       rarb        ;2
+      ;;                       rarac       ;3
+      ;;                       ref     ;4
+      ;;                       rereg   ;5
+      ;;                       rerf    ;6
+      ;;                       rehf    ;7
+      ;;                       rehrf   ;8
+      ;;                       )
+      ;;                 ;; :inner-search-max-iter max-iterations
+      ;;                 :action action
+      ;;                 :max-iter max-iterations
+      ;;                 :selection-strategy +best-improvement+
+      ;;                 ;; :shake-search (jump-around-search-strategy no-of-jumps)
+      ;;                 :search-strategy +exhaustive-search-strategy+)))
+
+      (time
+       (setf results (vns-code
+                      p1 s1
+                      (list
+                       rabs             ;0
+                       rarbs            ;1
+                       raracs           ;2
+                       refs             ;3
+                       rerfs            ;4
+                       rehfs            ;5
+                       rehrfs           ;6
+                       reregs           ;7
+                       rehrfs           ;8
+                       rerehgs          ;9
+                       rehregs          ;10
+                       rehrehgs          ;11
+                       )
+                      ;; :inner-search-max-iter max-iterations
+                      :action action
+                      :max-iter max-iterations
+                      :selection-strategy +best-improvement+
+                      ;; :shake-search (jump-around-search-strategy no-of-jumps)
+                      :search-strategy +exhaustive-search-strategy+)))
+
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through: ~a~%"
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor:~%")
+            (pp-solution best-solution-exhaustive t)
+
+            (simulate-solution best-solution-exhaustive p1 cvrp-action)
+
+            (setf best-solution-exhaustive (first results))
+            (format t "Best value through Yoel's: ~a~%"
+                    (+ (total-distance cvrp-action)
+                       (total-penalty cvrp-action)))
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))
+
+
+
+      )
+
+(let* ((p1 a-n65-k9-problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action*))
+       (results nil)
+
+       (max-iterations 1000)
+       ;; (no-of-jumps 4)
+
+       (cvrp-action (basic-cvrp-action))
+       )
+
+
+      (bformat t "Testing DNS with a-n33-k6")
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (+ (total-distance cvrp-action)
+                         (total-penalty cvrp-action)))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-solution s1 t)
+
+      (time
+       (setf results (vns-code
+                      p1 s1
+                      (list
+                       rabs*            ;0
+                       rarbs*           ;1
+                       raracs*          ;2
+                       refs*             ;3
+                       rerfs*            ;4
+                       rehfs*            ;5
+                       rehrfs*           ;6
+                       reregs*           ;7
+                       rehrfs*           ;8
+                       rerehgs*          ;9
+                       rehregs*          ;10
+                       rehrehgs*         ;11
+                       )
+                      ;; :inner-search-max-iter max-iterations
+                      :action action
+                      :max-iter max-iterations
+                      :selection-strategy *random-improvement*
+                      ;; :shake-search (jump-around-search-strategy no-of-jumps)
+                      :search-strategy *exhaustive-search-strategy*)))
+
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through: ~a~%"
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor:~%")
+            (pp-solution best-solution-exhaustive t)
+
+            (simulate-solution best-solution-exhaustive p1 cvrp-action)
+
+            (setf best-solution-exhaustive (first results))
+            (format t "Best value through Yoel's: ~a~%"
+                    (+ (total-distance cvrp-action)
+                       (total-penalty cvrp-action)))
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))
+
+
+
+      )
+
+(let* ((p1 a-n80-k10-problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action*))
+       (results nil)
+
+       (max-iterations 1000)
+       ;; (no-of-jumps 4)
+
+       (cvrp-action (basic-cvrp-action))
+       )
+
+
+      (bformat t "Testing DNS with a-n33-k6")
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (+ (total-distance cvrp-action)
+                         (total-penalty cvrp-action)))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-solution s1 t)
+
+      (time
+       (setf results (vns-code
+                      p1 s1
+                      (list
+                       rabs*            ;0
+                       rarbs*           ;1
+                       raracs*          ;2
+                       refs*             ;3
+                       rerfs*            ;4
+                       rehfs*            ;5
+                       rehrfs*           ;6
+                       reregs*           ;7
+                       rehrfs*           ;8
+                       rerehgs*          ;9
+                       rehregs*          ;10
+                       rehrehgs*         ;11
+                       )
+                      ;; :inner-search-max-iter max-iterations
+                      :action action
+                      :max-iter 1000
+                      :selection-strategy *random-improvement*
+                      :search-strategy *exhaustive-search-strategy*)))
+
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through: ~a~%"
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor:~%")
+            (pp-solution best-solution-exhaustive t)
+
+            (simulate-solution best-solution-exhaustive p1 cvrp-action)
+
+            (setf best-solution-exhaustive (first results))
+            (format t "Best value through Yoel's: ~a~%"
+                    (+ (total-distance cvrp-action)
+                       (total-penalty cvrp-action)))
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))
+
+
+
+      )
+
+(with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                    (5 0 6 7 2 4)  ;1
+                                    (1 8 0 3 9 1)  ;2
+                                    (4 5 1 0 5 7)  ;3
+                                    (4 5 1 5 0 6)  ;4
+                                    (1 5 7 6 9 0)) ;5
+                                    ;0 1 2 3 4 5 
+                                    :demands '(10 10 15 40 20)
+                                    :capacity 40)
+  (with-basic-cvrp-solution (s1 ((2 4 5) (3) (1)) p1)
+    (let* ((best-solution-exhaustive nil)
+           (action (delta-cvrp-action))
+           (results nil)
+           (cvrp-action (basic-cvrp-action 
+                         :penalty-factor 1000)))
+
+      (bformat t "Testing VNS")
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (+ (total-distance cvrp-action)
+                         (total-penalty cvrp-action)))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-solution s1 t)
+
+      (setf results (vns-fn-no-output 
+                     p1 s1 (list rab-best
+                                 rarb-best
+                                 rarac-best)
+                     :max-iter 150
+                     :action action))
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))      
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through exhaustive: ~a~%"
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor through exhaustive search:~%")
+            (pp-solution best-solution-exhaustive t)
+
+            ;; (format t "Best value through Yoel's: ~a~%"
+            ;;         (solution-cost best-solution-exhaustive
+            ;;                        p1 cvrp-action))
+            ;; (format t "action: ~a~%" cvrp-action)
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))
+
+          )))
+
+(let* ((p1 a-n33-k6-problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action))
+       (results nil)
+
+       ;(selection-strategy +first-improvement+)
+       (selection-strategy +random-improvement+)
+       ;(selection-strategy +best-improvement+)
+       (max-iterations 550)
+
+       (cvrp-action (basic-cvrp-action))
+       )
+
+
+      (bformat t "Testing DNS with a-n33-k6")
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (+ (total-distance cvrp-action)
+                         (total-penalty cvrp-action)))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-solution s1 t)
+
+      (setf results (vns-fn-no-output
+                     p1 s1
+                     (list rab-random
+                           rehrf-random
+                           rarac-random
+                           ref-random
+                           rereg-random
+                           rerf-random
+                           rehf-random
+                           rarb-random
+                           )
+                     :max-iter max-iterations
+                     :action action))
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through ~a: ~a~%"
+                    selection-strategy
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor through ~a:~%"
+                    selection-strategy)
+            (pp-solution best-solution-exhaustive t)
+
+            (simulate-solution best-solution-exhaustive p1 cvrp-action)
+
+            (setf best-solution-exhaustive (first results))
+            (format t "Best value through Yoel's: ~a~%"
+                    (+ (total-distance cvrp-action)
+                       (total-penalty cvrp-action)))
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))
+
+
+
+      )
+
+(let* ((p1 a-n33-k6-problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action))
+       (results nil)
+
+       ;(search-strategy +exhaustive-search-strategy+)
+       (search-strategy (random-neighborhood-search-strategy 100))
+
+       (selection-strategy +first-improvement+)
+       ;(selection-strategy +random-improvement+)
+       ;(selection-strategy +best-improvement+)
+       (max-iterations 550)
+
+       (rarac-r-ex (make-neighborhood-criterion
+                    rarac-description
+                    search-strategy
+                    selection-strategy))
+
+       (rab-r-ex (make-neighborhood-criterion
+                  rab-description
+                  search-strategy
+                  selection-strategy))
+
+       (rereg-r-ex (make-neighborhood-criterion
+                    rereg-description
+                    search-strategy
+                    selection-strategy))
+
+
+       (cvrp-action (basic-cvrp-action))
+       )
+
+
+      (bformat t "Testing DNS with a-n33-k6")
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (+ (total-distance cvrp-action)
+                         (total-penalty cvrp-action)))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-solution s1 t)
+
+      (setf results (vns
+                     p1 s1
+                     (list
+                      rarac-r-ex
+                      rab-r-ex
+                      rereg-r-ex
+                           )
+                     :max-iter max-iterations
+                     :action action))
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through ~a: ~a~%"
+                    selection-strategy
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor through ~a:~%"
+                    selection-strategy)
+            (pp-solution best-solution-exhaustive t)
+
+            (simulate-solution best-solution-exhaustive p1 cvrp-action)
+
+            (setf best-solution-exhaustive (first results))
+            (format t "Best value through Yoel's: ~a~%"
+                    (+ (total-distance cvrp-action)
+                       (total-penalty cvrp-action)))
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))
+
+
+
+      )
+
+(with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                    (5 0 6 7 2 4)  ;1
+                                    (1 8 0 3 9 1)  ;2
+                                    (4 5 1 0 5 7)  ;3
+                                    (4 5 1 5 0 6)  ;4
+                                    (1 5 7 6 9 0)) ;5
+                                    ;0 1 2 3 4 5 
+                                    :demands '(10 10 15 40 20)
+                                    :capacity 40)
+  (with-basic-cvrp-solution (s1 ((1 2 3 4 5)) p1)
+    (let* ((best-solution-exhaustive nil)
+           (action (delta-cvrp-action))
+           (results nil)
+           (cvrp-action (basic-cvrp-action 
+                         :penalty-factor 1000))
+           )
+
+      (bformat t "Testing VNS with add-route")
+
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (get-cost-from-action cvrp-action))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-solution s1 t)
+
+      (setf results (vns-code-no-output 
+                     p1 s1 (list
+                            rab   ; 0
+                            rarb  ; 1
+                            rarac ; 2
+                            rad   ; 3   
+                            )
+                     :max-iter 150
+                     :action action
+                     :selection-strategy +best-improvement+))
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))      
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through exhaustive: ~a~%"
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor through exhaustive search:~%")
+            (pp-solution best-solution-exhaustive t)
+
+            ;; (format t "Best value through Yoel's: ~a~%"
+            ;;         (solution-cost best-solution-exhaustive
+            ;;                        p1 cvrp-action))
+            ;; (format t "action: ~a~%" cvrp-action)
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))
+
+          )))
+
+(let* ((p1 a-n33-k6-problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action*))
+       (results nil)
+
+       (max-iterations 1000)
+       (no-of-jumps 4)
+
+       (cvrp-action (basic-cvrp-action))
+       )
+
+
+      (bformat t "Testing DNS with a-n33-k6")
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (+ (total-distance cvrp-action)
+                         (total-penalty cvrp-action)))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-solution s1 t)
+
+      (time
+       (setf results (vns-code-no-output
+                      p1 s1
+                      (list rabs*     ;1
+                            rarbs*   ;2
+                            raracs*   ;3
+                            refs*     ;4
+                            reregs*   ;5
+                            rehfs*    ;6
+                            rerfs*    ;7
+                            rehrfs*   ;8
+                            rerehgs*  ;9
+                            rehregs*  ;10
+                            rehrehgs* ;11
+                            )
+                      ;; :inner-search-max-iter max-iterations
+                      :action action
+                      :max-iter max-iterations
+                      :selection-strategy
+                      ;; (random-improvement-smart 0.5 )
+                      *random-improvement*
+                      ;; +first-improvement+
+                      :search-strategy *exhaustive-search-strategy*)))
+
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through: ~a~%"
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor:~%")
+            (pp-solution best-solution-exhaustive t)
+
+            (simulate-solution best-solution-exhaustive p1 cvrp-action)
+
+            (setf best-solution-exhaustive (first results))
+            (format t "Best value through Yoel's: ~a~%"
+                    (+ (total-distance cvrp-action)
+                       (total-penalty cvrp-action)))
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))
+
+
+
+      )
+
+(with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                    (5 0 6 7 2 4)  ;1
+                                    (1 8 0 3 9 1)  ;2
+                                    (4 5 1 0 5 7)  ;3
+                                    (4 5 1 5 0 6)  ;4
+                                    (1 5 7 6 9 0)) ;5
+                                    ;0 1 2 3 4 5 
+                                    :demands '(10 10 15 40 20)
+                                    :capacity 40)
+  (with-basic-cvrp-solution (s1 ((1 2 3 4 5)) p1)
+    (let* ((best-solution-exhaustive nil)
+           (action (delta-cvrp-action))
+           (results nil)
+           (cvrp-action (basic-cvrp-action 
+                         :penalty-factor 1000))
+           )
+
+      (bformat t "Testing VNS with add-route")
+
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (get-cost-from-action cvrp-action))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-solution s1 t)
+
+      (setf results (vns-shake 
+                     p1 s1 (list
+                            rab   ; 0
+                            rarb  ; 1
+                            rarac ; 2
+                            rad   ; 3   
+                            )
+                     :max-iter 150
+                     :action action
+                     :selection-strategy +best-improvement+))
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))      
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through exhaustive: ~a~%"
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor through exhaustive search:~%")
+            (pp-solution best-solution-exhaustive t)
+
+            ;; (format t "Best value through Yoel's: ~a~%"
+            ;;         (solution-cost best-solution-exhaustive
+            ;;                        p1 cvrp-action))
+            ;; (format t "action: ~a~%" cvrp-action)
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))
+
+          )))
+
+(let* ((p1 a-n33-k6-problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action*))
+       (results nil)
+
+       (max-iterations 1000)
+       ;; (no-of-jumps 4)
+
+       (cvrp-action (basic-cvrp-action))
+       )
+
+
+      (bformat t "Testing DNS with a-n33-k6")
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (+ (total-distance cvrp-action)
+                         (total-penalty cvrp-action)))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-solution s1 t)
+
+      (setf results (vns-code-bar
+                     p1 s1
+                     (list
+                      rabs*             ;0
+                      rarbs*            ;1
+                      raracs*           ;2
+                      refs*             ;3
+                      rerfs*            ;4
+                      rehfs*            ;5
+                      rehrfs*           ;6
+                      reregs*           ;7
+                      rehrfs*           ;8
+                      rerehgs*          ;9
+                      rehregs*          ;10
+                      rehrehgs*         ;11
+                      )
+                     :max-iter max-iterations
+                     :action action
+                     :selection-strategy *first-improvement*
+                     ;; :shake-search (jump-around-search-strategy no-of-jumps)
+                     :search-strategy *exhaustive-search-strategy*))
+
+
+      (format t "~%Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through: ~a~%"
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor:~%")
+            (pp-solution best-solution-exhaustive t)
+
+            (simulate-solution best-solution-exhaustive p1 cvrp-action)
+
+            (setf best-solution-exhaustive (first results))
+            (format t "Best value through Yoel's: ~a~%"
+                    (+ (total-distance cvrp-action)
+                       (total-penalty cvrp-action)))
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))
+
+
+
+      )
+
+(let* ((p1 a-n33-k6-problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action*))
+       (results nil)
+
+       (max-iterations 1000)
+       ;; (no-of-jumps 4)
+
+       (cvrp-action (basic-cvrp-action))
+       )
+
+
+      (bformat t "Testing DNS with a-n33-k6")
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (+ (total-distance cvrp-action)
+                         (total-penalty cvrp-action)))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-solution s1 t)
+
+      (setf results (vns-code-bar
+                     p1 s1
+                     (list
+                      rabs*             ;0
+                      rarbs*            ;1
+                      raracs*           ;2
+                      refs*             ;3
+                      rerfs*            ;4
+                      rehfs*            ;5
+                      rehrfs*           ;6
+                      reregs*           ;7
+                      rehrfs*           ;8
+                      rerehgs*          ;9
+                      rehregs*          ;10
+                      rehrehgs*         ;11
+                      )
+                     :max-iter max-iterations
+                     :action action
+                     :selection-strategy +first-improvement+
+                     :search-strategy +exhaustive-search-strategy+))
+
+
+      (format t "~%Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through: ~a~%"
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor:~%")
+            (pp-solution best-solution-exhaustive t)
+
+            (simulate-solution best-solution-exhaustive p1 cvrp-action)
+
+            (setf best-solution-exhaustive (first results))
+            (format t "Best value through Yoel's: ~a~%"
+                    (+ (total-distance cvrp-action)
+                       (total-penalty cvrp-action)))
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))
+
+
+
+      )
 
 (let* ((*vrp-unit-testing-display-output* nil)
        (*vrp-unit-testing-display-results* t)
@@ -1583,546 +2387,1489 @@ Testing get-distance-from-to:
        (c3 (basic-cvrp-client 3 40))
        (c4 (basic-cvrp-client 4 50))
        (d0 (basic-depot))
-       (v1 (cvrp-vehicle 1 50))
-       (v2 (cvrp-vehicle 2 50))
-       (r1 (route-for-simulation :id 1 :vehicle v1
-                                 :depot d0 :clients (list c1 c2)))
-       (r2 (route-for-simulation :id 2 :vehicle v2
-                                 :depot d0 :clients (list c3 c4)))
-       ;; (s1 (basic-solution :id 1 :routes (list r1 r2)))
+       (d1 (basic-depot 5))
+       (v1 (cvrp-vehicle 1 70))
+       (v2 (cvrp-vehicle 2 70))
 
-       (distance #2A ((0 1 2 3 5)
-                      (1 0 4 5 6)
-                      (2 4 0 6 7)
-                      (3 5 6 0 8)
-                      (5 6 7 8 0)))
-       (p1 (make-instance 'cvrp-problem
+       (distance #2A ((0 1 2 3 5 6)
+                      (1 0 4 5 6 7)
+                      (2 4 0 6 7 9)
+                      (3 5 6 0 8 9)
+                      (5 6 7 8 0 1)
+                      (3 5 6 4 8 0)))
+       (p1 (make-instance 'finite-fleet-end-depot-cvrp-problem
                           :depot d0
-                          :id 1
-                          :clients (list c1 c2 c3 c4)
-                          :capacity 50
-                          :distance-matrix distance))
-       (action (basic-cvrp-action))
-       (*vrp-logging* 0))
-  (format t "=======================================
-Testing make-basic-cvrp-route-from-list
-=======================================~2%")
-  (format t "Basic route from (1 2 3):~%  ~a~%"
-          (make-basic-cvrp-route-from-list 1 '(1 2 3) 1 p1))
-  (check-obj= r1 (make-basic-cvrp-route-from-list 1 '(1 2) 1 p1))
-  (check-obj= r2 (make-basic-cvrp-route-from-list 2 '(3 4) 2 p1))
-  (check-= 1 1)
-  ;; (simulate-solution s1 dp action)
-  ;; (check-= 23 (total-distance action))
-  ;; (check-= 20 (capacity-violation action))
-  ;; (check-= 20000 (total-penalty action))
-  )
-
-(let* ((*vrp-unit-testing-display-output* nil)
-       (*vrp-unit-testing-display-results* t)
-       (c1 (basic-cvrp-client 1 30))
-       (c2 (basic-cvrp-client 2 20))
-       (c3 (basic-cvrp-client 3 40))
-       (c4 (basic-cvrp-client 4 50))
-       (d0 (basic-depot))
-       (v1 (cvrp-vehicle 1 50))
-       (v2 (cvrp-vehicle 2 50))
-       (r1 (route-for-simulation :id 1 :vehicle v1
-                                 :depot d0 :clients (list c1 c2)))
-       (r2 (route-for-simulation :id 2 :vehicle v2
-                                 :depot d0 :clients (list c3 c4)))
-       (s1 (basic-cvrp-solution :id 1 :routes (list r1 r2)))
-
-       (distance #2A ((0 1 2 3 5)
-                      (1 0 4 5 6)
-                      (2 4 0 6 7)
-                      (3 5 6 0 8)
-                      (5 6 7 8 0)))
-       (p1 (make-instance 'cvrp-problem
-                          :depot d0
-                          :id 1
-                          :clients (list c1 c2 c3 c4)
-                          :capacity 50
-                          :distance-matrix distance))
-       (s2 (make-basic-cvrp-solution-from-list 1 '((1 2) (4 3)) p1))
-       (action (basic-cvrp-action))
-       (*vrp-logging* 0))
-
-  (bformat t "Testing make-basic-cvrp-solution-from-list")
-
-  (format t "Basic solution from ((1 2) (4 3)):~%~a~%"
-          (make-basic-cvrp-solution-from-list 1 '((1 2) (4 3)) p1))
-
-  (check-obj= s1 (make-basic-cvrp-solution-from-list 1 '((1 2) (3 4)) p1))
-
-  (format t "Testing the simulation with the original solution:~%")
-  (simulate-solution s1 p1 action)
-  (check-= 23 (total-distance action))
-  (check-= 40 (capacity-violation action))
-  (check-= 40000 (total-penalty action))
-
-  (format t "Testing the simulation with the automatic solution:~%")
-  (simulate-solution s2 p1 action)
-  (check-= 23 (total-distance action))
-  (check-= 40 (capacity-violation action))
-  (check-= 40000 (total-penalty action))
-  )
-
-(let* ((*vrp-unit-testing-display-output* nil)
-       (*vrp-unit-testing-display-results* t)
-       (c1 (basic-cvrp-client 1 30))
-       (c2 (basic-cvrp-client 2 20))
-       (c3 (basic-cvrp-client 3 40))
-       (c4 (basic-cvrp-client 4 50))
-       (d0 (basic-depot))
-       (v1 (cvrp-vehicle 1 50))
-       (v2 (cvrp-vehicle 2 50))
-       (r1 (route-for-simulation :id 1 :vehicle v1
-                                 :depot d0 :clients (list c1 c2)))
-       (r2 (route-for-simulation :id 2 :vehicle v2
-                                 :depot d0 :clients (list c3 c4)))
-       (s1 (basic-solution :id 1 :routes (list r1 r2)))
-
-       (distance #2A ((0 1 2 3 5)
-                      (1 0 4 5 6)
-                      (2 4 0 6 7)
-                      (3 5 6 0 8)
-                      (5 6 7 8 0)))
-       (p1 (make-instance 'cvrp-problem
-                          :depot d0
-                          :id 1
-                          :clients (list c1 c2 c3 c4)
-                          :capacity 50
-                          :distance-matrix distance))
-       (action (basic-cvrp-action))
-       (*vrp-logging* 0))
-
-  (bformat t "Testing make-basic-cvrp-solution-from-list")
-
-  (with-basic-cvrp-solution (s2 ((1 2) (3 4)) p1)
-    (format t "Basic solution from ((1 2) (4 3)):~%~a~%"
-            s2)
-
-    (format t "type-of S1: ~a~%" (type-of S1))
-    (check-obj= s1 s2)
-
-    (format t "Testing the simulation with the original solution:~%")
-    (simulate-solution s1 p1 action)
-    (check-= 23 (total-distance action))
-    (check-= 40 (capacity-violation action))
-    (check-= 40000 (total-penalty action))
-
-    (format t "Testing the simulation with the automatic solution:~%")
-    (simulate-solution s2 p1 action)
-    (check-= 23 (total-distance action))
-    (check-= 40 (capacity-violation action))
-    (check-= 40000 (total-penalty action))))
-
-(let* ((*vrp-unit-testing-display-output* nil)
-       (*vrp-unit-testing-display-results* t)
-       (c1 (basic-cvrp-client 1 30))
-       (c2 (basic-cvrp-client 2 20))
-       (c3 (basic-cvrp-client 3 40))
-       (c4 (basic-cvrp-client 4 50))
-       (d0 (basic-depot))
-       (v1 (cvrp-vehicle 1 50))
-       (v2 (cvrp-vehicle 2 10))
-       (r1 (route-for-simulation :id 1 :vehicle v1
-                                 :depot d0 :clients (list c1 c2)))
-       (r2 (route-for-simulation :id 2 :vehicle v2
-                                 :depot d0 :clients (list c3 c4)))
-       ;; (s1 (basic-solution :id 1 :routes (list r1 r2)))
-
-       (distance #2A ((0 1 2 3 5)
-                      (1 0 4 5 6)
-                      (2 4 0 6 7)
-                      (3 5 6 0 8)
-                      (5 6 7 8 0)))
-       (p1 (make-instance 'finite-fleet-cvrp-problem
-                          :depot d0
+                          :end-depot d1
                           :id 1
                           :clients (list c1 c2 c3 c4)
                           :fleet (list v1 v2)
                           :distance-matrix distance))
-       (*vrp-logging* 0))
-  (bformat t "Testing make-basic-cvrp-route-from-list")
-  (format t "Basic route from (1 2 3):~%  ~a~%"
-          (make-basic-cvrp-route-from-list 1 '(1 2 3) 2 p1))
-  (check-obj= r1 (make-finite-fleet-cvrp-route-from-list 1 '(1 2) 1 p1))
-  (check-obj= r2 (make-finite-fleet-cvrp-route-from-list 2 '(3 4) 2 p1))
-  )
 
-(let* ((*vrp-unit-testing-display-output* nil)
-       (*vrp-unit-testing-display-results* t)
-       (c1 (basic-cvrp-client 1 30))
-       (c2 (basic-cvrp-client 2 20))
-       (c3 (basic-cvrp-client 3 40))
-       (c4 (basic-cvrp-client 4 50))
-       (d0 (basic-depot))
-       (v1 (cvrp-vehicle 1 50))
-       (v2 (cvrp-vehicle 2 50))
-       (r1 (route-for-simulation :id 1 :vehicle v2
-                                 :depot d0 :clients (list c1 c2)))
-       (r2 (route-for-simulation :id 2 :vehicle v1
-                                 :depot d0 :clients (list c3 c4)))
-       (s1 (basic-solution :id 1 :routes (list r1 r2)))
+       ;; now the algorithms related data
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action))
+       (results nil)
+       (cvrp-action (basic-cvrp-action 
+                     :penalty-factor 1000))
+       (criterion-code `((select-route r1)
+                         (select-client c1 from r1)
+                         (select-route r2)
+                         (insert-client c1 into r2)))
 
-       (distance #2A ((0 1 2 3 5)
-                      (1 0 4 5 6)
-                      (2 4 0 6 7)
-                      (3 5 6 0 8)
-                      (5 6 7 8 0)))
-       (p1 (make-instance 'finite-fleet-cvrp-problem
-                          :depot d0
-                          :id 1
-                          :clients (list c1 c2 c3 c4)
-                          :fleet (list v1 v2)
-                          :distance-matrix distance))
-       (s2 (make-finite-fleet-cvrp-solution-from-list
-            1 '((2 1 2) (1 4 3)) p1))
-       (action (basic-cvrp-action))
+       (neighborhood-exploration
+        (make-neighborhood-criterion
+         criterion-code
+         +exhaustive-search-strategy+
+         +best-improvement+))
+
+       (results nil)
+       (max-iterations 1000)
+
        (*vrp-logging* 0))
 
-  (bformat t "Testing make-basic-cvrp-solution-from-list")
+  (bformat t "Testing VNS with end-depot")
 
-  (format t "Basic solution from ((1 2) (4 3)):~%~a~%"
-          (make-finite-fleet-cvrp-solution-from-list
-           1 '((2 1 2) (1 3 4)) p1))
+  (with-finite-fleet-end-depot-cvrp-solution (s1 ((1 1 2) (2 3 4)) p1)
 
-  (check-obj= s1 (make-finite-fleet-cvrp-solution-from-list
-                  1 '((2 1 2) (1 3 4)) p1))
+    ;; first we compute the cost of the solution
+    (simulate-solution s1 p1 cvrp-action)
+    (setf (cost s1) (+ (total-distance cvrp-action)
+                       (total-penalty cvrp-action)))
 
-  (format t "Testing the simulation with the original solution:~%")
-  (simulate-solution s1 p1 action)
-  (check-= 23 (total-distance action))
-  (check-= 40 (capacity-violation action))
-  (check-= 40000 (total-penalty action))
+    (format t "Original solution (with cost ~a):~%"
+            (cost s1))
+    (pp-solution s1 t)
 
-  ;; (format t "Testing the simulation with the automatic solution:~%")
-  ;; (simulate-solution s2 p1 action)
-  ;; (check-= 23 (total-distance action))
-  ;; (check-= 40 (capacity-violation action))
-  ;; (check-= 40000 (total-penalty action))
-  )
+    (setf results (vns-code-bar
+                     p1 s1
+                     (list
+                      rabs*             ;0
+                      rarbs*            ;1
+                      raracs*           ;2
+                      refs*             ;3
+                      rerfs*            ;4
+                      rehfs*            ;5
+                      rehrfs*           ;6
+                      reregs*           ;7
+                      rehrfs*           ;8
+                      rerehgs*          ;9
+                      rehregs*          ;10
+                      rehrehgs*         ;11
+                      )
+                     :max-iter max-iterations
+                     :action action
+                     :selection-strategy *first-improvement*
+                     ;; :shake-search (jump-around-search-strategy no-of-jumps)
+                     :search-strategy *exhaustive-search-strategy*))
 
-(let* ((*vrp-unit-testing-display-output* nil)
-       (*vrp-unit-testing-display-results* t)
-       (c1 (basic-cvrp-client 1 30))
-       (c2 (basic-cvrp-client 2 20))
-       (c3 (basic-cvrp-client 3 40))
-       (c4 (basic-cvrp-client 4 50))
-       (d0 (basic-depot))
-       (v1 (cvrp-vehicle 1 50))
-       (v2 (cvrp-vehicle 2 50))
-       (r1 (route-for-simulation :id 1 :vehicle v1
-                                 :depot d0 :clients (list c1 c2)))
-       (r2 (route-for-simulation :id 2 :vehicle v2
-                                 :depot d0 :clients (list c3 c4)))
-       (s1 (basic-solution :id 1 :routes (list r1 r2)))
+    (format t "~%Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
 
-       (distance #2A ((0 1 2 3 5)
-                      (1 0 4 5 6)
-                      (2 4 0 6 7)
-                      (3 5 6 0 8)
-                      (5 6 7 8 0)))
-       (p1 (make-instance 'finite-fleet-cvrp-problem
-                          :depot d0
-                          :id 1
-                          :clients (list c1 c2 c3 c4)
-                          :fleet (list v1 v2)
-                          :distance-matrix distance))
-       (action (basic-cvrp-action))
-       (*vrp-logging* 0))
+    (setf best-solution-exhaustive (first results))
 
-  (bformat t "Testing make-basic-cvrp-solution-from-list")
+    (if best-solution-exhaustive
+          (then
+            (format t "Best value through: ~a~%"
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor:~%")
+            (pp-solution best-solution-exhaustive t)
 
-  (with-finite-fleet-cvrp-solution (s2 ((1 1 2) (2 3 4)) p1)
-    (format t "Basic solution from ((1 1 2) (2 3 4)):~%~a~%"
-            s2)
+            (simulate-solution best-solution-exhaustive p1 cvrp-action)
 
-    (format t "type-of S1: ~a~%" (type-of S1))
-    (format t "type-of p1: ~a~%" (type-of p1))
-    (check-obj= s1 s2)
+            (setf best-solution-exhaustive (first results))
+            (format t "Best value through Yoel's: ~a~%"
+                    (+ (total-distance cvrp-action)
+                       (total-penalty cvrp-action)))
+            )
 
-    (format t "Testing the simulation with the original solution:~%")
-    (simulate-solution s1 p1 action)
-    (check-= 23 (total-distance action))
-    (check-= 40 (capacity-violation action))
-    (check-= 40000 (total-penalty action))
+          (else
+            (format t "Initial solution was optimum!~%")))
 
-    (format t "Testing the simulation with the automatic solution:~%")
-    (simulate-solution s2 p1 action)
-    (check-= 23 (total-distance action))
-    (check-= 40 (capacity-violation action))
-    (check-= 40000 (total-penalty action))
+
     ))
 
-(let* ((*vrp-unit-testing-display-output* nil)
-       (*vrp-unit-testing-display-results* t)
-       (c1 (basic-cvrp-client 1 30))
-       (c2 (basic-cvrp-client 2 20))
-       (c3 (basic-cvrp-client 3 40))
-       (c4 (basic-cvrp-client 4 50))
-       (d0 (basic-depot))
-       (d1 (basic-depot 5))
-       (v1 (cvrp-vehicle 1 50))
-       (v2 (cvrp-vehicle 2 10))
-       (r1 (route-for-simulation-with-end-depot
-            :id 1
-            :vehicle v1
-            :depot d0
-            :end-depot d1
-            :clients (list c1 c2)))
-       (r2 (route-for-simulation-with-end-depot
-            :id 2
-            :vehicle v2
-            :depot d0
-            :end-depot d1
-            :clients (list c3 c4)))
+(let* ((p1 a-n33-k6-problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action*))
+       (results nil)
 
-       (distance #2A ((0 1 2 3 5 6)
-                      (1 0 4 5 6 7)
-                      (2 4 0 6 7 9)
-                      (3 5 6 0 8 9)
-                      (5 6 7 8 0 1)
-                      (3 5 6 4 8 0)))
-       (p1 (make-instance 'finite-fleet-end-depot-cvrp-problem
-                          :depot d0
-                          :end-depot d1
-                          :id 1
-                          :clients (list c1 c2 c3 c4)
-                          :fleet (list v1 v2)
-                          :distance-matrix distance))
-       (*vrp-logging* 0))
-  (bformat t "Testing make-basic-cvrp-")
-  (format t "Basic route with end-depot from (1 2 3):~%  ~a~%"
-          (make-finite-fleet-with-end-depot-route-cvrp-from-list
-           1 '(1 2 3) 2 p1))
+       (max-iterations 1000)
+       ;; (no-of-jumps 4)
 
-  (check-obj= r1 (make-finite-fleet-with-end-depot-route-cvrp-from-list
-                  1 '(1 2) 1 p1))
-  (check-obj= r2 (make-finite-fleet-with-end-depot-route-cvrp-from-list
-                  2 '(3 4) 2 p1)))
-
-(let* ((*vrp-unit-testing-display-output* nil)
-       (*vrp-unit-testing-display-results* t)
-       (c1 (basic-cvrp-client 1 30))
-       (c2 (basic-cvrp-client 2 20))
-       (c3 (basic-cvrp-client 3 40))
-       (c4 (basic-cvrp-client 4 50))
-       (d0 (basic-depot))
-       (d1 (basic-depot 5))
-       (v1 (cvrp-vehicle 1 50))
-       (v2 (cvrp-vehicle 2 10))
-       (r1 (route-for-simulation-with-end-depot
-            :id 1
-            :vehicle v1
-            :depot d0
-            :end-depot d1
-            :clients (list c1 c2)))
-       (r2 (route-for-simulation-with-end-depot
-            :id 2
-            :vehicle v2
-            :depot d0
-            :end-depot d1
-            :clients (list c3 c4)))
-
-       (distance #2A ((0 1 2 3 5 6)
-                      (1 0 4 5 6 7)
-                      (2 4 0 6 7 9)
-                      (3 5 6 0 8 9)
-                      (5 6 7 8 0 1)
-                      (3 5 6 4 8 0)))
-       (p1 (make-instance 'finite-fleet-end-depot-cvrp-problem
-                          :depot d0
-                          :end-depot d1
-                          :id 1
-                          :clients (list c1 c2 c3 c4)
-                          :fleet (list v1 v2)
-                          :distance-matrix distance))
-       (s1 (basic-solution :id 1 :routes (list r1 r2)))
-
-       (*vrp-logging* 0))
-  (bformat t "Testing make-finite-fleet-with-end-depot-route-cvrp-from-list")
-  (format t "Basic solution with end-depot from ((1 1 2) (2 3 4)):~%  ~a~%"
-          (make-finite-fleet-with-end-depot-cvrp-solution-from-list
-           1 '((1 1 2) (2 3 4)) p1))
-
-  (check-obj= s1 (make-finite-fleet-with-end-depot-cvrp-solution-from-list
-                   1 '((1 1 2) (2 3 4)) p1)))
-
-(let* ((*vrp-unit-testing-display-output* nil)
-       (*vrp-unit-testing-display-results* t)
-       (c1 (basic-cvrp-client 1 30))
-       (c2 (basic-cvrp-client 2 20))
-       (c3 (basic-cvrp-client 3 40))
-       (c4 (basic-cvrp-client 4 50))
-       (d0 (basic-depot))
-       (d1 (basic-depot 5))
-       (v1 (cvrp-vehicle 1 50))
-       (v2 (cvrp-vehicle 2 10))
-       (r1 (route-for-simulation-with-end-depot
-            :id 1
-            :vehicle v1
-            :depot d0
-            :end-depot d1
-            :clients (list c1 c2)))
-       (r2 (route-for-simulation-with-end-depot
-            :id 2
-            :vehicle v2
-            :depot d0
-            :end-depot d1
-            :clients (list c3 c4)))
-
-       (distance #2A ((0 1 2 3 5 6)
-                      (1 0 4 5 6 7)
-                      (2 4 0 6 7 9)
-                      (3 5 6 0 8 9)
-                      (5 6 7 8 0 1)
-                      (3 5 6 4 8 0)))
-       (p1 (make-instance 'finite-fleet-end-depot-cvrp-problem
-                          :depot d0
-                          :end-depot d1
-                          :id 1
-                          :clients (list c1 c2 c3 c4)
-                          :fleet (list v1 v2)
-                          :distance-matrix distance))
-       (s1 (basic-solution :id 1 :routes (list r1 r2)))
-
-       (action (basic-cvrp-action))
-
-       (*vrp-logging* 0))
-  (bformat t "Testing with-finite-fleet-with-end-depot-solution")
-
-  (with-finite-fleet-end-depot-cvrp-solution (s2 ((1 1 2) (2 3 4)) p1)
-
-    (format t "Basic solution with the macro:~%  ~a~%" s2)
-
-    (check-t (obj= s1 s2))
-
-    (format t "Checking the evaluation of the solution s1:~%")
-    (simulate-solution s1 p1 action)
-    (format t "distance: ~a~%" (total-distance action))
-    (format t "penalty: ~a~%" (total-penalty action))
+       (cvrp-action (basic-cvrp-action))
+       )
 
 
-    (format t "~%Checking the evaluation of the solution s2:~%")
-    (setf action (basic-cvrp-action))
-    (simulate-solution s2 p1 action)
-    (format t "distance: ~a~%" (total-distance action))
-    (format t "penalty: ~a~%" (total-penalty action))
+      (bformat t "Testing DNS with a-n33-k6")
 
-    ))
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (get-cost-from-action cvrp-action))
 
-(progn
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-solution s1 t)
 
-  (bformat t "Testing make-demand-clients-from-demands")
+      (setf results (vns-fn-bar 
+                     p1 s1
+                     (mapcar (lambda (x)
+                               (make-neighborhood-criterion
+                                x
+                                *exhaustive-search-strategy*
+                                *random-improvement*
+                                ))
+                      (list
+                       rabs*            ;0
+                       rarbs*           ;1
+                       raracs*          ;2
+                       refs*            ;3
+                       rerfs*           ;4
+                       rehfs*           ;5
+                       rehrfs*          ;6
+                       reregs*          ;7
+                       rehrfs*          ;8
+                       rerehgs*         ;9
+                       rehregs*         ;10
+                       rehrehgs*        ;11
+                       ))
+                     :max-iter max-iterations 
+                     :action action))
 
-  (format t "Clients: ~a~%"
-          (make-demand-clients-from-demands '(1 2 3 4 5 6)))
-  (format t "Clients: ~a~%"
-          (make-demand-clients-from-demands '(10 20 30 40 50 60)))
-  (format t "Clients: ~a~%"
-          (make-demand-clients-from-demands '(10 30 20 50 40 60))))
 
-(let* ((p1 (make-cvrp-from-lists `((0 2 3 4 5)
-                                   (5 0 6 7 6)
-                                   (1 8 0 9 8)
-                                   (4 5 1 0 6)
-                                   (1 2 3 4 0))
-                                  `(1 3 5 2)
-                                  6)))
-  (print p1)
-  (print (distance-matrix p1))
-  (print (id p1))
-  (print (clients p1)))
+      (format t "~%Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
 
-(with-cvrp-problem (p1 :distances `((0 2 3 4 5)
-                                     (5 0 6 7 2 )
-                                     (1 8 0 3 9)
-                                     (4 5 1 0 5)
-                                     (4 5 1 5 0))
-                        :demands '(1 3 5 2)
-                        :capacity 6)
- (print p1)
- (print (distance-matrix p1))
- (print (id p1))
- (print (clients p1)))
+      (setf best-solution-exhaustive (first results))
 
-(progn
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through: ~a~%"
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor:~%")
+            (pp-solution best-solution-exhaustive t)
 
-  (bformat t "Testing make-demand-clients-from-demands")
+            (simulate-solution best-solution-exhaustive p1 cvrp-action)
 
-  (format t "Vehicles: ~a~%"
-          (make-cvrp-vehicles-list-from-capacities
-           '(1 2 3 4 5 6)))
-  (format t "Vehicles: ~a~%"
-          (make-cvrp-vehicles-list-from-capacities
-           '(10 20 30 40 50 60)))
-  (format t "Vehicles: ~a~%"
-          (make-cvrp-vehicles-list-from-capacities
-           '(10 30 20 50 40 60))))
+            (setf best-solution-exhaustive (first results))
+            (format t "Best value through Yoel's: ~a~%"
+                    (get-cost-from-action cvrp-action))
+            )
 
-(let* ((p1 (make-finite-fleet-cvrp-from-lists `((0 2 3 4 5)
-                                                (5 0 6 7 6)
-                                                (1 8 0 9 8)
-                                                (4 5 1 0 6)
-                                                (1 2 3 4 0))
-                                              `(1 3 5 2)
-                                              `(1 2 5 4))))
-  (format t "Finite-Fleet-Problem: ~a~%" p1)
-  (format t "distance matrix: ~a~%" (distance-matrix p1))
-  (format t "id: ~a~%" (id p1))
-  (format t "clients: ~a~%" (clients p1))
-  (format t "vehicles: ~a~%" (fleet p1)))
+          (else
+            (format t "Initial solution was optimum!~%")))
 
-(with-finite-fleet-cvrp-problem (p1 :distances `((0 2 3 4 5)
-                                                 (5 0 6 7 2 )
-                                                 (1 8 0 3 9)
-                                                 (4 5 1 0 5)
-                                                 (4 5 1 5 0))
-                                    :demands '(1 3 5 2)
-                                    :capacities '(4 5 3))
+      (format t "length delta-distance-stack: ~a~%"
+              (length (delta-distance-stack action )))
+      (format t "length total-penalty: ~a~%"
+              (length (total-penalty-stack action )))
 
-  (bformat t "Testing with-finite-fleet-cvrp-problem...")
+      )
 
-  (format t "Finite-Fleet-Problem: ~a~%" p1)
-  (format t "distance matrix: ~a~%" (distance-matrix p1))
-  (format t "id: ~a~%" (id p1))
-  (format t "clients: ~a~%" (clients p1))
-  (format t "vehicles: ~a~%" (fleet p1)))
+(let* ((p1 a-n80-k10-problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action*))
+       (results nil)
 
-(let* ((p1 (make-finite-fleet-end-cvrp-from-lists `((0 2 3 4 5 6)
-                                                    (5 0 6 7 8 9)
-                                                    (1 8 0 9 1 2)
-                                                    (4 5 1 0 3 4)
-                                                    (4 3 9 2 0 2)
-                                                    (8 1 2 5 2 0))
-                                                  `(1 3 5 2)
-                                                  `(2 5 8))))
-  (format t "finite-fleet-end-depot-cvrp-problem: ~a~%" p1)
+       (max-iterations 1000)
+       ;; (no-of-jumps 4)
 
-  (format t "distance matrix: ~a~3%" (distance-matrix p1))
-  (format t "id:        ~a~%" (id p1))
-  (format t "clients:   ~a~%" (clients p1))
-  (format t "vehicles:  ~a~%" (fleet p1))
-  (format t "depot:     ~a~%" (depot p1))
-  (format t "end-depot: ~a~%" (end-depot p1)))
+       (cvrp-action (basic-cvrp-action))
+       )
 
-(with-finite-fleet-end-depot-cvrp-problem
-    (p1 :distances `((0 2 3 4 5)
-                     (5 0 6 7 8)
-                     (1 8 0 9 1)
-                     (4 5 1 0 3)
-                     (8 1 2 5 2))
-         :demands '(1 3 2)
-         :capacities '(4 5 3))
 
-  (format t "finite-fleet-end-depot-cvrp-problem: ~a~%" p1)
+      (bformat t "Testing DNS with a-n33-k6")
 
-  (format t "distance matrix: ~a~3%" (distance-matrix p1))
-  (format t "id:        ~a~%" (id p1))
-  (format t "clients:   ~a~%" (clients p1))
-  (format t "vehicles:  ~a~%" (fleet p1))
-  (format t "depot:     ~a~%" (depot p1))
-  (format t "end-depot: ~a~%" (end-depot p1)))
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (get-cost-from-action cvrp-action))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-solution s1 t)
+
+      (setf results (vns-fn-bar 
+                     p1 s1
+                     (mapcar (lambda (x)
+                               (make-neighborhood-criterion
+                                x
+                                *exhaustive-search-strategy*
+                                *random-improvement*
+                                ))
+                      (list
+                       rabs*            ;0
+                       rarbs*           ;1
+                       raracs*          ;2
+                       refs*            ;3
+                       rerfs*           ;4
+                       rehfs*           ;5
+                       rehrfs*          ;6
+                       reregs*          ;7
+                       rehrfs*          ;8
+                       rerehgs*         ;9
+                       rehregs*         ;10
+                       rehrehgs*        ;11
+                       ))
+                     :max-iter max-iterations 
+                     :action action))
+
+
+      (format t "~%Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through: ~a~%"
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor:~%")
+            (pp-solution best-solution-exhaustive t)
+
+            (simulate-solution best-solution-exhaustive p1 cvrp-action)
+
+            (setf best-solution-exhaustive (first results))
+            (format t "Best value through Yoel's: ~a~%"
+                    (get-cost-from-action cvrp-action))
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))
+
+      (format t "length delta-distance-stack: ~a~%"
+              (length (delta-distance-stack action )))
+      (format t "length total-penalty: ~a~%"
+              (length (total-penalty-stack action )))
+
+      )
+
+(let* ((p1 ff-a-n33-k6-problem)
+       (s1 (make-initial-solution-for-finite-fleet-cvrp-deterministic
+            p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action*))
+       (results nil)
+
+       (max-iterations 1000)
+       ;; (no-of-jumps 4)
+
+       (cvrp-action (basic-cvrp-action))
+       )
+
+
+      (bformat t "Testing DNS with a-n33-k6")
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (get-cost-from-action cvrp-action))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-solution s1 t)
+
+      (setf results (vns-fn-bar 
+                     p1 s1
+                     (mapcar (lambda (x)
+                               (make-neighborhood-criterion
+                                x
+                                *exhaustive-search-strategy*
+                                *random-improvement*
+                                ))
+                      (list
+                       rabs*            ;0
+                       rarbs*           ;1
+                       raracs*          ;2
+                       refs*            ;3
+                       rerfs*           ;4
+                       rehfs*           ;5
+                       rehrfs*          ;6
+                       reregs*          ;7
+                       rehrfs*          ;8
+                       rerehgs*         ;9
+                       rehregs*         ;10
+                       rehrehgs*        ;11
+                       ))
+                     :max-iter max-iterations 
+                     :action action))
+
+
+      (format t "~%Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through: ~a~%"
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor:~%")
+            (pp-solution best-solution-exhaustive t)
+
+            (simulate-solution best-solution-exhaustive p1 cvrp-action)
+
+            (setf best-solution-exhaustive (first results))
+            (format t "Best value through Yoel's: ~a~%"
+                    (get-cost-from-action cvrp-action))
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))
+
+      (format t "length delta-distance-stack: ~a~%"
+              (length (delta-distance-stack action )))
+      (format t "length total-penalty: ~a~%"
+              (length (total-penalty-stack action )))
+
+      )
+
+(let* ((p1 a-n33-k6-problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action*))
+       (results nil)
+
+       (max-iterations 1000)
+       ;; (no-of-jumps 4)
+
+       (cvrp-action (basic-cvrp-action)))
+
+
+
+      (bformat t "Testing DNS with a-n33-k6")
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (+ (total-distance cvrp-action)
+                         (total-penalty cvrp-action)))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-solution s1 t)
+
+      (time
+       (setf results (vns-code-scrambling
+                      p1 s1
+                      (list
+                       rabs*            ;1
+                       rarbs*           ;2
+                       raracs*          ;3
+                       refs*             ;4
+                       rerfs*            ;5
+                       rehfs*            ;6
+                       rehrfs*           ;7
+                       reregs*           ;8
+                       rehrfs*           ;9
+                       rerehgs*          ;10
+                       rehregs*          ;11
+                       rehrehgs*         ;12
+                       )
+                      ;; :inner-search-max-iter max-iterations
+                      :action action
+                      :max-iter max-iterations
+                      :selection-strategy *random-improvement*
+                      :search-strategy *exhaustive-search-strategy*)))
+
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through: ~a~%"
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor:~%")
+            (pp-solution best-solution-exhaustive t)
+
+            (simulate-solution best-solution-exhaustive p1 cvrp-action)
+
+            (setf best-solution-exhaustive (first results))
+            (format t "Best value through Yoel's: ~a~%"
+                    (+ (total-distance cvrp-action)
+                       (total-penalty cvrp-action)))
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))
+
+
+
+      )
+
+(let* ((p1 a-n65-k9-problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action*))
+       (results nil)
+
+       (max-iterations 1000)
+       ;; (no-of-jumps 4)
+
+       (cvrp-action (basic-cvrp-action))
+       )
+
+
+      (bformat t "Testing DNS with a-n33-k6")
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (+ (total-distance cvrp-action)
+                         (total-penalty cvrp-action)))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-solution s1 t)
+
+      (time
+       (setf results (vns-code-scrambling
+                      p1 s1
+                      (list
+                       rabs*            ;1
+                       rarbs*           ;2
+                       raracs*          ;3
+                       refs*            ;4
+                       rerfs*           ;5
+                       rehfs*           ;6
+                       rehrfs*          ;7
+                       reregs*          ;8
+                       rehrfs*          ;9
+                       rerehgs*         ;10
+                       rehregs*         ;11
+                       rehrehgs*        ;12
+                       )
+                      :action action
+                      :max-iter max-iterations
+                      :selection-strategy *random-improvement*
+                      :search-strategy *exhaustive-search-strategy*)))
+
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through: ~a~%"
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor:~%")
+            (pp-solution best-solution-exhaustive t)
+
+            (simulate-solution best-solution-exhaustive p1 cvrp-action)
+
+            (setf best-solution-exhaustive (first results))
+            (format t "Best value through Yoel's: ~a~%"
+                    (+ (total-distance cvrp-action)
+                       (total-penalty cvrp-action)))
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))
+
+
+
+      )
+
+(let* ((p1 a-n33-k6-problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action))
+       (results nil)
+
+       (max-iterations 200)
+
+       (cvrp-action (basic-cvrp-action))
+       )
+
+
+      (bformat t "Testing DNS with a-n33-k6")
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (+ (total-distance cvrp-action)
+                         (total-penalty cvrp-action)))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      ;; (pp-solution s1 t)
+
+      ;; (setf results (vns-shake
+      ;;                p1 s1
+      ;;                (list
+      ;;                 rab
+      ;;                 rehrf
+      ;;                 rarac
+      ;;                 ref
+      ;;                 rereg
+      ;;                 rerf
+      ;;                 rehf
+      ;;                 rarb
+      ;;                 )
+      ;;                :max-iter max-iterations
+      ;;                :action action
+      ;;                ;; :shake-search (jump-around-search-strategy 10)
+      ;;                :shake-search (jump-around-search-strategy 5)
+      ;;                :shake-selection +jump-around-return-last-neighbor+
+      ;;                :descent-selection-strategy +random-improvement+))
+
+      (setf results (vns-code
+                     p1 s1
+                     (list
+                      rab
+                      rehrf
+                      rarac
+                      ref
+                      rereg
+                      rerf
+                      rehf
+                      rarb
+                      )
+                     :max-iter max-iterations
+                     :action action
+                     :selection-strategy +random-improvement+))
+
+      (format t "finished vns-shake~%")
+
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through: ~a~%"
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor:~%")
+            (pp-solution best-solution-exhaustive t)
+
+            (simulate-solution best-solution-exhaustive p1 cvrp-action)
+
+            (setf best-solution-exhaustive (first results))
+            (format t "Best value through Yoel's: ~a~%"
+                    (+ (total-distance cvrp-action)
+                       (total-penalty cvrp-action)))
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))
+
+
+
+      )
+
+(let* ((p1 a-n33-k6-problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action))
+       (results nil)
+
+       (max-iterations 100)
+
+       (cvrp-action (basic-cvrp-action))
+       )
+
+
+      (bformat t "Testing DNS with a-n33-k6")
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (+ (total-distance cvrp-action)
+                         (total-penalty cvrp-action)))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      ;; (pp-solution s1 t)
+
+      (time
+       (progn
+       ;; (setf results (vns-shake
+       ;;                p1 s1
+       ;;                (list
+       ;;                 ; rabs
+       ;;                 rab
+       ;;                 rehrf
+       ;;                 ;raracs
+       ;;                 rarac
+       ;;                 ref
+       ;;                 rereg
+       ;;                 rerf
+       ;;                 rehf
+       ;;                 ;rarbs
+       ;;                 rarb
+       ;;                 )
+       ;;                :max-iter max-iterations
+       ;;                :action action
+       ;;                ;; :shake-search (jump-around-search-strategy 10)
+       ;;                :shake-search (jump-around-search-strategy 1)
+       ;;                :shake-selection +jump-around-return-last-neighbor+
+       ;;                :selection-strategy +first-improvement+))
+
+         (setf results (vns-shake 
+                     p1 s1
+                     (list
+                      rab
+                      ;;rehrf
+                      raracs
+                      ref
+                      reregs
+                      ;;rerf
+                      ;;rehf
+                      rarb
+                      )
+                     :max-iter max-iterations
+                     :action action
+                     :selection-strategy +random-improvement+
+                     :inner-search-max-iter 20))
+
+      (format t "finished vns-shake~%")
+
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through: ~a~%"
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor:~%")
+            (pp-solution best-solution-exhaustive t)
+
+            (simulate-solution best-solution-exhaustive p1 cvrp-action)
+
+            (setf best-solution-exhaustive (first results))
+            (format t "Best value through Yoel's: ~a~%"
+                    (+ (total-distance cvrp-action)
+                       (total-penalty cvrp-action)))
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))
+
+      ))
+
+      )
+
+(let* ((p1 a-n33-k6-problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action))
+       (results nil)
+
+       (max-iterations 100)
+
+       (cvrp-action (basic-cvrp-action))
+       )
+
+
+      (bformat t "Testing DNS with a-n33-k6")
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (+ (total-distance cvrp-action)
+                         (total-penalty cvrp-action)))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      ;; (pp-solution s1 t)
+
+      (time
+       (progn
+         (setf results (vns-shake 
+                     p1 s1
+                     (list
+                      rabs*              ;1
+                      rarbs*             ;2
+                      raracs*            ;3
+                      refs*              ;4
+                      reregs*            ;5
+                      rehfs*             ;6
+                      rerfs*             ;7
+                      rads*              ;8
+                      rehrfs*            ;9
+                      rerehgs*           ;10
+                      rehregs*           ;11
+                      rehrehgs*          ;12
+                      )
+                     :max-iter max-iterations
+                     :action action
+                     :selection-strategy +random-improvement+
+                     :inner-search-max-iter 20))
+
+      (format t "finished vns-shake~%")
+
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through: ~a~%"
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor:~%")
+            (pp-solution best-solution-exhaustive t)
+
+            (simulate-solution best-solution-exhaustive p1 cvrp-action)
+
+            (setf best-solution-exhaustive (first results))
+            (format t "Best value through Yoel's: ~a~%"
+                    (+ (total-distance cvrp-action)
+                       (total-penalty cvrp-action)))
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))
+
+      ))
+
+      )
+
+(let* ((p1 a-n33-k6-problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action*))
+       (results nil)
+
+       (max-iterations 20)
+
+       (cvrp-action (basic-cvrp-action))
+       )
+
+
+      (bformat t "Testing DNS with a-n33-k6")
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (+ (total-distance cvrp-action)
+                         (total-penalty cvrp-action)))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      ;; (pp-solution s1 t)
+
+      (time
+       (progn
+         (setf results (vns-shake 
+                     p1 s1
+                     (list
+                      rabs*              ;1
+                      rarbs*             ;2
+                      raracs*            ;3
+                      refs*              ;4
+                      ;; reregs*            ;5
+                      ;; rehfs*             ;6
+                      ;; rerfs*             ;7
+                      ;; rads*              ;8
+                      ;; rehrfs*            ;9
+                      ;; rerehgs*           ;10
+                      ;; rehregs*           ;11
+                      ;; rehrehgs*          ;12
+                      )
+                     :max-iter max-iterations
+                     :action action
+                     :selection-strategy +random-improvement+
+                     :inner-search-max-iter 10))
+
+      (format t "finished vns-shake~%")
+
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through: ~a~%"
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor:~%")
+            (pp-solution best-solution-exhaustive t)
+
+            (simulate-solution best-solution-exhaustive p1 cvrp-action)
+
+            (setf best-solution-exhaustive (first results))
+            (format t "Best value through Yoel's: ~a~%"
+                    (+ (total-distance cvrp-action)
+                       (total-penalty cvrp-action)))
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%"))))) ;; time
+
+      (format t "distance-stack: ~a~%"
+              (length (delta-distance-stack action)))
+
+      )
+
+(let* ((p1 a-n33-k6-problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action*))
+       (action-for-shake (delta-cvrp-action))
+       (results nil)
+       (max-iterations 200)
+       (cvrp-action (basic-cvrp-action))
+       )
+
+
+      (bformat t "Testing DNS with a-n33-k6")
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (+ (total-distance cvrp-action)
+                         (total-penalty cvrp-action)))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      ;; (pp-solution s1 t)
+
+      (time
+       (progn
+         (setf results (vns-shake-smart
+                     p1 s1
+                     (list
+                      rabs*              ;0
+                      rarbs*             ;1
+                      raracs*            ;2
+                      refs*              ;3
+                      reregs*            ;4
+                      rehfs*             ;5
+                      rerfs*             ;6
+                      rads*              ;7
+                      rehrfs*            ;8
+                      rerehgs*           ;9
+                      rehregs*           ;10
+                      rehrehgs*          ;11
+                      )
+                     :max-iter max-iterations
+                     :action action
+                     :action-for-shake action-for-shake
+                     :selection-strategy *random-improvement*
+                     :search-strategy *exhaustive-search-strategy*
+                     :inner-search-max-iter 200))
+
+      (format t "finished vns-shake~%")
+
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through: ~a~%"
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor:~%")
+            (pp-solution best-solution-exhaustive t)
+
+            (simulate-solution best-solution-exhaustive p1 cvrp-action)
+
+            (setf best-solution-exhaustive (first results))
+            (format t "Best value through Yoel's: ~a~%"
+                    (get-cost-from-action cvrp-action))
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%"))))) ;; time
+
+      ;; (format t "distance-stack: ~a~%"
+      ;;         (length (delta-distance-stack action)))
+
+      )
+
+(let* ((p1 a-n80-k10-problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action*))
+       (action-for-shake (delta-cvrp-action))
+       (results nil)
+       (max-iterations 200)
+       (cvrp-action (basic-cvrp-action))
+       )
+
+
+      (bformat t "Testing DNS with a-n33-k6")
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (+ (total-distance cvrp-action)
+                         (total-penalty cvrp-action)))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      ;; (pp-solution s1 t)
+
+      (time
+       (progn
+         (setf results (vns-shake-smart
+                     p1 s1
+                     (list
+                      rabs*              ;0
+                      rarbs*             ;1
+                      raracs*            ;2
+                      refs*              ;3
+                      reregs*            ;4
+                      rehfs*             ;5
+                      rerfs*             ;6
+                      rads*              ;7
+                      rehrfs*            ;8
+                      rerehgs*           ;9
+                      rehregs*           ;10
+                      rehrehgs*          ;11
+                      )
+                     :max-iter max-iterations
+                     :action action
+                     :action-for-shake action-for-shake
+                     :selection-strategy *random-improvement*
+                     :search-strategy *exhaustive-search-strategy*
+                     :inner-search-max-iter 60))
+
+      (format t "finished vns-shake~%")
+
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through: ~a~%"
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor:~%")
+            (pp-solution best-solution-exhaustive t)
+
+            (simulate-solution best-solution-exhaustive p1 cvrp-action)
+
+            (setf best-solution-exhaustive (first results))
+            (format t "Best value through Yoel's: ~a~%"
+                    (get-cost-from-action cvrp-action))
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%"))))) ;; time
+
+      ;; (format t "distance-stack: ~a~%"
+      ;;         (length (delta-distance-stack action)))
+
+      )
+
+(let* ((p1 a-n65-k9-problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action*))
+       (action-for-shake (delta-cvrp-action))
+       (results nil)
+       (max-iterations 200)
+       (cvrp-action (basic-cvrp-action))
+       )
+
+
+      (bformat t "Testing DNS with a-n33-k6")
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (+ (total-distance cvrp-action)
+                         (total-penalty cvrp-action)))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-solution s1 t)
+
+      (time
+       (progn
+         (setf results (vns-shake-smart
+                     p1 s1
+                     (list
+                      rabs*              ;0
+                      rarbs*             ;1
+                      raracs*            ;2
+                      refs*              ;3
+                      reregs*            ;4
+                      rehfs*             ;5
+                      rerfs*             ;6
+                      rads*              ;7
+                      rehrfs*            ;8
+                      rerehgs*           ;9
+                      rehregs*           ;10
+                      rehrehgs*          ;11
+                      )
+                     :max-iter max-iterations
+                     :action action
+                     :action-for-shake action-for-shake
+                     :selection-strategy
+                     ;;(random-improvement-smart 0.7)
+                      *first-improvement*
+                     :search-strategy *exhaustive-search-strategy*
+                     :inner-search-max-iter 50))
+
+      (format t "finished vns-shake~%")
+
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through: ~a~%"
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor:~%")
+            (pp-solution best-solution-exhaustive t)
+
+            (simulate-solution best-solution-exhaustive p1 cvrp-action)
+
+            (setf best-solution-exhaustive (first results))
+            (format t "Best value through Yoel's: ~a~%"
+                    (get-cost-from-action cvrp-action))
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))))
+      ;; time
+
+      ;; (format t "distance-stack: ~a~%"
+      ;;         (length (delta-distance-stack action)))
+
+      )
+
+(let* ((p1 a-n65-k9-problem)
+       (s1 (make-initial-random-cvrp-solution p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action*))
+       (action-for-shake (delta-cvrp-action))
+       (results nil)
+       (max-iterations 200)
+       (cvrp-action (basic-cvrp-action))
+       )
+
+
+      (bformat t "Testing DNS with a-n65-k9-problem")
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (+ (total-distance cvrp-action)
+                         (total-penalty cvrp-action)))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      (pp-solution s1 t)
+
+      (time
+       (progn
+         (setf results (vns-shake-smart
+                     p1 s1
+                     (list
+                      rabs*              ;0
+                      rarbs*             ;1
+                      raracs*            ;2
+                      refs*              ;3
+                      reregs*            ;4
+                      rehfs*             ;5
+                      rerfs*             ;6
+                      rads*              ;7
+                      rehrfs*            ;8
+                      rerehgs*           ;9
+                      ;; rehregs*           ;10
+                      rehrehgs*          ;11
+                      )
+                     :max-iter max-iterations
+                     :action action
+                     :action-for-shake action-for-shake
+                     :selection-strategy
+                     ;; (random-improvement-smart 0.7)
+                      *first-improvement*
+                     :search-strategy *exhaustive-search-strategy*
+                     :inner-search-max-iter 500))
+
+      (format t "finished vns-shake~%")
+
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through: ~a~%"
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor:~%")
+            (pp-solution best-solution-exhaustive t)
+
+            (simulate-solution best-solution-exhaustive p1 cvrp-action)
+
+            (setf best-solution-exhaustive (first results))
+            (format t "Best value through Yoel's: ~a~%"
+                    (get-cost-from-action cvrp-action))
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))))
+      ;; time
+
+      ;; (format t "distance-stack: ~a~%"
+      ;;         (length (delta-distance-stack action)))
+
+      )
+
+(let* ((p1 a-n65-k9-problem)
+       (s1 (make-basic-cvrp-solution-from-list
+            1 `(( 2 )
+                ( 23 )( 48 )( 35  46 )( 45  6 )( 63 )( 55 )
+                ( 51  38 )( 40 )( 28  11 )( 25 )(43  22  4 )
+                ( 29  42  50  60  19 )( 57 )( 49 )( 53 )( 41 )
+                ( 44  37 )( 52 )( 16  15  5 )( 10  58 )
+                ( 64  24  39 )( 61 )( 47  21 )( 9 )( 14  32 )
+                ( 56 )( 33  12  34  27 )( 62 )( 20  26  1 )
+                ( 17 )( 18 )( 13  59 )( 54  36 30  7  3  8 )
+                ( 31 ))
+            a-n65-k9-problem))
+            (best-solution-exhaustive nil)
+            (action (delta-cvrp-action*))
+            (action-for-shake (delta-cvrp-action))
+            (results nil)
+            (max-iterations 200)
+            (cvrp-action (basic-cvrp-action))
+            )
+
+
+           (bformat t "Testing DNS with a-n65-k9-problem")
+
+           ;; first we compute the cost of the solution
+           (simulate-solution s1 p1 cvrp-action)
+           (setf (cost s1) (+ (total-distance cvrp-action)
+                              (total-penalty cvrp-action)))
+
+           (format t "Original solution (with cost ~a):~%"
+                   (cost s1))
+           (pp-solution s1 t)
+
+           (time
+            (progn
+              (setf results (vns-shake-smart
+                          p1 s1
+                          (list
+                           rabs*              ;0
+                           rarbs*             ;1
+                           raracs*            ;2
+                           refs*              ;3
+                           reregs*            ;4
+                           rehfs*             ;5
+                           rerfs*             ;6
+                           rads*              ;7
+                           rehrfs*            ;8
+                           rerehgs*           ;9
+                           rehregs*           ;10
+                           rehrehgs*          ;11
+                           )
+                          :max-iter max-iterations
+                          :action action
+                          :action-for-shake action-for-shake
+                          :selection-strategy
+                          ;; (random-improvement-smart 0.7)
+                           *first-improvement*
+                          :search-strategy *exhaustive-search-strategy*
+                          :inner-search-max-iter 50))
+
+           (format t "finished vns-shake~%")
+
+
+           (format t "Iterations: ~a. Optimum found ~a.~%"
+                   (second results) (third results))
+
+           (setf best-solution-exhaustive (first results))
+
+           (if best-solution-exhaustive
+               (then
+                 (format t "Best value through: ~a~%"
+                         (cost best-solution-exhaustive))
+                 (format t "Best neighbor:~%")
+                 (pp-solution best-solution-exhaustive t)
+
+                 (simulate-solution best-solution-exhaustive p1 cvrp-action)
+
+                 (setf best-solution-exhaustive (first results))
+                 (format t "Best value through Yoel's: ~a~%"
+                         (get-cost-from-action cvrp-action))
+                 )
+
+               (else
+                 (format t "Initial solution was optimum!~%")))))
+           ;; time
+
+           ;; (format t "distance-stack: ~a~%"
+           ;;         (length (delta-distance-stack action)))
+
+           )
+
+(let* ((p1 ff-a-n33-k6-problem)
+       (s1 (make-initial-solution-for-finite-fleet-cvrp-random
+            p1))
+            (best-solution-exhaustive nil)
+            (action (delta-cvrp-action*))
+            (action-for-shake (delta-cvrp-action))
+            (results nil)
+            (max-iterations 200)
+            (cvrp-action (basic-cvrp-action))
+            )
+
+
+           (bformat t "Testing DNS with a-n65-k9-problem")
+
+           ;; first we compute the cost of the solution
+           (simulate-solution s1 p1 cvrp-action)
+           (setf (cost s1) (+ (total-distance cvrp-action)
+                              (total-penalty cvrp-action)))
+
+           (format t "Original solution (with cost ~a):~%"
+                   (cost s1))
+           (pp-solution s1 t)
+
+           (time
+            (progn
+              (setf results (vns-shake-smart
+                          p1 s1
+                          (list
+                           rabs*              ;0
+                           rarbs*             ;1
+                           raracs*            ;2
+                           refs*              ;3
+                           reregs*            ;4
+                           ;; rehfs*             ;5
+                           rerfs*             ;6
+                           ;; rads*              ;7
+                           ;; rehrfs*            ;8
+                           ;; rerehgs*           ;9
+                           ;; rehregs*           ;10
+                           ;; rehrehgs*          ;11
+                           )
+                          :max-iter max-iterations
+                          :action action
+                          :action-for-shake action-for-shake
+                          :selection-strategy
+                          ;; (random-improvement-smart 0.7)
+                           *first-improvement*
+                          :search-strategy *exhaustive-search-strategy*
+                          :inner-search-max-iter 50))
+
+           (format t "finished vns-shake~%")
+
+
+           (format t "Iterations: ~a. Optimum found ~a.~%"
+                   (second results) (third results))
+
+           (setf best-solution-exhaustive (first results))
+
+           (if best-solution-exhaustive
+               (then
+                 (format t "Best value through: ~a~%"
+                         (cost best-solution-exhaustive))
+                 (format t "Best neighbor:~%")
+                 (pp-solution best-solution-exhaustive t)
+
+                 (simulate-solution best-solution-exhaustive p1 cvrp-action)
+
+                 (setf best-solution-exhaustive (first results))
+                 (format t "Best value through Yoel's: ~a~%"
+                         (get-cost-from-action cvrp-action))
+                 )
+
+               (else
+                 (format t "Initial solution was optimum!~%")))))
+           ;; time
+
+           ;; (format t "distance-stack: ~a~%"
+           ;;         (length (delta-distance-stack action)))
+
+           )
+
+(let* ((p1 a-n33-k6-problem)
+       (s1 (make-initial-solution-for-cvrp-deterministic p1))
+       (best-solution-exhaustive nil)
+       (action (delta-cvrp-action*))
+       (action-for-shake (delta-cvrp-action))
+       (results nil)
+       (max-iterations 200)
+       (cvrp-action (basic-cvrp-action))
+       )
+
+
+      (bformat t "Testing VNS shake no output with a-n33-k6")
+
+      ;; first we compute the cost of the solution
+      (simulate-solution s1 p1 cvrp-action)
+      (setf (cost s1) (+ (total-distance cvrp-action)
+                         (total-penalty cvrp-action)))
+
+      (format t "Original solution (with cost ~a):~%"
+              (cost s1))
+      ;; (pp-solution s1 t)
+
+      (time
+       (progn
+         (setf results (vns-shake-smart-no-output
+                     p1 s1
+                     (list
+                      rabs*              ;0
+                      rarbs*             ;1
+                      raracs*            ;2
+                      refs*              ;3
+                      reregs*            ;4
+                      rehfs*             ;5
+                      rerfs*             ;6
+                      rads*              ;7
+                      rehrfs*            ;8
+                      rerehgs*           ;9
+                      rehregs*           ;10
+                      rehrehgs*          ;11
+                      )
+                     :max-iter max-iterations
+                     :action action
+                     :action-for-shake action-for-shake
+                     :selection-strategy *random-improvement*
+                     :search-strategy *exhaustive-search-strategy*
+                     :inner-search-max-iter 40))
+
+      (format t "finished vns-shake~%")
+
+
+      (format t "Iterations: ~a. Optimum found ~a.~%"
+              (second results) (third results))
+
+      (setf best-solution-exhaustive (first results))
+
+      (if best-solution-exhaustive
+          (then
+            (format t "Best value through: ~a~%"
+                    (cost best-solution-exhaustive))
+            (format t "Best neighbor:~%")
+            (pp-solution best-solution-exhaustive t)
+
+            (simulate-solution best-solution-exhaustive p1 cvrp-action)
+
+            (setf best-solution-exhaustive (first results))
+            (format t "Best value through Yoel's: ~a~%"
+                    (get-cost-from-action cvrp-action))
+            )
+
+          (else
+            (format t "Initial solution was optimum!~%")))))
+
+      )
+
+(progn (defparameter c1 (basic-cvrp-client 1 1))
+       (defparameter c2 (basic-cvrp-client 2 1))
+       (defparameter c3 (basic-cvrp-client 3 4))
+       (defparameter c4 (basic-cvrp-client 4 3))
+       (defparameter c5 (basic-cvrp-client 5 2))
+       (defparameter c6 (basic-cvrp-client 6 1))
+
+       (defparameter v1 (cvrp-vehicle 1 10))
+       (defparameter v2 (cvrp-vehicle 2 10))
+
+       (defparameter d0 (basic-depot))
+
+       ;; Solution for the eval-graph
+       ;; remember to start and end all the routes with depot
+       ;; the starting depot is placed in the previous-client slot
+       (defparameter r1 (route-for-simulation :id 1 :vehicle v1 :depot d0
+					      :clients (list c1 c2 c3 (clone d0)) :previous-client (clone d0)))
+       (defparameter r2 (route-for-simulation :id 2 :vehicle v2 :depot d0
+					      :clients (list c4 c5 c6 (clone d0)) :previous-client (clone d0)))
+
+       (defparameter s1 (basic-solution :id 1 :routes (list r1 r2)))
+
+       (defparameter dist-mat #2A((0 1 2 3 4 5 6)
+				  (1 0 9 2 7 3 2)
+				  (2 9 0 2 2 2 2)
+				  (3 2 2 0 8 2 1)
+				  (4 7 2 8 0 2 9)
+				  (5 3 2 2 2 0 1)
+				  (6 2 2 1 9 1 0)))
+       (defparameter problem (finite-fleet-cvrp-problem :id 1 :clients (list c1 c2 c3 c4 c5 c6)
+							:depot d0 :distance-matrix dist-mat :fleet (list v1 v2) ))
+
+       (defparameter graph (init-graph s1)))
+
+  ;; let's evaluate the solution
+
+  (progn
+    (def-var total-distance 0 graph)
+    (loop for r in (routes s1) do 
+	 (progn
+	   (def-var route-distance 0 graph)
+	   (def-var route-demand (capacity (vehicle r)) graph) 
+	   (loop for c in (clients r) do 
+		(progn
+		  (increment-distance (previous-client r) c route-distance dist-mat graph)
+		  (decrement-demand c route-demand graph) 
+		  (setf (previous-client r) c)))
+	   (increment-value total-distance route-distance graph)
+	   (apply-penalty route-demand total-distance 10 graph)) 
+	 (return-value total-distance graph)))
+
+  (format t "initial cost: ~a~%" (output-value (output graph)))
+  (format t "initial solution: ~a~%" (solution-track graph))
+
+
+  (progn
+    (setf rab (make-neighborhood-criterion 
+	       `((select-route r1)
+		 (select-client c1 from r1)
+		 (insert-client c1 to r1))
+	       +exhaustive-search-strategy+ 
+	       +best-improvement+))
+
+    (setf rarb (make-neighborhood-criterion 
+		`((select-route r1)
+		  (select-client c1 from r1)
+		  (select-route r2)
+		  (insert-client c1 to r2))
+		+exhaustive-search-strategy+ 
+		+best-improvement+))
+
+    (setf rarac (make-neighborhood-criterion 
+		 `((select-route r1)
+		   (select-client c1 from r1)
+		   (select-route r2)
+		   (select-client c2 from r2)
+		   (swap-clients c1 c2))
+		 +exhaustive-search-strategy+ 
+		 +best-improvement+))
+
+(setf ref (make-neighborhood-criterion 
+	   `((select-route r1)
+	     (select-subroute z1 from r1)
+	     (insert-subroute z1 into r1))
+	   +exhaustive-search-strategy+ 
+	   +best-improvement+))
+
+  (setf rereg (make-neighborhood-criterion 
+	       `((select-route r1)
+		 (select-subroute c1 from r1)
+		 (select-route r2)
+		 (select-subroute c2 from r2)
+		 (swap-subroutes c1 c2))
+	+exhaustive-search-strategy+ 
+	+best-improvement+))
+
+(setf rerf (make-neighborhood-criterion 
+	    `((select-route r1)
+	      (select-subroute c1 from r1)
+	      (select-route r2)
+	      (insert-subroute c1 into r2))
+	    +exhaustive-search-strategy+ 
+	    +best-improvement+))
+
+    (setf criteria (list rab rarb rarac ref rerf))
+
+    (format t "~a" (vns-vrp-system problem criteria graph :max-iter 10000000000)))

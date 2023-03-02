@@ -29,8 +29,6 @@
 	      region-ordered-intensification-list
 
 	      result
-	      a
-	      b
 	      ;; data for computing delta cost
 	      ;; (work-cop (basic-working-copy solution))
 	      ;; (action (delta-cvrp-action))
@@ -59,7 +57,7 @@
 		     ;; before the intensification phase
 
 		     (do-suite-operations graph current-ops-list)
-		     (setf a (clone (solution-track graph)))  
+		     ;; (setf a (clone (solution-track graph)))  
 		     (when on-exploration-phase
 		       (push (output-value (output graph))
 			     (gethash (from-coordinate-list-to-region-tuple current-solution)
@@ -67,7 +65,7 @@
 		     (setf result (output-value (output graph)))
 
 		     (undo-suite-operations graph current-ops-list) 
-		     (setf b (clone (solution-track graph)))   
+		     ;; (setf b (clone (solution-track graph)))   
 		     ;; here we return the current operation list and its delta cost evaluation
 		     (values current-ops-list result)))
 

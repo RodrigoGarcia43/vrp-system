@@ -214,6 +214,14 @@
     ()
     :documentation "A class to represent a search strategy where we compute the delta-cost of each neighbor using the the * macros.")
 
+(def-vrp-class use-neigh-tree()
+    ()
+    :documentation "A class to represent a search strategy where we use the neghborhood tree to generate solutions")
+
+(def-vrp-class use-eval-graph()
+    (use-neigh-generator)
+    :documentation "A class to represent a search strategy where we use the eval graph to evaluate solutions")
+
 (def-vrp-class there-is-a-best-solution ()
     ()
     :documentation "A class to represent a search strategy where we have a best-solution value that we update during the search.")
@@ -279,18 +287,6 @@
 (defparameter +jump-around-strategy+
   (jump-around-search-strategy 10))
 
-(def-vrp-class exhaustive/efficient-neighborhood-search-strategy
-    (exhaustive-neighborhood-search-strategy)
-  ()
-    :documentation "A class to represent an exhaustive search of a neighborhood."
-    :constructor (exhaustive/efficient-neighborhood-search-strategy ())
-    :print-object-string ("<exhaustive*-search>")
-    :slots-for-obj= ()
-    :slots-for-clone ())
-
-(defparameter *exhaustive-search-strategy*
-  (exhaustive/efficient-neighborhood-search-strategy))
-
 (def-vrp-class random-bug-search-strategy
     (random-neighborhood-search-strategy
      looking-for-bug)
@@ -308,7 +304,7 @@
 (def-vrp-class best-improvement-search-strategy
     (
      return-best-solution
-     search-with-a-basic-wc)
+     use-eval-graph)
 
     ()
     :documentation "A class to represent a best-improvement strategy in the search of a neighborhood."
@@ -320,7 +316,7 @@
 (def-vrp-class first-improvement-search-strategy
     (
      return-best-solution
-     search-with-a-basic-wc)
+     use-eval-graph)
 
     ()
     :documentation "A class to represent a first-improvement strategy in the search of a neighborhood."
@@ -333,7 +329,7 @@
     (
      return-best-solution
      has-candidates-for-best-neighbor
-     search-with-a-basic-wc)
+     use-eval-graph)
 
     ()
     :documentation "A class to represent a random-improvement strategy in the search of a neighborhood."
@@ -345,7 +341,7 @@
 (def-vrp-class random-improvement-selection-strategy
     (
      return-best-solution
-     search-with-a-basic-wc)
+     use-eval-graph)
 
     ((acceptance-ratio
       :initform 0.5
@@ -358,8 +354,7 @@
     :slots-for-clone (acceptance-ratio))
 
 (def-vrp-class jump-around-return-last-neighbor
-    (search-with-a-basic-wc
-     compute-delta-cost-inefficiently)
+    (use-eval-graph)
 
     ()
     :documentation "A class to represent the simplest jump-around selection strategy."
@@ -374,126 +369,12 @@
 (def-vrp-class return-last-neighbor-selection-strategy
     (return-best-delta-cost
      return-best-solution
-     search-with-a-basic-wc)
+     use-eval-graph)
     () ;; no slots
     :documentation "A class to represent a search strategy where we return the last neighbor independently of its cost.")
 
 (defparameter +return-last-neighbor+
   (make-instance 'return-last-neighbor-selection-strategy))
-
-(def-vrp-class best-improvement-inefficient
-    (best-improvement-search-strategy
-     compute-delta-cost-inefficiently)
-
-    ()
-    :documentation "A class to represent a best-improvement (with delta-cost) strategy in the search of a neighborhood."
-    :constructor (best-improvement-inefficient ())
-    :print-object-string ("<best-improvement-inefficient>")
-    :slots-for-obj= ()
-    :slots-for-clone ())
-
-(defparameter +best-improvement+
-  (make-instance 'best-improvement-inefficient))
-
-(def-vrp-class first-improvement-ineffcient
-    (first-improvement-search-strategy
-     compute-delta-cost-inefficiently)
-
-    ()
-    :documentation "A class to represent a first-improvement strategy computing the delta-cost with the function =delta-cost=."
-    :constructor (first-improvement-ineffcient ())
-    :print-object-string ("<first-improvement-inefficient>")
-    :slots-for-obj= ()
-    :slots-for-clone ())
-
-(defparameter +first-improvement+
-  (make-instance 'first-improvement-ineffcient))
-
-(def-vrp-class random-improvement-with-candidates-inefficient
-    (random-improvement-with-candidates-selection-strategy
-     compute-delta-cost-inefficiently)
-
-    ()
-    :documentation "A class to represent a random-improvement strategy in the search of a neighborhood, that uses the delta-cost function."
-    :constructor (random-improvement-with-candidates-inefficient)
-    :print-object-string ("<random-improvement-inefficient>")
-    :slots-for-obj= ()
-    :slots-for-clone ())
-
-(defparameter +random-improvement-with-candidates+
-  (make-instance 'random-improvement-with-candidates-inefficient))
-
-(def-vrp-class random-improvement-inefficient
-    (random-improvement-selection-strategy
-     compute-delta-cost-inefficiently)
-
-    ()
-    :documentation "A class to represent a random-improvement strategy in the search of a neighborhood, that uses the delta-cost function."
-    :constructor (random-improvement-inefficient
-                  (&optional (acceptance-ratio 0.8)))
-    :print-object-string ("<random-improvement-inefficient>")
-    :slots-for-obj= (acceptance-ratio)
-    :slots-for-clone (acceptance-ratio))
-
-(defparameter +random-improvement+
-  (make-instance 'random-improvement-inefficient))
-
-(def-vrp-class best-improvement-smart
-    (best-improvement-search-strategy
-     compute-delta-cost-with-smart-macros)
-
-    ()
-    :documentation "A class to represent a best-improvement strategy (with * macros) in the search of a neighborhood."
-    :constructor (best-improvement-smart ())
-    :print-object-string ("<best-improvement-smart>")
-    :slots-for-obj= ()
-    :slots-for-clone ())
-
-(defparameter *best-improvement*
-  (make-instance 'best-improvement-smart))
-
-(def-vrp-class first-improvement-smart
-    (first-improvement-search-strategy
-     compute-delta-cost-with-smart-macros)
-
-    ()
-    :documentation "A class to represent a first-improvement strategy where we use the * macros."
-    :constructor (first-improvement-smart ())
-    :print-object-string ("<first-improvement-smart")
-    :slots-for-obj= ()
-    :slots-for-clone ())
-
-(defparameter *first-improvement*
-  (make-instance 'first-improvement-smart))
-
-(def-vrp-class random-improvement-with-candidates-smart
-    (random-improvement-with-candidates-selection-strategy
-     compute-delta-cost-with-smart-macros)
-
-    ()
-    :documentation "A class to represent a random-improvement strategy in the search of a neighborhood, that uses the smart macros."
-    :constructor (random-improvement-with-candidates-smart ())
-    :print-object-string ("<random-improvement-smart>")
-    :slots-for-obj= ()
-    :slots-for-clone ())
-
-(defparameter *random-improvement-with-candidates*
-  (make-instance 'random-improvement-with-candidates-smart))
-
-(def-vrp-class random-improvement-smart
-    (random-improvement-selection-strategy
-     compute-delta-cost-with-smart-macros)
-
-    ()
-    :documentation "A class to represent a random-improvement strategy in the search of a neighborhood, that uses the smart macros."
-    :constructor (random-improvement-smart (&optional
-                                            (acceptance-ratio 0.8)))
-    :print-object-string ("<random-improvement-smart>")
-    :slots-for-obj= (acceptance-ratio)
-    :slots-for-clone (acceptance-ratio))
-
-(defparameter *random-improvement*
-  (make-instance 'random-improvement-smart))
 
 (def-vrp-class basic-neighborhood-strategy-blueprint ()
     ((initializations-inside-the-let
@@ -756,20 +637,24 @@
 (defmethod generate-inside-let-initializations :after
     (description
      strategy
-     (other-strategies search-with-a-basic-wc)
+     (other-strategies use-eval-graph)
      (where-to-store-it basic-neighborhood-strategy-blueprint))
 
-  (push `(wc (make-working-copy (clone solution)))
+  (push `(current-cost 0)
         (initializations-inside-the-let where-to-store-it)))
 
 (defmethod generate-inside-let-initializations :after
     (description
      strategy
-     (other-strategies search-with-delta-cost-computation)
+     (other-strategies use-neigh-tree)
      (where-to-store-it basic-neighborhood-strategy-blueprint))
 
-  (push `(current-delta-cost 0)
-        (initializations-inside-the-let where-to-store-it)))
+  (push `(neigh-tree (build-neighborhood-tree code solution))
+	(initializations-inside-the-let where-to-store-it))
+  (push `(sol-generator (exhaustive-exploration neigh-tree))
+	(initializations-inside-the-let where-to-store-it))
+  (push `(current-solution (funcall sol-generator))
+	(initializations-inside-the-let where-to-store-it)))
 
 (defmethod generate-inside-let-initializations :after
     (description
@@ -806,13 +691,13 @@
      other-strategies
      (where-to-store-it basic-neighborhood-strategy-blueprint))
 
-  (push `(cumulative-delta-cost 0)
+  (push `(cumulative-cost 0)
         (initializations-inside-the-let where-to-store-it))
 
-  (push `(best-jump-delta-cost 0)
+  (push `(best-jump-cost 0)
         (initializations-inside-the-let where-to-store-it))
 
-  (push `(best-jump-delta-cost-to-return 0)
+  (push `(best-jump-cost-to-return 0)
         (initializations-inside-the-let where-to-store-it))
 
   (push `(best-jump-solution nil)
@@ -830,16 +715,16 @@
         (initializations-inside-the-let where-to-store-it))
   (push `(wc (basic-working-copy (clone solution)))
         (initializations-inside-the-let where-to-store-it))
-  (push `(current-delta-cost 0)
+  (push `(current-cost 0)
         (initializations-inside-the-let where-to-store-it))
 
-  (push `(cumulative-delta-cost 0)
+  (push `(cumulative-cost 0)
         (initializations-inside-the-let where-to-store-it))
 
-  (push `(best-jump-delta-cost 0)
+  (push `(best-jump-cost 0)
         (initializations-inside-the-let where-to-store-it))
 
-  (push `(best-jump-delta-cost-to-return 0)
+  (push `(best-jump-cost-to-return 0)
         (initializations-inside-the-let where-to-store-it))
 
   (push `(best-jump-solution nil)
@@ -1260,10 +1145,10 @@
 
     ;; finally, the function heading:
     (setf result
-          `(lambda (solution problem action
+          `(lambda (solution problem action graph
                     &optional (initial-best-delta-cost 0))
              (declare (ignorable initial-best-delta-cost
-                                 solution problem action))
+                                 solution problem action graph))
 
                     ,result))
     ;; and now, let's return result

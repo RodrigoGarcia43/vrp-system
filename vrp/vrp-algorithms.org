@@ -4212,144 +4212,145 @@
     Here we add a shake step in the algorithm, but in the following way: we do normal vns.  After that, we shake with the first neighborhood and repeat the vns. If no improvement is found we increase the shake index and repeat.  After all the neighborhoods have been used in the shake, and no improvement is made, we assume we have found the optimum.
 *** code
    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-algorithms.lisp
-   ;; Variable Neighboorhood Search
-   (defun vns-shake
-       (problem solution criteria
-        &key
-          (search-strategy +exhaustive-search-strategy+)
-          (selection-strategy +best-improvement+)
-          (shake-search (jump-around-search-strategy 5))
-          (shake-selection (jump-around-return-last-neighbor))
-          (list-returned-by-vns nil)
-          (inner-search-max-iter 100)
-          (max-iter 100)
+     ;; Variable Neighboorhood Search
+     (defun vns-shake
+	 (problem solution criteria
+	  &key
+	    (search-strategy +exhaustive-search-strategy+)
+	    (selection-strategy +best-improvement+)
+	    (shake-search (jump-around-search-strategy 5))
+	    (shake-selection (jump-around-return-last-neighbor))
+	    (list-returned-by-vns nil)
+	    (inner-search-max-iter 100)
+	    (max-iter 100)
 
-          action
-          (print-mod 1)
-          )
-     "Solves the VRP problem using a VNS with the given criterion starting with the given solution. We assume that the initial solution has the cost slot bound. If the result is nil, then the initial solution is an optimum for that neighboorhood."
-     (declare (ignore print-mod))
+	    action
+	    (print-mod 1)
+	    )
+       "Solves the VRP problem using a VNS with the given criterion starting with the given solution. We assume that the initial solution has the cost slot bound. If the result is nil, then the initial solution is an optimum for that neighboorhood."
+       (declare (ignore print-mod))
 
-     (let* (;; (current-index 0)
-            (number-of-criteria (length criteria))
-            (current-criterion-code nil)
-            (current-criterion nil)
-            (better-solution nil)
-            (current-solution solution)
-            (neighboorhoods-used 1)
-            ;; (best-solution (clone solution))
-            (x_prime nil)
-            (initial-best-delta-cost 0)
-            (shake-index 0)
-            (neighboorhoods-used-in-vns 0)
-            (optimum-found-in-vns nil)
-            )
+       (let* (;; (current-index 0)
+	      (number-of-criteria (length criteria))
+	      (current-criterion-code nil)
+	      (current-criterion nil)
+	      (better-solution nil)
+	      (current-solution solution)
+	      (neighboorhoods-used 1)
+	      ;; (best-solution (clone solution))
+	      (x_prime nil)
+	      (initial-best-delta-cost 0)
+	      (shake-index 0)
+	      ;;(neighboorhoods-used-in-vns 0)
+	      ;;(optimum-found-in-vns nil)
+	      )
 
-       (loop while (and (< shake-index number-of-criteria)
-                        (<= neighboorhoods-used max-iter))
-             for better-solution-found-in-shake = nil 
-             ;; let's set the current criterion
-             do (setf current-criterion-code (nth shake-index criteria))
-             ;; let's build the criterion for shaking
-             do (setf current-criterion
-                      (make-neighborhood-criterion
-                       current-criterion-code
-                       shake-search
-                       shake-selection))
+	 (loop while (and (< shake-index number-of-criteria)
+			  (<= neighboorhoods-used max-iter))
+	       for better-solution-found-in-shake = nil 
+	       ;; let's set the current criterion
+	       do (setf current-criterion-code (nth shake-index criteria))
+		  ;; let's build the criterion for shaking
+	       do (setf current-criterion
+			(make-neighborhood-criterion
+			 current-criterion-code
+			 shake-search
+			 shake-selection))
 
-             ;; let's shake the current solution
-             ;; we expect two values because we also need
-             ;; to know the initial-best-delta-cost
-             ;; to pass it to the second step.
-             do (setf (values x_prime initial-best-delta-cost)
-                      (funcall current-criterion
-                               current-solution problem action))
+		  ;; let's shake the current solution
+		  ;; we expect two values because we also need
+		  ;; to know the initial-best-delta-cost
+		  ;; to pass it to the second step.
+	       do (setf (values x_prime initial-best-delta-cost)
+			(funcall current-criterion
+				 current-solution problem action))
 
-             ;; (format t "     x_prime? ~a~%" (not (null x_prime)))
-
-
-             ;; for debugging purposes
-             do (format t "Iteration ~a, shake criterion ~a.
-        Best:    ~a (~a)~%"
-                        neighboorhoods-used
-                        shake-index
-                        (cost current-solution)
-                        (cost x_prime))
-
-         ;; do (format t "     initial-delta-cost: ~a~%"
-         ;;                initial-best-delta-cost)
+		  ;; (format t "     x_prime? ~a~%" (not (null x_prime)))
 
 
-             do (if (< initial-best-delta-cost 0)
-                    (then ;; we found a better solution in the shake
-                      ;; so, let's update.
-                      (setf better-solution-found-in-shake t)
-                      (setf current-solution x_prime)
-                      (format t "     Found a better solution in shake with cost ~a.~%"
-                              (cost current-solution))))
+		  ;; for debugging purposes
+	       do (format t "Iteration ~a, shake criterion ~a.
+	     Best:    ~a (~a)~%"
+			  neighboorhoods-used
+			  shake-index
+			  (cost current-solution)
+			  (cost x_prime))
 
-             ;; the following should be done
-             ;; only if no better-solution-found-in-shake
+		  ;; do (format t "     initial-delta-cost: ~a~%"
+		  ;;                initial-best-delta-cost)
 
 
-             ;; let's call vns on the shaked solution
-             do (unless better-solution-found-in-shake
-                  ;; let's call vns on the shaked solution
-                  (setf list-returned-by-vns
-                        (vns-code-bar
-                         problem x_prime criteria
-                         :search-strategy search-strategy
-                         :selection-strategy selection-strategy
-                         :max-iter inner-search-max-iter
-                         :action action))
-                  ;; let's get the results
-                  (setf better-solution (first list-returned-by-vns)
-                        neighboorhoods-used-in-vns (nth 1 list-returned-by-vns)
-                        optimum-found-in-vns (third list-returned-by-vns)))
+	       do (if (< initial-best-delta-cost 0)
+		      (then ;; we found a better solution in the shake
+			;; so, let's update.
+			(setf better-solution-found-in-shake t)
+			(setf current-solution x_prime)
+			(format t "     Found a better solution in shake with cost ~a.~%"
+				(cost current-solution))))
 
-                ;; let's see if the vns solution is better than x
-             do (unless better-solution-found-in-shake
-                  (if better-solution
-                      (then
-                        ;; let's see if the solution is better
-                        (if (< (cost better-solution)
-                               (cost current-solution))
-                            (then
-                             ;; we found a better solution
-                             ;; update the current-solution
-                             (setf current-solution better-solution)
-                             ;; set the number-of-criteria to 0
-                             (setf shake-index 0)
-                             ;; this is for debug
-                             (format t ": ~a~%" (cost better-solution)))
-                            (else
-                              ;; there is no improvement
-                              ;; use the next criterion for the shake
-                              (incf shake-index)
-                              ;; this is for debug
-                              (format t ".  :-(~%"))))))
+		  ;; the following should be done
+		  ;; only if no better-solution-found-in-shake
 
-             ;; in any case, increment the number of neighboorhoods-used
-             do (incf neighboorhoods-used)
 
-             ;; ;; ;; for debugging
-             ;; (format t "     At the end of loop: cost of current-sol: ~a~%"
-             ;;         (cost current-solution))
+		  ;; let's call vns on the shaked solution
+	       do (unless better-solution-found-in-shake
+		    ;; let's call vns on the shaked solution
+		    (setf list-returned-by-vns
+			  (vns-code-bar
+			   problem x_prime criteria
+			   :search-strategy search-strategy
+			   :selection-strategy selection-strategy
+			   :max-iter inner-search-max-iter
+			   :action action))
+		    ;; let's get the results
+		    (setf better-solution (first list-returned-by-vns)
+			  ;;neighboorhoods-used-in-vns (nth 1 list-returned-by-vns)
+			  ;;optimum-found-in-vns (third list-returned-by-vns)
+			  ))
 
-             ;; ;; ;; for debugging purposes
-             ;; (format t "At the end of the while: ~a, ~a~%"
-             ;;         current-index number-of-criteria
-             ;;         ;; (< current-index number-of-criteria)
-             ;;         ;; (<= neighboorhoods-used max-iter)
-             ;;         )
-             ;; ;; ;; end of debugging purposes ;;}}}
+		  ;; let's see if the vns solution is better than x
+	       do (unless better-solution-found-in-shake
+		    (if better-solution
+			(then
+			  ;; let's see if the solution is better
+			  (if (< (cost better-solution)
+				 (cost current-solution))
+			      (then
+				;; we found a better solution
+				;; update the current-solution
+				(setf current-solution better-solution)
+				;; set the number-of-criteria to 0
+				(setf shake-index 0)
+				;; this is for debug
+				(format t ": ~a~%" (cost better-solution)))
+			      (else
+				;; there is no improvement
+				;; use the next criterion for the shake
+				(incf shake-index)
+				;; this is for debug
+				(format t ".  :-(~%"))))))
 
-             )
-       ;; finally return the current solution
-       ;; if it is nil, then the initial solution is an optimum
-       (list current-solution
-             neighboorhoods-used
-             (<= neighboorhoods-used max-iter))))
+		  ;; in any case, increment the number of neighboorhoods-used
+	       do (incf neighboorhoods-used)
+
+		  ;; ;; ;; for debugging
+		  ;; (format t "     At the end of loop: cost of current-sol: ~a~%"
+		  ;;         (cost current-solution))
+
+		  ;; ;; ;; for debugging purposes
+		  ;; (format t "At the end of the while: ~a, ~a~%"
+		  ;;         current-index number-of-criteria
+		  ;;         ;; (< current-index number-of-criteria)
+		  ;;         ;; (<= neighboorhoods-used max-iter)
+		  ;;         )
+		  ;; ;; ;; end of debugging purposes ;;}}}
+
+	       )
+	 ;; finally return the current solution
+	 ;; if it is nil, then the initial solution is an optimum
+	 (list current-solution
+	       neighboorhoods-used
+	       (<= neighboorhoods-used max-iter))))
        #+END_SRC
    
 *** tests
@@ -4612,166 +4613,167 @@
     This is the last shake we had, but now we create the code for the criteria only once at the beginning of the the algorithm.
 *** code
    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-algorithms.lisp
-   ;; Variable Neighboorhood Search
-   (defun vns-shake-smart
-       (problem solution criteria
-        &key
-          (search-strategy +exhaustive-search-strategy+)
-          (selection-strategy +best-improvement+)
-          (shake-search (jump-around-search-strategy 5))
-          (shake-selection (jump-around-return-last-neighbor))
-          (list-returned-by-vns nil)
-          (inner-search-max-iter 100)
-          (max-iter 100)
+     ;; Variable Neighboorhood Search
+     (defun vns-shake-smart
+	 (problem solution criteria
+	  &key
+	    (search-strategy +exhaustive-search-strategy+)
+	    (selection-strategy +best-improvement+)
+	    (shake-search (jump-around-search-strategy 5))
+	    (shake-selection (jump-around-return-last-neighbor))
+	    (list-returned-by-vns nil)
+	    (inner-search-max-iter 100)
+	    (max-iter 100)
 
-          action
-          action-for-shake
-          (print-mod 1)
-          )
-     "Solves the VRP problem using a VNS with the given criterion starting with the given solution. We assume that the initial solution has the cost slot bound. If the result is nil, then the initial solution is an optimum for that neighboorhood."
-     (declare (ignore print-mod))
+	    action
+	    action-for-shake
+	    (print-mod 1)
+	    )
+       "Solves the VRP problem using a VNS with the given criterion starting with the given solution. We assume that the initial solution has the cost slot bound. If the result is nil, then the initial solution is an optimum for that neighboorhood."
+       (declare (ignore print-mod))
 
-     (let* (;; (current-index 0)
-            (number-of-criteria (length criteria))
-            ;; the criteria to be passed to the vns-fn-bar
-            (exhaustive-criteria-code (mapcar (lambda (x)
-                                                (make-neighborhood-criterion
-                                                 x
-                                                 search-strategy
-                                                 selection-strategy))
-                                              criteria))
-            ;; the criteria to use for the shake
-            (random-criteria-code (mapcar (lambda (x)
-                                                (make-neighborhood-criterion
-                                                 x
-                                                 shake-search
-                                                 shake-selection))
-                                              criteria))
-            (current-criterion-for-shake nil)
-            (better-solution nil)
-            (current-solution solution)
-            (neighboorhoods-used 1)
-            ;; (best-solution (clone solution))
-            (x_prime nil)
-            (initial-best-delta-cost 0)
-            (shake-index 0)
-            (neighboorhoods-used-in-vns 0)
-            (optimum-found-in-vns nil)
-            )
+       (let* (;; (current-index 0)
+	      (number-of-criteria (length criteria))
+	      ;; the criteria to be passed to the vns-fn-bar
+	      (exhaustive-criteria-code (mapcar (lambda (x)
+						  (make-neighborhood-criterion
+						   x
+						   search-strategy
+						   selection-strategy))
+						criteria))
+	      ;; the criteria to use for the shake
+	      (random-criteria-code (mapcar (lambda (x)
+						  (make-neighborhood-criterion
+						   x
+						   shake-search
+						   shake-selection))
+						criteria))
+	      (current-criterion-for-shake nil)
+	      (better-solution nil)
+	      (current-solution solution)
+	      (neighboorhoods-used 1)
+	      ;; (best-solution (clone solution))
+	      (x_prime nil)
+	      (initial-best-delta-cost 0)
+	      (shake-index 0)
+	      ;;(neighboorhoods-used-in-vns 0)
+	      ;;(optimum-found-in-vns nil)
+	      )
 
-       (loop while (and (< shake-index number-of-criteria)
-                        (<= neighboorhoods-used max-iter))
-             for better-solution-found-in-shake = nil 
-             ;; let's get the criterion for shaking
-             do (setf current-criterion-for-shake
-                      (nth shake-index random-criteria-code))
+	 (loop while (and (< shake-index number-of-criteria)
+			  (<= neighboorhoods-used max-iter))
+	       for better-solution-found-in-shake = nil 
+	       ;; let's get the criterion for shaking
+	       do (setf current-criterion-for-shake
+			(nth shake-index random-criteria-code))
 
-             ;; let's shake the current solution
-             ;; we expect two values because we also need
-             ;; to know the initial-best-delta-cost
-             ;; to pass it to the second step.
+	       ;; let's shake the current solution
+	       ;; we expect two values because we also need
+	       ;; to know the initial-best-delta-cost
+	       ;; to pass it to the second step.
 
-             ;; do (initialize-action-for-delta-cost-computation
-             ;;     current-solution
-             ;;     problem
-             ;;     action-for-shake)
+	       ;; do (initialize-action-for-delta-cost-computation
+	       ;;     current-solution
+	       ;;     problem
+	       ;;     action-for-shake)
 
-             do (setf (values x_prime initial-best-delta-cost)
-                      (funcall current-criterion-for-shake
-                               current-solution
-                               problem
-                               action-for-shake))
+	       do (setf (values x_prime initial-best-delta-cost)
+			(funcall current-criterion-for-shake
+				 current-solution
+				 problem
+				 action-for-shake))
 
-             ;; (format t "    debug: distance-stack after shake: ~a~%"
-             ;;         (length (delta-distance-stack action)))
-
-
-             ;; for debugging purposes
-             do (format t "Iteration ~a, shake criterion ~a.
-        Best:    ~a (~a)~%"
-                        neighboorhoods-used
-                        shake-index
-                        (cost current-solution)
-                        (cost x_prime))
-
-         ;; do (format t "     initial-delta-cost: ~a~%"
-         ;;                initial-best-delta-cost)
+	       ;; (format t "    debug: distance-stack after shake: ~a~%"
+	       ;;         (length (delta-distance-stack action)))
 
 
-             do (if (< initial-best-delta-cost 0)
-                    (then ;; we found a better solution in the shake
-                      ;; so, let's update.
-                      (setf better-solution-found-in-shake t)
-                      (setf current-solution x_prime)
-                      (format t "     Found a better solution in shake with cost ~a.~%"
-                              (cost current-solution))))
+	       ;; for debugging purposes
+	       do (format t "Iteration ~a, shake criterion ~a.
+	  Best:    ~a (~a)~%"
+			  neighboorhoods-used
+			  shake-index
+			  (cost current-solution)
+			  (cost x_prime))
 
-             ;; the following should be done
-             ;; only if no better-solution-found-in-shake
+	   ;; do (format t "     initial-delta-cost: ~a~%"
+	   ;;                initial-best-delta-cost)
 
 
-             ;; let's call vns on the shaked solution
-             do (unless better-solution-found-in-shake
-                  ;; let's call vns on the shaked solution
-                  (setf list-returned-by-vns
-                        (vns-fn-bar
-                         problem x_prime
-                         exhaustive-criteria-code
-                         :max-iter inner-search-max-iter
-                         :action action
-                         :dots-canvas 1
-                         ))
-                  ;; let's get the results
-                  (setf better-solution
-                        (first list-returned-by-vns))
-                  (setf neighboorhoods-used-in-vns
-                        (nth 1 list-returned-by-vns))
-                  (setf optimum-found-in-vns
-                        (third list-returned-by-vns)))
+	       do (if (< initial-best-delta-cost 0)
+		      (then ;; we found a better solution in the shake
+			;; so, let's update.
+			(setf better-solution-found-in-shake t)
+			(setf current-solution x_prime)
+			(format t "     Found a better solution in shake with cost ~a.~%"
+				(cost current-solution))))
 
-                ;; let's see if the vns solution is better than x
-             do (unless better-solution-found-in-shake
-                  (if better-solution
-                      (then
-                        ;; let's see if the solution is better
-                        (if (< (cost better-solution)
-                               (cost current-solution))
-                            (then
-                             ;; we found a better solution
-                             ;; update the current-solution
-                             (setf current-solution better-solution)
-                             ;; set the number-of-criteria to 0
-                             (setf shake-index 0)
-                             ;; this is for debug
-                             (format t ": ~a~%" (cost better-solution)))
-                            (else
-                              ;; there is no improvement
-                              ;; use the next criterion for the shake
-                              (incf shake-index)
-                              ;; this is for debug
-                              (format t ".  :-(~%"))))))
+	       ;; the following should be done
+	       ;; only if no better-solution-found-in-shake
 
-             ;; in any case, increment the number of neighboorhoods-used
-             do (incf neighboorhoods-used)
 
-             ;; ;; ;; for debugging
-             ;; (format t "     At the end of loop: cost of current-sol: ~a~%"
-             ;;         (cost current-solution))
+	       ;; let's call vns on the shaked solution
+	       do (unless better-solution-found-in-shake
+		    ;; let's call vns on the shaked solution
+		    (setf list-returned-by-vns
+			  (vns-fn-bar
+			   problem x_prime
+			   exhaustive-criteria-code
+			   :max-iter inner-search-max-iter
+			   :action action
+			   :dots-canvas 1
+			   ))
+		    ;; let's get the results
+		    (setf better-solution
+			  (first list-returned-by-vns))
+		    ;; (setf neighboorhoods-used-in-vns
+		    ;;       (nth 1 list-returned-by-vns))
+		    ;; (setf optimum-found-in-vns
+		    ;;       (third list-returned-by-vns))
+)
 
-             ;; ;; ;; for debugging purposes
-             ;; (format t "At the end of the while: ~a, ~a~%"
-             ;;         current-index number-of-criteria
-             ;;         ;; (< current-index number-of-criteria)
-             ;;         ;; (<= neighboorhoods-used max-iter)
-             ;;         )
-             ;; ;; ;; end of debugging purposes ;;}}}
+		  ;; let's see if the vns solution is better than x
+	       do (unless better-solution-found-in-shake
+		    (if better-solution
+			(then
+			  ;; let's see if the solution is better
+			  (if (< (cost better-solution)
+				 (cost current-solution))
+			      (then
+			       ;; we found a better solution
+			       ;; update the current-solution
+			       (setf current-solution better-solution)
+			       ;; set the number-of-criteria to 0
+			       (setf shake-index 0)
+			       ;; this is for debug
+			       (format t ": ~a~%" (cost better-solution)))
+			      (else
+				;; there is no improvement
+				;; use the next criterion for the shake
+				(incf shake-index)
+				;; this is for debug
+				(format t ".  :-(~%"))))))
 
-             )
-       ;; finally return the current solution
-       ;; if it is nil, then the initial solution is an optimum
-       (list current-solution
-             neighboorhoods-used
-             (<= neighboorhoods-used max-iter))))
+	       ;; in any case, increment the number of neighboorhoods-used
+	       do (incf neighboorhoods-used)
+
+	       ;; ;; ;; for debugging
+	       ;; (format t "     At the end of loop: cost of current-sol: ~a~%"
+	       ;;         (cost current-solution))
+
+	       ;; ;; ;; for debugging purposes
+	       ;; (format t "At the end of the while: ~a, ~a~%"
+	       ;;         current-index number-of-criteria
+	       ;;         ;; (< current-index number-of-criteria)
+	       ;;         ;; (<= neighboorhoods-used max-iter)
+	       ;;         )
+	       ;; ;; ;; end of debugging purposes ;;}}}
+
+	       )
+	 ;; finally return the current solution
+	 ;; if it is nil, then the initial solution is an optimum
+	 (list current-solution
+	       neighboorhoods-used
+	       (<= neighboorhoods-used max-iter))))
        #+END_SRC
    
 *** tests
@@ -5321,8 +5323,8 @@
             (x_prime nil)
             (initial-best-delta-cost 0)
             (shake-index 0)
-            (neighboorhoods-used-in-vns 0)
-            (optimum-found-in-vns nil)
+            ;;(neighboorhoods-used-in-vns 0)
+            ;;(optimum-found-in-vns nil)
             )
 
        (loop while (and (< shake-index number-of-criteria)
@@ -5365,10 +5367,11 @@
                   ;; let's get the results
                   (setf better-solution
                         (first list-returned-by-vns))
-                  (setf neighboorhoods-used-in-vns
-                        (nth 1 list-returned-by-vns))
-                  (setf optimum-found-in-vns
-                        (third list-returned-by-vns)))
+                  ;;(setf neighboorhoods-used-in-vns
+                  ;;      (nth 1 list-returned-by-vns))
+                  ;;(setf optimum-found-in-vns
+                  ;;      (third list-returned-by-vns))
+)
 
                 ;; let's see if the vns solution is better than x
              do (unless better-solution-found-in-shake
