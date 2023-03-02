@@ -1,0 +1,19 @@
+#+TITLE: VRP solver environment
+#+AUTHOR: Rodrigo Garcia Gomez
+
+* Introduction
+This is the main file of the system. First, we will define the vrp package. Then, we define the classes used to create a vrp problem. 
+
+* Package definition
+
+The first thing to do is to create the package we are going to be working in.
+
+
+#+BEGIN_SRC elisp +n -r :results none :exports code :tangle ../src/vrp.lisp 
+(defpackage :vrp
+  (:use :cl-user :common-lisp)
+  (:shadow random round)
+  (:export pp-solution))
+
+(in-package :vrp)
+#+END_SRC

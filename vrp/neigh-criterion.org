@@ -1,0 +1,184 @@
+#+TITLE: Neighborhood Enviroment
+#+AUTHOR: Hector F. Masson
+#+EMAIL: h.masson1911@gmail.com
+
+
+
+* Description
+  In this file I'll describe how to form the neighborhood criterion that modifies the current solution and builds the neigborhood.
+
+
+* Add the package to the tangled file
+  #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-criterion.lisp 
+    (in-package :vrp)
+  #+END_SRC
+
+
+* Neighborhod Criterion
+   The neighborhood criterion is presented as a code in LISP. The next functions create a list of neighborhood operations from it.
+
+   Here we also compute some important features of the neighborhood criterion, such as an identifier for each of the operations.
+
+** Methods
+    In this section I'll define a method for each type of coordinate. This method will return the corresponding neighborhood operation for this coordinate.
+
+*** 'select-route
+
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-criterion.lisp 
+      (defmethod create-neigh-operation-from ((symbol (eql 'select-route))
+					      element)
+	;; ('select-route ri)
+	(declare (special operations-id))
+	(let (result)
+	  (setf result (new-r-operation)
+		;; here we save the route symbol
+		(route-symbol result) (second element)
+		;; get the operation identifier
+		(operation-id result) (incf (getf operations-id (first element) -1)))
+	  result))
+    #+END_SRC
+
+*** 'select-client
+
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-criterion.lisp 
+      (defmethod create-neigh-operation-from ((symbol (eql 'select-client))
+					      element)
+	;; ('select-client ci from rj)
+	(declare (special operations-id))
+	(let (result)
+	  (setf result (new-a-operation)
+		;; here we save the client and route symbol
+		(client-symbol result) (second element)
+		(route-symbol result) (fourth element)
+		;; get the operation identifier
+		(operation-id result) (incf (getf operations-id (first element) -1)))
+	  result))
+    #+END_SRC
+
+*** 'insert-client
+
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-criterion.lisp 
+      (defmethod create-neigh-operation-from ((symbol (eql 'insert-client))
+					      element)
+	;; ('select-client ci from rj)
+	(declare (special operations-id))
+	(let (result)
+	  (setf result (new-b-operation)
+		;; here we save the client and route symbol
+		(client-symbol result) (second element)
+		(route-symbol result) (fourth element)
+		;; get the operation identifier
+		(operation-id result) (incf (getf operations-id (first element) -1)))
+	  result))
+    #+END_SRC
+
+*** 'swap-clients
+
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-criterion.lisp 
+      (defmethod create-neigh-operation-from ((symbol (eql 'swap-clients))
+					      element)
+	;; (swap-clients ci cj)
+	(declare (special operations-id))
+	(let (result)
+	  (setf result (new-c-operation)
+		;; here we save the client1 and client2 symbols
+		(client-1-symbol result) (second element)
+		(client-2-symbol result) (third element)
+		;; get the operation identifier
+		(operation-id result) (incf (getf operations-id (first element) -1)))
+	  result))
+    #+END_SRC
+
+*** 'select-subroute
+
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-criterion.lisp 
+      (defmethod create-neigh-operation-from ((symbol (eql 'select-subroute))
+					      element)
+	;; ('select-subroute sri from rj)
+	(declare (special operations-id))
+	(let (result)
+	  (setf result (new-e-operation)
+		;; here we save the route and subroute symbols
+		(subroute-symbol result) (second element)
+		(route-symbol result) (fourth element)
+		;; get the operation identifier
+		(operation-id result) (incf (getf operations-id (first element) -1)))
+	  result))
+    #+END_SRC
+
+*** 'insert-subroute
+
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-criterion.lisp 
+      (defmethod create-neigh-operation-from ((symbol (eql 'insert-subroute))
+					      element)
+	;; (insert-subroute sri into rj)
+	(declare (special operations-id))
+	(let (result)
+	  (setf result (new-f-operation)
+		;; here we save the route and subroute symbols
+		(route-symbol result) (fourth element)
+		(subroute-symbol result) (second element)
+		;; get the operation identifier
+		(operation-id result) (incf (getf operations-id (first element) -1)))
+	  result))
+    #+END_SRC
+
+*** 'swap-subroutes
+
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-criterion.lisp 
+      (defmethod create-neigh-operation-from ((symbol (eql 'swap-subroutes))
+					      element)
+	;; (swap-subroutes sri srj)
+	(declare (special operations-id))
+	(let (result)
+	  (setf result (new-g-operation)
+		;; here we save the subroute1 and subroute2 symbols
+		(subroute-1-symbol result) (second element)
+		(subroute-2-symbol result) (third element)
+		;; get the operation identifier
+		(operation-id result) (incf (getf operations-id (first element) -1)))
+	  result))
+    #+END_SRC
+
+*** 'reverse-subroute
+
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-criterion.lisp 
+      (defmethod create-neigh-operation-from ((symbol (eql 'reverse-subroute))
+					      element)
+	;; (reverse-subroute sri)
+	(declare (special operations-id))
+	(let (result)
+	  (setf result (new-h-operation)
+		;; here we save the subroute symbol
+		(subroute-symbol result) (second element)
+		;; get the operation identifier
+		(operation-id result) (incf (getf operations-id (first element) -1)))
+	  result))
+    #+END_SRC
+
+** Wrap function to create a list of neighborhood operations instances
+    In this section I'll define a function that iterates over a list that contains that criterion definition. Each element of this list is an operation. What this function does is define an instance of a neighborhood operation from that element using the /create-neighpoperation-from/ and collect those operation instances, that represent the criterion.
+
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-criterion.lisp
+      (defun create-operation-instances-from (list)
+	(let* (operations-id
+	       route-ops
+	       other-ops
+	       (init-op (new-init-operation)))
+	  (declare (special operations-id))
+	  (loop for element in list
+	     doing
+	       (if (eql (first element) 'select-route)
+		   (push (create-neigh-operation-from (first element) element)
+			 route-ops)
+		   (push (create-neigh-operation-from (first element) element)
+			 other-ops)))
+	  (append (list init-op) (reverse route-ops) (reverse other-ops))))
+    #+END_SRC
+   
+
+
+
+
+
+

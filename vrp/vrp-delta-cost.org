@@ -1,0 +1,3041 @@
+#+TITLE: VRP solver environment
+#+AUTHOR: Fernando Rodriguez Flores
+#+AUTHOR: Eduardo Núñez de Villavicencio Sánchez
+#+DATE 2018-08-23
+#+TODO: TODO BROKEN | DONE
+
+
+* Description
+
+  In this file we'll add the functions and methods related to the computation of the delta cost of a "working copy" after one operation has been made, as well as the functions related to delta cost in the penalty.
+
+  In the beginning we'll have two generic functions:
+
+   - compute-delta-cost-after
+   - finish-delta-cost-computation
+
+  compute-delta-cost-after should be called right before each operations is simulated.  It should compute the specific modification this operation does to the solution.
+
+  finish-delta-cost-computation is suppossed to be called after all the "local" delta cost has been computed.  This generic funtion could be used to compute the delta-cost in the penalties.
+
+  The src blocks in this file will be tangled to "src/vrp-delta-cost.lisp".
+
+  I added a new generic-function:
+  - undo-delta-cost-computation
+    
+  The idea of this function is to return the state of the delta-cost-action to the state it was before the last compute-delta-cost-after.
+
+
+* add the package to the file
+  #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+  (in-package :vrp)
+  #+END_SRC
+
+  
+* generic-functions
+** initialize-action-for-delta-cost-computation
+*** description
+    This function should be called before any call to compute-delta-cost-after.  This function should make all intializations needed by the action to make any computation.
+    
+*** generic-function
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+  ;;; A generic function to compute the delta-cost after an operation 
+  (defgeneric initialize-action-for-delta-cost-computation
+      (solution problem action)
+    (:documentation "Initializes the instance to make any future operation."))
+  #+END_SRC
+   
+*** method (everything t)
+**** description
+     This method just waits for all the auxiliary methods to do their magic.
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+   ;;; A generic function to compute the delta-cost after an operation 
+   (defmethod initialize-action-for-delta-cost-computation
+       (solution problem action)
+     "Do nothing, wait for the the auxiliary methods.")
+   #+END_SRC
+   
+** compute-delta-cost-after
+*** description
+    This function should be called right before each operations is simulated.  It should compute the specific modification this operation does to the solution's cost.
+*** generic-function
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+  ;;; A generic function to compute the delta-cost after an operation 
+  (defgeneric compute-delta-cost-after
+      (operation solution problem action)
+    (:documentation "Computes the cost difference in the solution (working-copy) after the operation has been made."))
+  #+END_SRC
+   
+*** method (everything t)
+**** description
+     This method just waits for all the auxiliary methods to do their magic.
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+     ;; A generic function to compute the delta-cost after an operation 
+     (defmethod compute-delta-cost-after
+         (operation solution problem action)
+       "Do nothing, wait for the the auxiliary methods."
+       nil)
+   #+END_SRC
+   
+** undo-delta-cost-computation
+*** description
+    The idea with this function is to be able to restore an action to the state it was before the delta cost-computation.  This could help with the creation of the doneighborhood-macros*.
+
+   (The doneighborhood-macros* are macros that compute each delta-cost as soon as they simulate the operation instead of waiting after all the operations have been simulated, but to do this is necessary to undo the delta-cost computation.)
+*** generic-function
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+  ;;; A generic function to compute the delta-cost after an operation 
+  (defgeneric undo-delta-cost-computation
+      (operation solution problem action)
+    (:documentation "Undoes the effect of the delta-cost-computation on the action.  It restores the action of the state it was before the delta-cost-computation."))
+  #+END_SRC
+*** method (everything t)
+**** description
+     This method just waits for all the auxiliary methods to do their magic.
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+     ;; A generic function to compute the delta-cost after an operation 
+     (defmethod undo-delta-cost-computation
+         (operation solution problem action)
+       "Do nothing, wait for the the auxiliary methods."
+       nil)
+   #+END_SRC
+** finish-delta-cost-computation
+*** description
+    This function should be called after all the "local" delta cost have been computed.  This generic funtion could be used to compute the delta in the penalties.
+*** generic-function
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+    ;; A generic function to finish the delta-cost computation
+    ;; after all the operations have been processed 
+    (defgeneric finish-delta-cost-computation
+        (working-copy problem action)
+      (:documentation "Finishes the delta cost computation for a given solution, problem, actions, and strategy."))
+  #+END_SRC
+*** method (everything t)
+**** description
+     This method just waits for all the auxiliary methods to do their magic.
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+     ;; A generic function to compute the delta-cost after an operation 
+     (defmethod finish-delta-cost-computation
+         (working-copy problem action)
+       "Do nothing, wait for the the auxiliary methods."
+       nil)
+   #+END_SRC
+** undo-finish-delta-cost-computation
+*** description
+    This function should be called to restore the state of the action to the point it was before finishing the delta-cost computation.  
+*** generic-function
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+       ;; A generic function to undo the effect of finishing
+       ;; the delta-cost computation. It restores the
+       ;; state of the action to before the call to finish
+       ;; delta-cost computation.
+       (defgeneric undo-finish-delta-cost-computation
+           (working-copy problem action)
+         (:documentation "Undoes the effect of finish-delta-cost-computation on the action."))
+  #+END_SRC
+*** method (everything t)
+**** description
+     This method just waits for all the auxiliary methods to do their magic.
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+     ;; A generic function to compute the delta-cost after an operation 
+     (defmethod undo-finish-delta-cost-computation
+         (working-copy problem action)
+       "Do nothing, wait for the the auxiliary methods."
+       nil)
+   #+END_SRC
+
+** delta-cost
+*** description
+    This is the function that will receive a solution, an action and a list with the operations that were made to the solution and will return the delta cost after applying all those operations.
+*** generic-function
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+    ;; A generic function to finish the delta-cost computation
+    ;; after all the operations have been processed 
+    (defgeneric delta-cost
+        (operations working-copy problem action)
+      (:documentation "Returns the delta-cost of the neighbor defined by the set of operations passed as the first argument"))
+  #+END_SRC
+   
+
+* initialize-action-for-delta-cost-computation
+** description
+   In this section we add the initializations for the delta-cost computation.
+** method :after (t t delta-distance)
+*** description
+    The initialization for the delta distance is just to set the slot to 0.
+*** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+    ;;; A generic function to compute the delta-cost after an operation 
+    (defmethod initialize-action-for-delta-cost-computation :after
+        (solution problem (action delta-distance-action))
+      (setf (delta-distance action) 0))
+  #+END_SRC
+*** tests
+    #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+    (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)   ;0
+                                        (5 0 6 7 2 4)   ;1
+                                        (1 8 0 3 9 1)   ;2
+                                        (4 5 1 0 5 7)   ;3
+                                        (4 5 1 5 0 6)   ;4
+                                        (1 5 7 6 9 0))  ;5
+                                        ;0 1 2 3 4 5 
+                           :demands '(20 10 15 40 30)
+                           :capacity 40)
+      (with-basic-cvrp-solution (s1 ((1 2) (3) (4 5)) p1)
+        (let* ((wc1 (basic-working-copy s1))
+               (action (delta-distance-action :delta-distance 400)))
+
+          (bformat t "Testing initialize-action for delta-distance")
+          (prepare-solution-for-neighborhood-exploration wc1)
+      
+          ;; (format t "Before initialization:~% ~a~%" action)
+          (check-= 400 (delta-distance action))
+          (initialize-action-for-delta-cost-computation wc1 p1 action)
+          ;; (format t "After initialization:~% ~a~%" action)
+          (check-= 0 (delta-distance action)))))
+    #+END_SRC
+** method :after (basic-working-copy t delta-basic-capacity)
+*** description
+    To initialize a delta-basic-capacity-action we need to reset the delta-routes-feasibility array to the capacity of the problem in all its elements.  We'll also consider as many elements as there are clients in the problem because we could get that much number of routes.  We also set the feasibility of each route to the capacity of the problem, because when we create a new route it will always be empty.
+*** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+    ;;; A generic function to compute the delta-cost after an operation 
+    (defmethod initialize-action-for-delta-cost-computation :after
+        ((wc basic-working-copy)
+         problem
+         (action delta-basic-capacity-action))
+      (let* ((number-of-clients (length (clients problem)))
+             (routes (routes (solution wc))))
+          (setf (delta-routes-feasibility action)
+                     (make-array (1+ (+ number-of-clients
+                                        (length routes)))
+                                 :initial-element 0))))
+  #+END_SRC
+*** tests
+    #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+    (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)   ;0
+                                        (5 0 6 7 2 4)   ;1
+                                        (1 8 0 3 9 1)   ;2
+                                        (4 5 1 0 5 7)   ;3
+                                        (4 5 1 5 0 6)   ;4
+                                        (1 5 7 6 9 0))  ;5
+                                        ;0 1 2 3 4 5 
+                           :demands '(20 10 15 40 30)
+                           :capacity 40)
+      (with-basic-cvrp-solution (s1 ((1 2) (3) (4 5)) p1)
+        (let* ((wc1 (basic-working-copy s1))
+               (action (delta-basic-capacity-action
+                        2 :routes-feasibility #(0 1 2))))
+
+          (bformat t "Testing initialize-action for delta-distance")
+          (prepare-solution-for-neighborhood-exploration wc1)
+
+          ;; (format t "Before initialization:~% ~a~%" action)
+          (check-obj= #(0 1 2) (delta-routes-feasibility action))
+          (initialize-action-for-delta-cost-computation wc1 p1 action)
+          ;; (format t "After initialization:~% ~a~%" action)
+          (check-obj= #(0 0 0 0 0 0 0 0 0) (delta-routes-feasibility action)))))
+    #+END_SRC
+** method :after (basic-working-copy t basic-capacity-penalty-action)
+*** description
+    To initialize a delta-basic-capacity-action we need to set the slot original-routes-feasibility slot to the correct value.
+*** make-original-routes-feasibility-array
+**** description
+     This function returns a routes-feasibility array. A routes-feasibility array is an array where in the position `pos' we have the basic-capacity of the route with id `pos'. The basic-capacity of a route is the difference between the capacity of the vehicle and the demand of the route.
+
+     It is a generic function to be able to modify it according to the type of problem and/or solution
+**** generic-function
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+    (defgeneric make-routes-feasibility-array (wc problem)
+      (:documentation "Returns a routes-feasibility array. A routes-feasibility array is an array where in the position `pos' we have the basic-capacity of the route with id `pos'. The basic-capacity of a route is the difference between the capacity of the vehicle and the demand of the route.  We'll have as many possible routes as there are clients in the problem, because (potentially) we could create that number of new-routes through the operation add-route.
+
+     Syntax:
+        (make-routes-feasibility-array wc problem)
+         wc      should be a working-copy.
+         problem should be a cvrp problem."))
+  #+END_SRC
+**** method (basic-solution capacity-problem)
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+     (defmethod make-routes-feasibility-array
+         ((wc basic-working-copy)
+          (problem capacity-problem))
+       "Returns a routes-feasibility array. A routes-feasibility array is an array where in the position `pos' we have the basic-capacity of the route with id `pos'. The basic-capacity of a route is the difference between the capacity of the vehicle and the demand of the route.  We'll have as many possible routes as there are clients in the problem, because (potentially) we could create that number of new-routes through the operation add-route.
+
+      Syntax:
+         (make-routes-feasibility-array wc problem)
+          wc      should be a working-copy.
+          problem should be a problem with capacity."
+        (let* ((solution (solution wc))
+               (routes (routes solution))
+               (number-of-clients (length (clients problem)))
+               (capacity (capacity problem))
+
+               ;; initialize the array with the appropriate size
+               (result (make-array
+                        (list (1+ (+ number-of-clients
+                                     (length routes))))
+                        :initial-element capacity)))
+
+          ;; let's update the values of each slot
+          (loop for r in routes
+                for r-id = (id r) 
+                for availability = capacity
+                doing (loop for c in (clients r)
+                            doing (decf availability (demand c)))
+                doing (setf (aref result r-id)
+                            availability))
+          ;; let's return result
+          result))
+   #+END_SRC
+     
+***** tests
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                           (5 0 6 7 2 4)  ;1
+                                           (1 8 0 3 9 1)  ;2
+                                           (4 5 1 0 5 7)  ;3
+                                           (4 5 1 5 0 6)  ;4
+                                           (1 5 7 6 9 0)) ;5
+                                           ;0 1 2 3 4 5
+                                         ; =============
+                                         ; 1  2  3  4  5
+                               :demands '(20 10 15 40 30)
+                               :capacity 30)
+        (bformat t "Testing make-routes-feasibility-array")
+
+         (with-basic-cvrp-solution (s1 ((1 3) (4) (5 2)) p1)
+           (let* ((wc1 (basic-working-copy s1)))
+
+             (prepare-solution-for-neighborhood-exploration wc1)
+
+             ;; (format t "routes-feasibility array: ~a~%"
+             ;;         (make-routes-feasibility-array wc1 p1))
+
+             (check-obj= #(30 -5 -10 -10 30 30 30 30 30)
+                         (make-routes-feasibility-array wc1 p1))
+
+             ))
+         (with-basic-cvrp-solution (s1 ((1 3) (4) (5) (2)) p1)
+           (let* ((wc1 (basic-working-copy s1)))
+
+
+             (prepare-solution-for-neighborhood-exploration wc1)
+
+             ;; (format t "routes-feasibility array: ~a~%"
+             ;;         (make-routes-feasibility-array wc1 p1))
+             (check-obj= #(30 -5 -10 0 20 30 30 30 30 30)
+                         (make-routes-feasibility-array wc1 p1)))))
+      #+END_SRC
+**** method (basic-solution finite-fleet-problem)
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+     (defmethod make-routes-feasibility-array
+         ((wc basic-working-copy)
+          (problem finite-fleet-problem))
+       "Returns a routes-feasibility array. A routes-feasibility array is an array where in the position `pos' we have the basic-capacity of the route with id `pos'. The basic-capacity of a route is the difference between the capacity of the vehicle and the demand of the route.
+
+     In this case, we can only have as many routes as there are vehicles in the fleet.
+
+      Syntax:
+         (make-routes-feasibility-array wc problem)
+          wc      should be a working-copy.
+          problem should be a problem with a fleet."
+        (let* ((solution (solution wc))
+               (routes (routes solution))
+               (number-of-vehicles (length (fleet problem)))
+
+               ;; initialize the array with the appropriate size
+               ;; we use 1+ because the routes-id are 1-based
+               ;; and the array is 0-based.
+               (result (make-array
+                        (list (1+ number-of-vehicles)))))
+
+          ;; let's update the values of each slot
+          (loop for r in routes
+                for r-id = (id r) 
+                for availability = (capacity (vehicle r))
+                doing (loop for c in (clients r)
+                            doing (decf availability (demand c)))
+                doing (setf (aref result r-id)
+                            availability))
+          ;; let's return result
+          result))
+   #+END_SRC
+     
+***** tests
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (with-finite-fleet-cvrp-problem (p1 :distances `((0 2 3 4 5 6) ;0
+                                                       (5 0 6 7 2 4) ;1
+                                                       (1 8 0 3 9 1) ;2
+                                                       (4 5 1 0 5 7) ;3
+                                                       (4 5 1 5 0 6) ;4
+                                                       (1 5 7 6 9 0)) ;5
+                                              ;0 1 2 3 4 5
+                                              ; =============
+                                              ; 1  2  3  4  5
+                                          :demands '(20 10 15 40 30)
+                                          :capacities `(30 20 40 50))
+        (bformat t "Testing make-routes-feasibility-array")
+
+        (with-finite-fleet-cvrp-solution (s1 ((1 1 3) (2 4) (3 5) (4 2)) p1)
+          (let* ((wc1 (make-working-copy s1)))
+
+             (prepare-solution-for-neighborhood-exploration wc1)
+
+             (format t "routes-feasibility array: ~a~%"
+                     (make-routes-feasibility-array wc1 p1))
+
+             ;; (check-obj= #(30 -5 -10 -10 30 30 30 30 30)
+             ;;             (make-routes-feasibility-array wc1 p1))
+
+             ))
+        (with-finite-fleet-cvrp-solution (s1 ((3 1 3) (1 ) (2 5) (4 2 4)) p1)
+          (let* ((wc1 (make-working-copy s1)))
+
+             (prepare-solution-for-neighborhood-exploration wc1)
+
+             (format t "routes-feasibility array: ~a~%"
+                     (make-routes-feasibility-array wc1 p1))
+
+             (pp-solution s1 t) (terpri)
+             ;; (check-obj= #(30 -5 -10 0 20 30 30 30 30 30)
+             ;;             (make-routes-feasibility-array wc1 p1))
+             ))
+         )
+      #+END_SRC
+*** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+    ;;; A generic function to compute the delta-cost after an operation 
+    (defmethod initialize-action-for-delta-cost-computation :after
+        ((wc basic-working-copy)
+         problem
+         (action delta-basic-capacity-penalty-action))
+
+      ;; sets the total-penalty to 0
+      (setf (total-penalty action) 0)
+      ;; initialize the original routes-feasibility array  
+      (setf (original-routes-feasibility action)
+            (make-routes-feasibility-array wc problem)))
+  #+END_SRC
+*** tests
+    #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+    (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)   ;0
+                                        (5 0 6 7 2 4)   ;1
+                                        (1 8 0 3 9 1)   ;2
+                                        (4 5 1 0 5 7)   ;3
+                                        (4 5 1 5 0 6)   ;4
+                                        (1 5 7 6 9 0))  ;5
+                                        ;0 1 2 3 4 5 
+                           :demands '(20 10 15 40 30)
+                           :capacity 40)
+      (with-basic-cvrp-solution (s1 ((1 2) (3) (4 5)) p1)
+        (let* ((wc1 (basic-working-copy s1))
+               (action (delta-basic-capacity-penalty-action
+                        :total-penalty 400
+                        :penalty-factor 300
+                        :delta-routes-feasibility #(0 1 2)
+                        :original-routes-feasibility nil)))
+
+          (bformat t "Testing initialize-action for delta-capacity-action")
+          (prepare-solution-for-neighborhood-exploration wc1)
+
+          ;; (format t "Before initialization:~% ~a~%" action)
+          (check-obj= #(0 1 2) (delta-routes-feasibility action))
+          (check-nil (original-routes-feasibility action))
+          (check-= 300 (penalty-factor action))
+          (check-= 400 (total-penalty action))
+
+          ;; let's initialize
+          (initialize-action-for-delta-cost-computation wc1 p1 action)
+          ;; (format t "After initialization:~% ~a~%" action)
+          (check-obj= #(0 0 0 0 0 0 0 0 0) (delta-routes-feasibility action))
+          (check-obj= #(40 10 25 -30 40 40 40 40 40)
+                      (original-routes-feasibility action))
+          (check-= 300 (penalty-factor action))
+          (check-= 0 (total-penalty action))
+          )))
+    #+END_SRC
+** method :after (basic-working-copy t basic-capacity-penalty-action*)
+*** description
+    This code is again a code duplication.  We need to find a way to remove it.  So far it is here because I want to test the undo-delta-cost-computation.
+    
+    +To initialize a delta-basic-capacity-action we need to set the slot original-routes-feasibility slot to the correct value.+
+*** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+    ;;; A generic function to compute the delta-cost after an operation 
+    (defmethod initialize-action-for-delta-cost-computation :after
+        ((wc basic-working-copy)
+         problem
+         (action delta-basic-capacity-penalty-action*))
+
+      ;; sets the total-penalty to 0
+      (setf (total-penalty action) 0)
+      ;; initialize the original routes-feasibility array  
+      (setf (original-routes-feasibility action)
+            (make-routes-feasibility-array wc problem)))
+  #+END_SRC
+*** tests
+    #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+    (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)   ;0
+                                        (5 0 6 7 2 4)   ;1
+                                        (1 8 0 3 9 1)   ;2
+                                        (4 5 1 0 5 7)   ;3
+                                        (4 5 1 5 0 6)   ;4
+                                        (1 5 7 6 9 0))  ;5
+                                        ;0 1 2 3 4 5 
+                           :demands '(20 10 15 40 30)
+                           :capacity 40)
+      (with-basic-cvrp-solution (s1 ((1 2) (3) (4 5)) p1)
+        (let* ((wc1 (basic-working-copy s1))
+               (action (delta-basic-capacity-penalty-action
+                        :total-penalty 400
+                        :penalty-factor 300
+                        :delta-routes-feasibility #(0 1 2)
+                        :original-routes-feasibility nil)))
+
+          (bformat t "Testing initialize-action for delta-capacity-action")
+          (prepare-solution-for-neighborhood-exploration wc1)
+
+          ;; (format t "Before initialization:~% ~a~%" action)
+          (check-obj= #(0 1 2) (delta-routes-feasibility action))
+          (check-nil (original-routes-feasibility action))
+          (check-= 300 (penalty-factor action))
+          (check-= 400 (total-penalty action))
+
+          ;; let's initialize
+          (initialize-action-for-delta-cost-computation wc1 p1 action)
+          ;; (format t "After initialization:~% ~a~%" action)
+          (check-obj= #(0 0 0 0 0 0 0 0 0) (delta-routes-feasibility action))
+          (check-obj= #(40 10 25 -30 40 40 40 40 40)
+                      (original-routes-feasibility action))
+          (check-= 300 (penalty-factor action))
+          (check-= 0 (total-penalty action))
+          )))
+    #+END_SRC
+
+
+* compute-delta-cost-after
+** methods for the classical actions
+*** compute-delta-distance
+**** description
+     In this section we add the methods to compute the difference in the distance travelled by the vehicles in the solution after the operations have been simulated.
+   
+**** method :after (select-op basic-wc distance-problem distance-action)
+***** description
+      In this section I'm going to implement how to compute the delta cost after a select operation in a distance problem.
+
+      The idea now is to describe how each operation affects the cost of the current solution.
+
+      The idea is the following:
+
+      If we have the following solution:
+
+      #+BEGIN_EXAMPLE
+      S1:
+        R1: (1, 2, 3)
+        R2: (4, 5)
+        R3: (6)
+      #+END_EXAMPLE
+
+      and we select c2 from (1,2) we need to remove the cost of (1,2) and (2,3), and add the cost of (1,3).
+
+      This generalizes as:
+
+      Substract the distance from the selected-client, to its previous client and to the next-client and add the distance from the previous-client to the next-client.
+
+      If the selected-client is the first in the route then the previous-client is the depot, and if it is the last one, then the next client is again the depot.
+***** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+      (defmethod compute-delta-cost-after :after
+          ((operation operation-select-client)
+           (working-copy basic-working-copy)
+           (problem distance-problem)
+           (action delta-distance-action))
+  
+        "If we have a selection we need to substract the distance from the selected-client to the next client and from the previous-client to the next one. We also need to add the distance from the previous-client to the next-client."
+
+        (let* ((current-pos ;; the position of the current client
+                (pos operation))
+               (current-route ;; the route (id) of the current client
+                (route operation))
+               (current-coord ;; the coordinates of the current client
+                (list current-route current-pos))
+               (selected-client ;; the selected client
+                (client-at current-coord working-copy))
+               (previous-coord ;; the coordinates of the previous client
+                (list current-route (1- current-pos)))
+               (next-coord ;; the coordinates of the next client
+                (list current-route (1+ current-pos)))
+               (previous-client ;; the previous-client
+                (client-at previous-coord working-copy))
+               (next-client ;; the next client
+                (client-at next-coord working-copy)))
+
+          ;; remove the distance from previous to current
+          (decf (delta-distance action)
+                (get-distance-from-to previous-client
+                                      selected-client
+                                      problem))
+          ;; substract the distance from current client to the next one
+          (decf (delta-distance action)
+                (get-distance-from-to selected-client
+                                      next-client
+                                      problem))
+          ;; now add the distance from previous to next
+          (incf (delta-distance action)
+                (get-distance-from-to previous-client
+                                      next-client
+                                      problem))))
+      #+END_SRC
+***** tests
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (with-cvrp-problem (p1 :distances `((0 2 3 4 5)
+                                          (5 0 6 7 2 )
+                                          (1 8 0 3 9)
+                                          (4 5 1 0 5)
+                                          (4 5 1 5 0))
+                             :demands '(20 10 15 40)
+                             :capacity 40)
+        (with-basic-cvrp-solution (s1 ((1 2 3) (4)) p1)
+
+          (format t "Solution: ~a~%" s1)
+          (let* ((wc1 (basic-working-copy s1))
+                 (c1 0) (c2 1) (c3 2)
+                 (op1 (op-select-client 1 2 c1))
+                 (op2 (op-select-client 1 1 c2))
+                 (op3 (op-select-client 1 3 c3))
+                 ac1 ac2 ac3 ad
+                 (action (delta-distance-action ))
+                 )
+
+            (prepare-solution-for-neighborhood-exploration wc1)
+
+            (setf ac1 (client-at `(1 1) wc1))
+            (setf ac2 (client-at `(1 2) wc1))
+            (setf ac3 (client-at `(1 3) wc1))
+            (setf ad  (client-at `(1 4) wc1))
+
+            (bformat t "Testing delta-distance after selection")
+      
+            (pp-solution wc1 t)
+            ;;{{{ selecting from the middle of the route
+            (format t "~%Selecting from the middle of the route~%")
+            ;; (format t "Distance from ~a to ~a: ~a~%" ac1 ac2
+            ;;         (get-distance-from-to ac1 ac2 p1))
+            ;; (format t "Distance from ~a to ~a: ~a~%" ac2 ac3
+            ;;         (get-distance-from-to ac2 ac3 p1))
+            ;; (format t "Distance from ~a to ~a: ~a~%" ac1 ac3
+            ;;         (get-distance-from-to ac1 ac3 p1))
+            (compute-delta-cost-after op1 wc1 p1 action)
+            ;; (format t "delta-cost after ~a: ~a~%"
+            ;;         op1 (delta-distance action))
+      
+            (check-= -2 (delta-distance action))
+            ;;}}}
+
+            ;;{{{ selecting from the beginning of the route
+            (setf (delta-distance action) 0)
+            (format t "~%Selecting from the beginning of the route~%")
+            ;; (format t "Distance from ~a to ~a: ~a~%" ad ac1
+            ;;         (get-distance-from-to ad ac1 p1))
+            ;; (format t "Distance from ~a to ~a: ~a~%" ac1 ac2
+            ;;         (get-distance-from-to ac1 ac2 p1))
+            ;; (format t "Distance from ~a to ~a: ~a~%" ad ac2
+            ;;         (get-distance-from-to ad ac2 p1))
+
+            (compute-delta-cost-after op2 wc1 p1 action)
+            ;; (format t "delta-cost after ~a: ~a~%"
+            ;;         op2
+            ;;         (delta-distance action))
+            (check-= -5 (delta-distance action))
+            ;;}}}
+
+            ;;{{{ selecting from the end of the route
+            (setf (delta-distance action) 0)
+            (format t "~%Selecting from the end of the route~%")
+            ;; (format t "Distance from ~a to ~a: ~a~%" ac3 ad
+            ;;         (get-distance-from-to ac3 ad p1))
+            ;; (format t "Distance from ~a to ~a: ~a~%" ac2 ac3
+            ;;         (get-distance-from-to ac2 ac3 p1))
+            ;; (format t "Distance from ~a to ~a: ~a~%" ac2 ad 
+            ;;         (get-distance-from-to ac2 ad p1))
+            (compute-delta-cost-after op3 wc1 p1 action)
+            ;; (format t "delta-cost after ~a: ~a~%"
+            ;;         op3
+            ;;         (delta-distance action))
+            (check-= -6 (delta-distance action))
+            ;;}}}
+            )
+          ))
+      #+END_SRC
+**** method :after (insert-op basic-wc distance-problem distance-action)
+***** description
+        In this section I'm going to implement how to compute the delta cost after an insertion in a distance problem.
+
+        The idea now is to describe how the insertion affects the cost of the current solution.
+
+        The idea is the following:
+
+        If we have the following solution:
+
+        #+BEGIN_EXAMPLE
+        S1:
+          R1: (1, 2, 3)
+          R2: (4, 5)
+          R3: (6)
+        #+END_EXAMPLE
+
+        And we insert c7 into postion (1,2) we need to remove the cost of (1,2) and add the cost of (1,7) and (7,2).
+
+        This generalizes as:
+
+        Define the current-position as the place where the insertion should be made and the current client as the client that will be inserted.  The previous client is the client in the previous coord, and the next client is the client currently at the current-position.
+
+        With these definitions what we need to do is to substract the distance from the previous client to the next client,, and add the distance from the previous client to the current-client and from the current-client to the next-client.
+
+        If the selected-client is the first in the route then the previous-client is the depot, and if it is the last one, then the next client is again the depot.
+***** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+      (defmethod compute-delta-cost-after :after
+          ((operation operation-insert-client)
+           (working-copy basic-working-copy)
+           (problem distance-problem)
+           (action delta-distance-action))
+        "If we have an insertion we need to substract the distance from the previous client to the next client, and add the distance from the previous to the current and from the current to the next."
+
+
+        (let* ((current-pos ;; the position where the insertion will take place
+                (pos operation))
+               (current-route ;; the route (id) of the insertion
+                (route operation))
+               (current-coord ;; the coordinates where the insertion
+                ;; should occur.
+                (list current-route current-pos))
+               (current-client-op (operand operation))
+               (current-client ;; the client that will be inserted
+                (client-selected-at-operation current-client-op
+                                              working-copy))
+               (previous-coord ;; the coordinates of the previous client
+                (list current-route (1- current-pos)))
+               (next-coord ;; the coordinates of the next client
+                current-coord)
+               (previous-client ;; the previous-client
+                (client-at previous-coord working-copy))
+               (next-client ;; the next client
+                ;; in this case it is the client at the pos
+                ;; of the insertion.
+                (client-at next-coord working-copy)))
+
+
+
+          ;; remove the distance from previous to next
+          (decf (delta-distance action)
+                (get-distance-from-to previous-client
+                                      next-client
+                                      problem))
+          ;; substract the distance from inserted client to the next one
+          (incf (delta-distance action)
+                (get-distance-from-to current-client
+                                      next-client
+                                      problem))
+          ;; now add the distance from previous client to the inserted
+          (incf (delta-distance action)
+                (get-distance-from-to previous-client
+                                      current-client
+                                      problem))))
+      #+END_SRC
+***** tests
+****** from insert-client in the suite
+       #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+       (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                           (5 0 6 7 2 4)  ;1
+                                           (1 8 0 3 9 1)  ;2
+                                           (4 5 1 0 5 7)  ;3
+                                           (4 5 1 5 0 6)  ;4
+                                           (1 5 7 6 9 0)) ;5
+                                           ;0 1 2 3 4 5 
+                              :demands '(20 10 15 40 30)
+                              :capacity 40)
+         (with-basic-cvrp-solution (s1 ((1 2 3) (4 5)) p1)
+           (let* ((wc1 (basic-working-copy s1))
+                  (c1 0)
+                  (op1 (op-select-client 1 2 c1))
+                  (op2 (op-insert-client 1 2 c1))
+                  (op3 (op-insert-client 2 2 c1))
+                  (op4 (op-insert-client 2 1 c1))
+                  op5
+                  ac2 ac4 ac5 ad
+                  (action (delta-distance-action))
+                  (delta-after-selection 0)
+                  )
+
+
+             (prepare-solution-for-neighborhood-exploration wc1)
+
+
+             (bformat t "Testing delta-distance after insertion")
+
+             ;;{{{ Selecting from the middle of the route
+             (pp-solution wc1 t) (terpri)
+             (format t "Selecting from the middle of the route~%")
+             ;; (format t "Distance from 1 to 2: ~a~%"
+             ;;         (get-distance-from-to (client-at `(1 1) wc1)
+             ;;                           (client-at `(1 2) wc1)
+             ;;                           p1))
+             ;; (format t "Distance from 2 to 3: ~a~%"
+             ;;         (get-distance-from-to (client-at `(1 2) wc1)
+             ;;                           (client-at `(1 3) wc1)
+             ;;                           p1))
+             ;; (format t "Distance from 2 to 3: ~a~%"
+             ;;         (get-distance-from-to (client-at `(1 1) wc1)
+             ;;                           (client-at `(1 3) wc1)
+             ;;                           p1))
+
+             (compute-delta-cost-after op1 wc1 p1 action)
+             (format t "delta-cost after ~a: ~a~%"
+                     op1 (delta-distance action))
+
+             (setf delta-after-selection (delta-distance action))
+
+             ;; let's simulate the operation
+             (simulate-neighborhood-operation op1 wc1)
+             (pp-solution wc1 t) (terpri)
+             (setf ac2 (client-selected-at-operation c1 wc1)
+                   ac4 (client-at `(2 1) wc1)
+                   ac5 (client-at `(2 2) wc1)
+                   ad  (client-at `(2 0) wc1))
+             ;;}}}
+
+
+             ;;{{{ insertion at the same position
+             (format t "Let's insert ~a in the middle of r1:~%"
+                     ac2)
+
+             ;; (format t "Distance from ~a to ~a: ~a~%"
+             ;;         ac4 ac5
+             ;;         (get-distance-from-to ac4 ac5 p1))
+             ;; (format t "Distance from ~a to ~a: ~a~%"
+             ;;         ac4 ac2
+             ;;         (get-distance-from-to ac4 ac2 p1))
+             ;; (format t "Distance from ~a to ~a: ~a~%"
+             ;;         ac2 ac5
+             ;;         (get-distance-from-to ac2 ac5 p1))
+
+
+             (compute-delta-cost-after op2 wc1 p1 action)
+             (format t "delta-cost after ~a: ~a~2%"
+                     op3 (delta-distance action))
+             (check-= 0 (delta-distance action))
+             ;;}}}
+
+
+             ;;{{{ insertion in the middle of the route
+             (format t "Let's insert ~a in the middle of r2:~%"
+                     ac2)
+
+             (format t "Distance from ~a to ~a: ~a~%"
+                     ac4 ac5
+                     (get-distance-from-to ac4 ac5 p1))
+             (format t "Distance from ~a to ~a: ~a~%"
+                     ac4 ac2
+                     (get-distance-from-to ac4 ac2 p1))
+             (format t "Distance from ~a to ~a: ~a~%"
+                     ac2 ac5
+                     (get-distance-from-to ac2 ac5 p1))
+
+
+             (compute-delta-cost-after op3 wc1 p1 action)
+             (format t "delta-cost after ~a: ~a~%"
+                     op3 (delta-distance action))
+             (check-= -4 (delta-distance action))
+             ;;}}}
+
+             ;;{{{ "Inserting at the beginning of the route~%"
+             (format t "~%Inserting at the beginning of the route r2~%")
+             (setf (delta-distance action) delta-after-selection)
+             ;; (format t "Distance from ~a to ~a: ~a~%" ad ac4
+             ;;         (get-distance-from-to ad ac4 p1))
+             ;; (format t "Distance from ~a to ~a: ~a~%" ad ac2
+             ;;         (get-distance-from-to ad ac2 p1))
+             ;; (format t "Distance from ~a to ~a: ~a~%" ac2 ac4
+             ;;         (get-distance-from-to ac2 ac4 p1))
+             (compute-delta-cost-after op4 wc1 p1 action)
+             (format t "delta-cost after ~a: ~a~%"
+                     op4 (delta-distance action))
+             (check-= 5 (delta-distance action))
+             ;;}}}
+
+             ;;{{{ "Inserting at the end of the route r2~%"
+             (setf op5 (op-insert-client 2 3 c1))
+             (format t "~%Inserting at the end of the route r2~%")
+             (setf (delta-distance action) delta-after-selection)
+             (format t "Distance from ~a to ~a: ~a~%" ac5 ad
+                     (get-distance-from-to ac5 ad p1))
+             (format t "Distance from ~a to ~a: ~a~%" ac5 ac2
+                     (get-distance-from-to ac5 ac2 p1))
+             (format t "Distance from ~a to ~a: ~a~%" ac2 ad
+                     (get-distance-from-to ac2 ad p1))
+             (compute-delta-cost-after op5 wc1 p1 action)
+             (format t "delta-cost after ~a: ~a~%"
+                     op5 (delta-distance action))
+             (check-= 5 (delta-distance action))
+             ;;}}}
+
+             )))
+       #+END_SRC
+**** tests for delta-distance-action*
+***** description
+      As delta-distance-action* inherits from delta-distance-action, the methods compute-delta-cost-after should work without any modification.
+***** tests for selections
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (with-cvrp-problem (p1 :distances `((0 2 3 4 5)
+                                          (5 0 6 7 2 )
+                                          (1 8 0 3 9)
+                                          (4 5 1 0 5)
+                                          (4 5 1 5 0))
+                             :demands '(20 10 15 40)
+                             :capacity 40)
+        (with-basic-cvrp-solution (s1 ((1 2 3) (4)) p1)
+
+          (format t "Solution: ~a~%" s1)
+          (let* ((wc1 (basic-working-copy s1))
+                 (c1 0) (c2 1) (c3 2)
+                 (op1 (op-select-client 1 2 c1))
+                 (op2 (op-select-client 1 1 c2))
+                 (op3 (op-select-client 1 3 c3))
+                 ac1 ac2 ac3 ad
+                 (action (delta-distance-action ))
+                 (action* (delta-distance-action*))
+                 )
+
+            (prepare-solution-for-neighborhood-exploration wc1)
+
+            (setf ac1 (client-at `(1 1) wc1))
+            (setf ac2 (client-at `(1 2) wc1))
+            (setf ac3 (client-at `(1 3) wc1))
+            (setf ad  (client-at `(1 4) wc1))
+
+            (bformat t "Testing delta-distance after selection")
+
+            (pp-solution wc1 t)
+            ;;{{{ selecting from the middle of the route
+            (format t "~%Selecting from the middle of the route~%")
+            ;; (format t "Distance from ~a to ~a: ~a~%" ac1 ac2
+            ;;         (get-distance-from-to ac1 ac2 p1))
+            ;; (format t "Distance from ~a to ~a: ~a~%" ac2 ac3
+            ;;         (get-distance-from-to ac2 ac3 p1))
+            ;; (format t "Distance from ~a to ~a: ~a~%" ac1 ac3
+            ;;         (get-distance-from-to ac1 ac3 p1))
+            (compute-delta-cost-after op1 wc1 p1 action)
+            (compute-delta-cost-after op1 wc1 p1 action*)
+            ;; (format t "delta-cost after ~a: ~a~%"
+            ;;         op1 (delta-distance action))
+
+            (check-= -2 (delta-distance action))
+            (check-= -2 (delta-distance action*))
+            ;;}}}
+
+            ;;{{{ selecting from the beginning of the route
+            (setf (delta-distance action) 0)
+            (setf (delta-distance action*) 0)
+            (format t "~%Selecting from the beginning of the route~%")
+            ;; (format t "Distance from ~a to ~a: ~a~%" ad ac1
+            ;;         (get-distance-from-to ad ac1 p1))
+            ;; (format t "Distance from ~a to ~a: ~a~%" ac1 ac2
+            ;;         (get-distance-from-to ac1 ac2 p1))
+            ;; (format t "Distance from ~a to ~a: ~a~%" ad ac2
+            ;;         (get-distance-from-to ad ac2 p1))
+
+            (compute-delta-cost-after op2 wc1 p1 action)
+            (compute-delta-cost-after op2 wc1 p1 action*)
+            ;; (format t "delta-cost after ~a: ~a~%"
+            ;;         op2
+            ;;         (delta-distance action))
+            (check-= -5 (delta-distance action))
+            (check-= -5 (delta-distance action*))
+            (check-= (delta-distance action) (delta-distance action*))      
+            ;;}}}
+
+            ;;{{{ selecting from the end of the route
+            (setf (delta-distance action) 0)
+            (setf (delta-distance action*) 0)
+            (format t "~%Selecting from the end of the route~%")
+            ;; (format t "Distance from ~a to ~a: ~a~%" ac3 ad
+            ;;         (get-distance-from-to ac3 ad p1))
+            ;; (format t "Distance from ~a to ~a: ~a~%" ac2 ac3
+            ;;         (get-distance-from-to ac2 ac3 p1))
+            ;; (format t "Distance from ~a to ~a: ~a~%" ac2 ad 
+            ;;         (get-distance-from-to ac2 ad p1))
+            (compute-delta-cost-after op3 wc1 p1 action)
+            (compute-delta-cost-after op3 wc1 p1 action*)
+            ;; (format t "delta-cost after ~a: ~a~%"
+            ;;         op3
+            ;;         (delta-distance action))
+            (check-= -6 (delta-distance action))
+            (check-= (delta-distance action) (delta-distance action*))
+
+            ;;}}}
+            )
+          ))
+      #+END_SRC
+
+***** tests for insertions
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                          (5 0 6 7 2 4)  ;1
+                                          (1 8 0 3 9 1)  ;2
+                                          (4 5 1 0 5 7)  ;3
+                                          (4 5 1 5 0 6)  ;4
+                                          (1 5 7 6 9 0)) ;5
+                                          ;0 1 2 3 4 5 
+                             :demands '(20 10 15 40 30)
+                             :capacity 40)
+        (with-basic-cvrp-solution (s1 ((1 2 3) (4 5)) p1)
+          (let* ((wc1 (basic-working-copy s1))
+                 (c1 0)
+                 (op1 (op-select-client 1 2 c1))
+                 (op2 (op-insert-client 1 2 c1))
+                 (op3 (op-insert-client 2 2 c1))
+                 (op4 (op-insert-client 2 1 c1))
+                 op5
+                 ac2 ac4 ac5 ad
+                 (action (delta-distance-action))
+                 (action* (delta-distance-action*))
+                 (delta-after-selection 0)
+                 )
+
+
+            (prepare-solution-for-neighborhood-exploration wc1)
+
+
+            (bformat t "Testing delta-distance after insertion")
+
+            ;;{{{ Selecting from the middle of the route
+            (pp-solution wc1 t) (terpri)
+            (format t "Selecting from the middle of the route~%")
+            ;; (format t "Distance from 1 to 2: ~a~%"
+            ;;         (get-distance-from-to (client-at `(1 1) wc1)
+            ;;                           (client-at `(1 2) wc1)
+            ;;                           p1))
+            ;; (format t "Distance from 2 to 3: ~a~%"
+            ;;         (get-distance-from-to (client-at `(1 2) wc1)
+            ;;                           (client-at `(1 3) wc1)
+            ;;                           p1))
+            ;; (format t "Distance from 2 to 3: ~a~%"
+            ;;         (get-distance-from-to (client-at `(1 1) wc1)
+            ;;                           (client-at `(1 3) wc1)
+            ;;                           p1))
+
+            (compute-delta-cost-after op1 wc1 p1 action)
+            (compute-delta-cost-after op1 wc1 p1 action*)
+            (check-= (delta-distance action*) (delta-distance action))
+            ;; (format t "delta-cost after ~a: ~a~%"
+            ;;         op1 (delta-distance action))
+            ;; (format t "delta-cost* after ~a: ~a~%"
+            ;;         op1 (delta-distance action*))
+
+            (setf delta-after-selection (delta-distance action))
+
+            ;; let's simulate the operation
+            (simulate-neighborhood-operation op1 wc1)
+            (pp-solution wc1 t) (terpri)
+            (setf ac2 (client-selected-at-operation c1 wc1)
+                  ac4 (client-at `(2 1) wc1)
+                  ac5 (client-at `(2 2) wc1)
+                  ad  (client-at `(2 0) wc1))
+            ;;}}}
+
+
+            ;;{{{ insertion at the same position
+            (format t "Let's insert ~a in the middle of r1:~%"
+                    ac2)
+
+            ;; (format t "Distance from ~a to ~a: ~a~%"
+            ;;         ac4 ac5
+            ;;         (get-distance-from-to ac4 ac5 p1))
+            ;; (format t "Distance from ~a to ~a: ~a~%"
+            ;;         ac4 ac2
+            ;;         (get-distance-from-to ac4 ac2 p1))
+            ;; (format t "Distance from ~a to ~a: ~a~%"
+            ;;         ac2 ac5
+            ;;         (get-distance-from-to ac2 ac5 p1))
+
+
+            (compute-delta-cost-after op2 wc1 p1 action)
+            (compute-delta-cost-after op2 wc1 p1 action*)
+            (format t "delta-cost after ~a: ~a. Expect 0.~%"
+                    op3 (delta-distance action))
+            (check-= (delta-distance action*) (delta-distance action))
+            (terpri)
+            ;;}}}
+
+
+            ;;{{{ insertion in the middle of the route
+            (format t "Let's insert ~a in the middle of r2:~%"
+                    ac2)
+
+            ;; (format t "Distance from ~a to ~a: ~a~%"
+            ;;         ac4 ac5
+            ;;         (get-distance-from-to ac4 ac5 p1))
+            ;; (format t "Distance from ~a to ~a: ~a~%"
+            ;;         ac4 ac2
+            ;;         (get-distance-from-to ac4 ac2 p1))
+            ;; (format t "Distance from ~a to ~a: ~a~%"
+            ;;         ac2 ac5
+            ;;         (get-distance-from-to ac2 ac5 p1))
+
+
+            (compute-delta-cost-after op3 wc1 p1 action)
+            (compute-delta-cost-after op3 wc1 p1 action*)
+            (format t "delta-cost after ~a: ~a~%"
+                    op3 (delta-distance action))
+            (check-= (delta-distance action*) (delta-distance action))
+            ;;}}}
+
+            ;;{{{ "Inserting at the beginning of the route~%"
+            (format t "~%Inserting at the beginning of the route r2~%")
+            (setf (delta-distance action) delta-after-selection)
+            (setf (delta-distance action*) delta-after-selection)
+            ;; (format t "Distance from ~a to ~a: ~a~%" ad ac4
+            ;;         (get-distance-from-to ad ac4 p1))
+            ;; (format t "Distance from ~a to ~a: ~a~%" ad ac2
+            ;;         (get-distance-from-to ad ac2 p1))
+            ;; (format t "Distance from ~a to ~a: ~a~%" ac2 ac4
+            ;;         (get-distance-from-to ac2 ac4 p1))
+            (compute-delta-cost-after op4 wc1 p1 action)
+            (compute-delta-cost-after op4 wc1 p1 action*)
+            (format t "delta-cost after ~a: ~a~%"
+                    op4 (delta-distance action))
+            (check-=  (delta-distance action*) (delta-distance action))
+            ;;}}}
+
+            ;;{{{ "Inserting at the end of the route r2~%"
+            (setf op5 (op-insert-client 2 3 c1))
+            (format t "~%Inserting at the end of the route r2~%")
+            (setf (delta-distance action) delta-after-selection)
+            (setf (delta-distance action*) delta-after-selection)
+            ;; (format t "Distance from ~a to ~a: ~a~%" ac5 ad
+            ;;         (get-distance-from-to ac5 ad p1))
+            ;; (format t "Distance from ~a to ~a: ~a~%" ac5 ac2
+            ;;         (get-distance-from-to ac5 ac2 p1))
+            ;; (format t "Distance from ~a to ~a: ~a~%" ac2 ad
+            ;;         (get-distance-from-to ac2 ad p1))
+            (compute-delta-cost-after op5 wc1 p1 action)
+            (compute-delta-cost-after op5 wc1 p1 action*)
+            (format t "delta-cost after ~a: ~a~%"
+                    op5 (delta-distance action))
+            (check-= (delta-distance action*) (delta-distance action))
+            ;;}}}
+
+            )))
+      #+END_SRC
+*** compute-delta-basic-capacity 
+**** description
+     In this section I'm going to implement how to compute the delta cost after a select operation in a capacity problem.
+
+     The idea now is to describe how each operation affects the capacity of the routes in the current solution.
+
+     The idea should be easy: a selection always increases the feasibility of a route by the demand of the selected client and an insertion decreases it.
+
+**** method :after (select-op basic-wc t delta-basic-capacity)
+***** description
+      A selection always increases the feasibility of a route by the demand of the selected client.
+***** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+      (defmethod compute-delta-cost-after :after
+          ((operation operation-select-client)
+           (working-copy basic-working-copy)
+           problem
+           (action delta-basic-capacity-action))
+
+        "Increase the basic-feasibility of the route by the demand of the selected client."
+
+        (let* ((pos (pos operation) ;; the position of the current client
+                ;; in the route
+                 )
+               (route ;; the route (id) of the current client
+                (route operation))
+               (selected-client (client-at (list route pos) working-copy)))
+
+          ;; increment the feasibility of the route 
+          (incf (aref (delta-routes-feasibility action) route)
+                (demand selected-client))))
+      #+END_SRC
+***** tests
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (with-cvrp-problem (p1 :distances `((0 2 3 4 5)
+                                          (5 0 6 7 2 )
+                                          (1 8 0 3 9)
+                                          (4 5 1 0 5)
+                                          (4 5 1 5 0))
+                             :demands '(20 10 15 40)
+                             :capacity 40)
+        (with-basic-cvrp-solution (s1 ((1 2 3) (4)) p1)
+
+          (format t "Solution: ~a~%" s1)
+          (let* ((wc1 (basic-working-copy s1))
+                 (c1 0) (c2 1) (c3 2)
+                 (op1 (op-select-client 1 2 c1))
+                 (op2 (op-select-client 1 1 c2))
+                 (op3 (op-select-client 2 1 c3))
+                 ac1 ac2 ac3 ad
+                 (action (delta-basic-capacity-action 4))
+                 )
+
+            (prepare-solution-for-neighborhood-exploration wc1)
+
+
+            (bformat t "Testing delta-basic-capacity after selection")
+
+            (pp-solution wc1 t)
+            ;;{{{ selecting from the middle of the route
+
+            (format t "delta-routes-feasibility: ~a~%"
+                    (delta-routes-feasibility action))
+            (loop for op in (list op1 op2 op3)
+                  for c = (client-at (list (route op) (pos op)) wc1)
+                  doing (setf action (delta-basic-capacity-action 4))
+                  doing (compute-delta-cost-after op wc1 p1 action)
+                  doing (check-= (demand c)
+                                 (aref (delta-routes-feasibility action)
+                                       (route op))))
+            ;;}}}
+
+            )
+          ))
+      #+END_SRC
+
+**** method :after (insert-op basic-wc t delta-basic-capacity)
+***** description
+      An insertion always decreases the feasibility of a route by the demand of the selected client.
+***** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+      (defmethod compute-delta-cost-after :after
+          ((operation operation-insert-client)
+           (working-copy basic-working-copy)
+           problem
+           (action delta-basic-capacity-action))
+
+        "Decrease the basic-feasibility of the route by the demand of the selected client."
+
+        (let* ((route ;; the route (id) of the inserted client
+                (route operation))
+               (inserted-client
+                (client-selected-at-operation (operand operation)
+                                              working-copy)))
+
+
+          ;; decrease the feasibility of the route 
+          (decf (aref (delta-routes-feasibility action) route)
+                (demand inserted-client))))
+      #+END_SRC
+***** tests
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (with-cvrp-problem (p1 :distances `((0 2 3 4 5)
+                                          (5 0 6 7 2 )
+                                          (1 8 0 3 9)
+                                          (4 5 1 0 5)
+                                          (4 5 1 5 0))
+                             :demands '(20 10 15 40)
+                             :capacity 40)
+        (with-basic-cvrp-solution (s1 ((1 2) (3) (4)) p1)
+
+          (format t "Solution: ~a~%" s1)
+          (let* ((wc1 (basic-working-copy s1))
+                 (c1 0)
+                 (op1 (op-select-client 1 1 c1))
+                 (action (delta-basic-capacity-action 3))
+                 )
+
+            (prepare-solution-for-neighborhood-exploration wc1)
+
+
+            (bformat t "Testing delta-basic-capacity after insertion")
+
+            (pp-solution wc1 t)
+
+            ;; first we simulate the selection
+            (simulate-neighborhood-operation op1 wc1)
+
+            (loop for r from 1 to (length (routes wc1))
+                  for op = (op-insert-client r 1 c1)
+                  for c = (client-selected-at-operation c1 wc1)
+                  doing (compute-delta-cost-after op wc1 p1 action)
+                  doing (check-= (- (demand c))
+                                 (aref (delta-routes-feasibility action)
+                                       (route op))))
+            )
+          ))
+      #+END_SRC
+
+** methods for the actions*
+*** description
+    The idea is that the compute-delta-cost-after methods for the actions* is exactly the same.  The only difference is that we should store the previous values in the stack.  We can do that in a =:before= method, where we just need to specify what we should store in the stack.  Likewise, in the undo-delta-cost-computation we just need to specify how we should recover what's on the stack, that is, how to unpack the popped contents into the object's slots.  Those ideas can be implemented using a macro.
+*** *macro* for the creation of the :before methods
+**** description
+     Before using the methods compute-delta-cost-after with the actions* we need to store in the stack the state of the current delta cost computation.  We could do that in a before method where we specify how we should store these values in the stacks.
+
+     In general, all these before methods will be something like:
+
+     #+BEGIN_SRC lisp :exports :code
+     (defmethod compute-delta-cost-after :after (op wc (action*))
+        (push (content of some slots in action*)
+        name-of-stack-in-action))
+     #+END_SRC
+
+     That can (and should?) be abstracted in the macro in this section.
+
+**** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+    (defmacro make-before-method-for-delta-cost-after
+        (class-list list-to-push stack-name &key what-to-log)
+      (let* ((args (loop for arg in `(operation working-copy problem action)
+                         for class in class-list
+                         collect `(,arg ,class)))
+             (format-str (format nil "Storing~a in ~a"
+                                 (aif what-to-log
+                                      (format nil " ~a"it)
+                                      "")
+                                 (car (last class-list)))))
+
+        `(defbehavior compute-delta-cost-after :before
+           ,args
+           :log-str ,format-str
+           (push (list ,@list-to-push)
+                 (,stack-name action)))))
+    #+END_SRC
+**** tests
+***** testing macroexpansion
+      #+BEGIN_SRC lisp +n -r :results none :exports both :tangle ../src/vrp-tests.lisp 
+      (make-before-method-for-delta-cost-after
+       (t t t delta-distance-action*)
+       ((route operation) (delta-distance action))
+       delta-distance-stack)
+      #+END_SRC
+
+***** testing the expanded code
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (with-cvrp-problem (p1 :distances `((0 2 3 4 5)
+                                          (5 0 6 7 2 )
+                                          (1 8 0 3 9)
+                                          (4 5 1 0 5)
+                                          (4 5 1 5 0))
+                             :demands '(20 10 15 40)
+                             :capacity 40)
+        (with-basic-cvrp-solution (s1 ((1 2 3) (4)) p1)
+
+          (format t "Solution: ~a~%" s1)
+          (let* ((wc1 (basic-working-copy s1))
+                 (c1 0) (c2 1) (c3 2)
+                 (op1 (op-select-client 1 2 c1))
+                 (op2 (op-select-client 1 1 c2))
+                 (op3 (op-select-client 2 1 c3))
+                 ac1 ac2 ac3 ad
+                 (action* (delta-distance-action*))
+                 )
+
+            (prepare-solution-for-neighborhood-exploration wc1)
+
+            (setf ac1 (client-at `(1 1) wc1))
+            (setf ac2 (client-at `(1 2) wc1))
+            (setf ac3 (client-at `(1 3) wc1))
+            (setf ad  (client-at `(1 4) wc1))
+
+            (bformat t "Testing compute-delta-cost-after for actions*")
+
+
+
+            (pp-solution wc1 t)
+
+            ;;{{{ selecting from the middle of the route
+            (format t "~%Selecting from the middle of the route~%")
+            (format t "Stack before ~a: ~a~%"
+                    op1 (delta-distance-stack action*))
+            (compute-delta-cost-after op1 wc1 p1 action*)
+            (check-= -2 (delta-distance action*))
+            (format t "stack after ~a: ~a~%"
+                    op1 (delta-distance-stack action*))
+            (simulate-neighborhood-operation op1 wc1)
+            (pp-solution wc1 t)
+
+            ;;}}}
+
+            ;;{{{ selecting from the beginning of the route
+            (format t "~%Selecting from the beginning of the route~%")
+            (compute-delta-cost-after op2 wc1 p1 action*)
+            (format t "stack after ~a: ~a~%"
+                    op2 (delta-distance-stack action*))
+            (format t "delta-cost after ~a: ~a~%"
+                    op2 (delta-distance action*))
+            (simulate-neighborhood-operation op2 wc1)
+            (pp-solution wc1 t)
+            ;;}}}
+
+            ;; ;;{{{ selecting from the end of the route
+            (compute-delta-cost-after op3 wc1 p1 action*)
+            (format t "stack after ~a: ~a~%"
+                    op3 (delta-distance-stack action*))
+            (format t "delta-cost after ~a: ~a~%"
+                    op3 (delta-distance action*))
+            (simulate-neighborhood-operation op3 wc1)
+            (pp-solution wc1 t)
+            ;; (setf (delta-distance action) 0)
+            ;; (setf (delta-distance action*) 0)
+            ;; (format t "~%Selecting from the end of the route~%")
+            ;; ;; (format t "Distance from ~a to ~a: ~a~%" ac3 ad
+            ;; ;;         (get-distance-from-to ac3 ad p1))
+            ;; ;; (format t "Distance from ~a to ~a: ~a~%" ac2 ac3
+            ;; ;;         (get-distance-from-to ac2 ac3 p1))
+            ;; ;; (format t "Distance from ~a to ~a: ~a~%" ac2 ad 
+            ;; ;;         (get-distance-from-to ac2 ad p1))
+            ;; (compute-delta-cost-after op3 wc1 p1 action)
+            ;; (compute-delta-cost-after op3 wc1 p1 action*)
+            ;; ;; (format t "delta-cost after ~a: ~a~%"
+            ;; ;;         op3
+            ;; ;;         (delta-distance action))
+            ;; (check-= -6 (delta-distance action))
+            ;; (check-= (delta-distance action) (delta-distance action*))
+
+            ;; ;;}}}
+            )
+          ))
+      #+END_SRC
+*** compute-delta-cost-after for delta-distance-action*
+**** code
+***** code for the op-select-client
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+      (make-before-method-for-delta-cost-after
+       (operation-select-client t t delta-distance-action*)
+        ((delta-distance action))
+        delta-distance-stack
+        :what-to-log "(previous-distance)")
+      #+END_SRC
+***** code for the op-insert-client
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+      (make-before-method-for-delta-cost-after
+        (operation-insert-client t t delta-distance-action*)
+        ((delta-distance action))
+        delta-distance-stack
+        :what-to-log "(previous-distance)")
+      #+END_SRC
+**** tests
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (with-cvrp-problem (p1 :distances `((0 2 3 4 5)
+                                         (5 0 6 7 2 )
+                                         (1 8 0 3 9)
+                                         (4 5 1 0 5)
+                                         (4 5 1 5 0))
+                            :demands '(20 10 15 40)
+                            :capacity 40)
+       (with-basic-cvrp-solution (s1 ((1 2 3) (4)) p1)
+
+         (format t "Solution: ~a~%" s1)
+         (let* ((wc1 (basic-working-copy s1))
+                (c1 0) (c2 1) (c3 2)
+                (op1 (op-select-client 1 2 c1))
+                (op2 (op-select-client 1 1 c2))
+                (op3 (op-select-client 2 1 c3))
+                ac1 ac2 ac3 ad
+                (action* (delta-distance-action*))
+                )
+
+           (prepare-solution-for-neighborhood-exploration wc1)
+
+           (setf ac1 (client-at `(1 1) wc1))
+           (setf ac2 (client-at `(1 2) wc1))
+           (setf ac3 (client-at `(1 3) wc1))
+           (setf ad  (client-at `(1 4) wc1))
+
+           (bformat t "Testing compute-delta-cost-after for actions*")
+
+
+
+           (pp-solution wc1 t)
+
+           ;;{{{ selecting from the middle of the route
+           (format t "~%Selecting from the middle of the route~%")
+           (format t "Stack before ~a: ~a~%"
+                   op1 (delta-distance-stack action*))
+           (compute-delta-cost-after op1 wc1 p1 action*)
+           (check-= -2 (delta-distance action*))
+           (format t "stack after ~a: ~a~%"
+                   op1 (delta-distance-stack action*))
+           (simulate-neighborhood-operation op1 wc1)
+           (pp-solution wc1 t)
+
+           ;;}}}
+
+           ;;{{{ selecting from the beginning of the route
+           (format t "~%Selecting from the beginning of the route~%")
+           (compute-delta-cost-after op2 wc1 p1 action*)
+           (format t "stack after ~a: ~a~%"
+                   op2 (delta-distance-stack action*))
+           (format t "delta-cost after ~a: ~a~%"
+                   op2 (delta-distance action*))
+           (simulate-neighborhood-operation op2 wc1)
+           (pp-solution wc1 t)
+           ;;}}}
+
+           ;; ;;{{{ selecting from the end of the route
+           (compute-delta-cost-after op3 wc1 p1 action*)
+           (format t "stack after ~a: ~a~%"
+                   op3 (delta-distance-stack action*))
+           (format t "delta-cost after ~a: ~a~%"
+                   op3 (delta-distance action*))
+           (simulate-neighborhood-operation op3 wc1)
+           (pp-solution wc1 t)
+           ;; (setf (delta-distance action) 0)
+           ;; (setf (delta-distance action*) 0)
+           ;; (format t "~%Selecting from the end of the route~%")
+           ;; ;; (format t "Distance from ~a to ~a: ~a~%" ac3 ad
+           ;; ;;         (get-distance-from-to ac3 ad p1))
+           ;; ;; (format t "Distance from ~a to ~a: ~a~%" ac2 ac3
+           ;; ;;         (get-distance-from-to ac2 ac3 p1))
+           ;; ;; (format t "Distance from ~a to ~a: ~a~%" ac2 ad 
+           ;; ;;         (get-distance-from-to ac2 ad p1))
+           ;; (compute-delta-cost-after op3 wc1 p1 action)
+           ;; (compute-delta-cost-after op3 wc1 p1 action*)
+           ;; ;; (format t "delta-cost after ~a: ~a~%"
+           ;; ;;         op3
+           ;; ;;         (delta-distance action))
+           ;; (check-= -6 (delta-distance action))
+           ;; (check-= (delta-distance action) (delta-distance action*))
+
+           ;; ;;}}}
+           )
+         ))
+     #+END_SRC
+
+*** compute-delta-cost-after for delta-basic-capacity-action*
+**** code for the op-select-client
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+     (make-before-method-for-delta-cost-after
+        (operation-select-client t t delta-basic-capacity-action*)
+        ((route operation)
+         (aref (delta-routes-feasibility action) (route operation)))
+         delta-routes-feasibility-stack
+         :what-to-log "(route feasibility)")
+     #+END_SRC
+**** code for the op-insert-client
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+     (make-before-method-for-delta-cost-after
+        (operation-insert-client t t delta-basic-capacity-action*)
+        ((route operation)
+         (aref (delta-routes-feasibility action) (route operation)))
+         delta-routes-feasibility-stack
+         :what-to-log "(route feasibility)")
+     #+END_SRC
+**** tests
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (with-cvrp-problem (p1 :distances `((0 2 3 4 5)
+                                         (5 0 6 7 2 )
+                                         (1 8 0 3 9)
+                                         (4 5 1 0 5)
+                                         (4 5 1 5 0))
+                            :demands '(20 10 15 40)
+                            :capacity 40)
+       (with-basic-cvrp-solution (s1 ((1 2 3) (4)) p1)
+
+         (format t "Solution: ~a~%" s1)
+         (let* ((wc1 (basic-working-copy s1))
+                (c1 0) (c2 1) (c3 2)
+                (op1 (op-select-client 1 2 c1))
+                (op2 (op-select-client 1 1 c2))
+                (op3 (op-select-client 2 1 c3))
+                ac1 ac2 ac3 ad
+                (action* (delta-basic-capacity-action* 2))
+                )
+
+           (prepare-solution-for-neighborhood-exploration wc1)
+
+           (setf ac1 (client-at `(1 1) wc1))
+           (setf ac2 (client-at `(1 2) wc1))
+           (setf ac3 (client-at `(1 3) wc1))
+           (setf ad  (client-at `(1 4) wc1))
+
+           (bformat t "Testing compute-delta-cost-after for actions*")
+
+
+
+           (pp-solution wc1 t)
+
+           ;;{{{ selecting from the middle of the route
+           (format t "~%Selecting from the middle of the route~%")
+           (format t "Stack before ~a: ~a~%"
+                   op1 (delta-routes-feasibility-stack action*))
+           (compute-delta-cost-after op1 wc1 p1 action*)
+           (format t "stack after ~a: ~a~%"
+                   op1 (delta-routes-feasibility-stack action*))
+           (format t "routes-feasibility after ~a: ~a~%"
+                   op1 (delta-routes-feasibility action*))
+           (simulate-neighborhood-operation op1 wc1)
+           (pp-solution wc1 t)
+
+           ;;}}}
+
+           ;;{{{ selecting from the beginning of the route
+           (format t "~%Selecting from the beginning of the route~%")
+           (compute-delta-cost-after op2 wc1 p1 action*)
+           (format t "stack after ~a: ~a~%"
+                   op2 (delta-routes-feasibility-stack action*))
+           (format t "routes-feasibility after ~a: ~a~%"
+                   op1 (delta-routes-feasibility action*))
+           (simulate-neighborhood-operation op2 wc1)
+           (pp-solution wc1 t)
+
+           ;;}}}
+
+           ;;{{{ selecting from route 2
+           (format t "~%Selecting from the beginning of the route~%")
+           (compute-delta-cost-after op3 wc1 p1 action*)
+           (format t "stack after ~a: ~a~%"
+                   op3 (delta-routes-feasibility-stack action*))
+           (format t "routes-feasibility after ~a: ~a~%"
+                   op3 (delta-routes-feasibility action*))
+           (simulate-neighborhood-operation op3 wc1)
+           (pp-solution wc1 t)
+
+           ;;}}}
+           )
+         ))
+     #+END_SRC
+
+
+* undo-compute-delta-cost
+** description
+   In this section I'll add the functions and methods to undo a delta-cost computation.
+
+   In the current implementation, the action* classes have a stack where they store the state of the action before the computation of a delta-cost.  With this approach, to undo a delta cost computation we just need to pop the stack and set the value to the corresponding slots.
+
+   In all the cases the code will be very similar, that's why we'll use a macro for that.  That macro is presented in the next section.
+
+** *macro* for the creation of the undo-delta-cost-computation
+*** description
+    Most of the undo-delta-cost-computation will have the same structure:
+
+    #+BEGIN_EXAMPLE
+    (defbehavior undo-delta-cost-computation :after
+      (operation working-copy problem (action class-name))
+      (destructuring-bind (what-to-read-from-the-stack)
+                          (pop (stack-name action))
+        restore the state using the previous values))
+    #+END_EXAMPLE
+
+    That's what we'll abstract in this macro.  The user will provide
+     - the name of the generic-function we want to modify,
+     - the class-name,
+     - a lambda list with what to read from the stack,
+     - the name of the stack (this changes from action to action),
+     - the code to restore the values.
+
+    Actually, this is the same pattern that will appear in the undo-finish-delta-cost-computation methods, so we can improve the macro and use it to create also the undo-finish-delta-cost-computation.  To do this, we only need to (also) pass the name of the generic-function as another argument.
+    
+*** code
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+   (defmacro make-undo-delta-cost-computation
+       (generic-function
+        method-lambda-list
+        lambda-list
+        stack-name
+        what-to-log
+        &body body)
+  
+     `(defbehavior ,generic-function :after
+        ,method-lambda-list
+        :log-str ,what-to-log
+        (destructuring-bind ,lambda-list (pop (,stack-name action))
+            ,@body)))
+   #+END_SRC
+*** tests
+**** testing macroexpansion
+     #+BEGIN_SRC lisp +n -r :results none :exports both :tangle ../src/vrp-tests.lisp 
+     (make-undo-delta-cost-computation
+         undo-delta-cost-computation
+         (op wc problem (action delta-distance-action*))
+         (old-distance) delta-distance-stack
+         "Restoring delta-distance"
+       (setf (delta-distance action) old-distance))
+     #+END_SRC
+**** testing the expanded code
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (with-cvrp-problem (p1 :distances `((0 2 3 4 5)
+                                         (5 0 6 7 2 )
+                                         (1 8 0 3 9)
+                                         (4 5 1 0 5)
+                                         (4 5 1 5 0))
+                            :demands '(20 10 15 40)
+                            :capacity 40)
+       (with-basic-cvrp-solution (s1 ((1 2 3) (4)) p1)
+
+         (format t "Solution: ~a~%" s1)
+         (let* ((wc1 (basic-working-copy s1))
+                (c1 0) (c2 1) (c3 2)
+                (op1 (op-select-client 1 2 c1))
+                (op2 (op-select-client 1 1 c2))
+                (op3 (op-select-client 2 1 c3))
+                ac1 ac2 ac3 ad
+                (action* (delta-distance-action*))
+                )
+
+           (prepare-solution-for-neighborhood-exploration wc1)
+
+           (setf ac1 (client-at `(1 1) wc1))
+           (setf ac2 (client-at `(1 2) wc1))
+           (setf ac3 (client-at `(1 3) wc1))
+           (setf ad  (client-at `(1 4) wc1))
+
+           (bformat t "Testing compute-delta-cost-after for actions*")
+
+
+
+           (pp-solution wc1 t)
+
+           ;;{{{ selecting from the middle of the route
+           (format t "~%Selecting from the middle of the route~%")
+           (format t "Stack before ~a: ~a~%"
+                   op1 (delta-distance-stack action*))
+           (compute-delta-cost-after op1 wc1 p1 action*)
+           (check-= -2 (delta-distance action*))
+           (format t "stack after ~a: ~a~%"
+                   op1 (delta-distance-stack action*))
+           (simulate-neighborhood-operation op1 wc1)
+           (pp-solution wc1 t)
+
+           ;;}}}
+
+           ;;{{{ selecting from the beginning of the route
+           (format t "~%Selecting from the beginning of the route~%")
+           (compute-delta-cost-after op2 wc1 p1 action*)
+           (format t "stack after ~a: ~a~%"
+                   op2 (delta-distance-stack action*))
+           (format t "delta-cost after ~a: ~a~%"
+                   op2 (delta-distance action*))
+           (simulate-neighborhood-operation op2 wc1)
+           (pp-solution wc1 t)
+           ;;}}}
+
+           ;; ;;{{{ selecting from the end of the route
+           (compute-delta-cost-after op3 wc1 p1 action*)
+           (format t "stack after ~a: ~a~%"
+                   op3 (delta-distance-stack action*))
+           (format t "delta-cost after ~a: ~a~%"
+                   op3 (delta-distance action*))
+           (simulate-neighborhood-operation op3 wc1)
+           (pp-solution wc1 t)
+           ;; ;;}}}
+
+           ;;;{{{ let's restore the delta-cost
+           (format t "Restoring to the previous state~%")
+           (undo-neighborhood-operation op3 wc1)
+           (undo-delta-cost-computation op3 wc1 p1 action*)
+           (pp-solution wc1 t)
+           (format t "  delta-cost after undo: ~a~%"
+                   (delta-distance action*))
+           (format t "  delta-distance-stack: ~a~%"
+                   (delta-distance-stack action*))
+           ;;;}}}
+
+
+           ;;;{{{ let's restore (again) the delta-cost
+           (format t "Restoring to the previous state~%")
+           (undo-neighborhood-operation op2 wc1)
+           (undo-delta-cost-computation op2 wc1 p1 action*)
+           (pp-solution wc1 t)
+           (format t "  delta-cost after undo: ~a~%"
+                   (delta-distance action*))
+           (format t "  delta-distance-stack: ~a~%"
+                   (delta-distance-stack action*))
+           ;;;}}}
+
+                 ;;;{{{ let's restore the delta-cost
+           (format t "Restoring to the previous state~%")
+           (undo-neighborhood-operation op1 wc1)
+           (undo-delta-cost-computation op1 wc1 p1 action*)
+           (pp-solution wc1 t)
+           (format t "  delta-cost after undo: ~a~%"
+                   (delta-distance action*))
+           (format t "  delta-distance-stack: ~a~%"
+                   (delta-distance-stack action*))
+           ;;;}}}
+
+           )
+         ))
+     #+END_SRC
+** method for delta-distance-action*
+*** description
+    In the case of the delta-distance-action* we just need to restore the value of delta-distance.
+*** code
+**** code for the op-select-client
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+     (make-undo-delta-cost-computation
+         undo-delta-cost-computation
+         ((op operation-select-client)
+          wc
+          problem
+          (action delta-distance-action*))    
+         (old-distance) delta-distance-stack
+         "Restoring delta-distance"
+       (setf (delta-distance action) old-distance))
+     #+END_SRC
+**** code for the op-insert-client
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+     (make-undo-delta-cost-computation
+         undo-delta-cost-computation
+         ((op operation-insert-client)
+          wc
+          problem
+          (action delta-distance-action*))    
+         (old-distance) delta-distance-stack
+         "Restoring delta-distance"
+       (setf (delta-distance action) old-distance))
+     #+END_SRC
+*** test
+    #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+    (with-cvrp-problem (p1 :distances `((0 2 3 4 5)
+                                        (5 0 6 7 2 )
+                                        (1 8 0 3 9)
+                                        (4 5 1 0 5)
+                                        (4 5 1 5 0))
+                           :demands '(20 10 15 40)
+                           :capacity 40)
+      (with-basic-cvrp-solution (s1 ((1 2 3) (4)) p1)
+
+        (format t "Solution: ~a~%" s1)
+        (let* ((wc1 (basic-working-copy s1))
+               (c1 0) (c2 1) (c3 2)
+               (op1 (op-select-client 1 2 c1))
+               (op2 (op-select-client 1 1 c2))
+               (op3 (op-select-client 2 1 c3))
+               ac1 ac2 ac3 ad
+               (action* (delta-distance-action*))
+               )
+
+          (prepare-solution-for-neighborhood-exploration wc1)
+
+          (setf ac1 (client-at `(1 1) wc1))
+          (setf ac2 (client-at `(1 2) wc1))
+          (setf ac3 (client-at `(1 3) wc1))
+          (setf ad  (client-at `(1 4) wc1))
+
+          (bformat t "Testing undo-delta-cost-computation (distance)")
+
+          (pp-solution wc1 t)
+
+          ;;{{{ selecting from the middle of the route
+          (format t "~%Selecting from the middle of the route~%")
+          (format t "Stack before ~a: ~a~%"
+                  op1 (delta-distance-stack action*))
+          (compute-delta-cost-after op1 wc1 p1 action*)
+          (check-= -2 (delta-distance action*))
+          (format t "stack after ~a: ~a~%"
+                  op1 (delta-distance-stack action*))
+          (simulate-neighborhood-operation op1 wc1)
+          (pp-solution wc1 t)
+
+          ;;}}}
+
+          ;;{{{ selecting from the beginning of the route
+          (format t "~%Selecting from the beginning of the route~%")
+          (compute-delta-cost-after op2 wc1 p1 action*)
+          (format t "stack after ~a: ~a~%"
+                  op2 (delta-distance-stack action*))
+          (format t "delta-cost after ~a: ~a~%"
+                  op2 (delta-distance action*))
+          (simulate-neighborhood-operation op2 wc1)
+          (pp-solution wc1 t)
+          ;;}}}
+
+          ;; ;;{{{ selecting from the end of the route
+          (compute-delta-cost-after op3 wc1 p1 action*)
+          (format t "stack after ~a: ~a~%"
+                  op3 (delta-distance-stack action*))
+          (format t "delta-cost after ~a: ~a~%"
+                  op3 (delta-distance action*))
+          (simulate-neighborhood-operation op3 wc1)
+          (pp-solution wc1 t)
+          ;; ;;}}}
+
+          ;;;{{{ let's restore the delta-cost
+          (format t "Restoring to the previous state~%")
+          (undo-neighborhood-operation op3 wc1)
+          (undo-delta-cost-computation op3 wc1 p1 action*)
+          (pp-solution wc1 t)
+          (format t "  delta-cost after undo: ~a~%"
+                  (delta-distance action*))
+          (format t "  delta-distance-stack: ~a~%"
+                  (delta-distance-stack action*))
+          ;;;}}}
+
+
+          ;;;{{{ let's restore (again) the delta-cost
+          (format t "Restoring to the previous state~%")
+          (undo-neighborhood-operation op2 wc1)
+          (undo-delta-cost-computation op2 wc1 p1 action*)
+          (pp-solution wc1 t)
+          (format t "  delta-cost after undo: ~a~%"
+                  (delta-distance action*))
+          (format t "  delta-distance-stack: ~a~%"
+                  (delta-distance-stack action*))
+          ;;;}}}
+
+                ;;;{{{ let's restore the delta-cost
+          (format t "Restoring to the previous state~%")
+          (undo-neighborhood-operation op1 wc1)
+          (undo-delta-cost-computation op1 wc1 p1 action*)
+          (pp-solution wc1 t)
+          (format t "  delta-cost after undo: ~a~%"
+                  (delta-distance action*))
+          (format t "  delta-distance-stack: ~a~%"
+                  (delta-distance-stack action*))
+          ;;;}}}
+
+          )
+        ))
+    #+END_SRC
+** method for delta-basic-capacity-action*
+*** description
+    In the case of the delta-basic-capacity-action* we store in the stack two values: the route that was affected and the old value, and we need to restore the value of that element in the array.
+*** code
+**** code for the op-select-client
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+     (make-undo-delta-cost-computation
+         undo-delta-cost-computation
+         ((op operation-select-client)
+          wc
+          problem
+          (action delta-basic-capacity-action*))
+         (route old-feasibility) delta-routes-feasibility-stack
+          "Restoring basic route-feasibility"
+       (setf (aref (delta-routes-feasibility action) route) old-feasibility))
+     #+END_SRC
+**** code for the op-insert-client
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+     (make-undo-delta-cost-computation
+         undo-delta-cost-computation
+         ((op operation-insert-client)
+          wc
+          problem
+          (action delta-basic-capacity-action*))
+         (route old-feasibility) delta-routes-feasibility-stack
+          "Restoring basic route-feasibility"
+       (setf (aref (delta-routes-feasibility action) route) old-feasibility))
+     #+END_SRC
+*** test
+    #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+    (with-cvrp-problem (p1 :distances `((0 2 3 4 5)
+                                        (5 0 6 7 2 )
+                                        (1 8 0 3 9)
+                                        (4 5 1 0 5)
+                                        (4 5 1 5 0))
+                           :demands '(20 10 15 40)
+                           :capacity 40)
+      (with-basic-cvrp-solution (s1 ((1 2 3) (4)) p1)
+
+        (format t "Solution: ~a~%" s1)
+        (let* ((wc1 (basic-working-copy s1))
+               (c1 0) (c2 1) (c3 2)
+               (op1 (op-select-client 1 2 c1))
+               (op2 (op-select-client 1 1 c2))
+               (op3 (op-select-client 2 1 c3))
+               ac1 ac2 ac3 ad
+               (action* (delta-basic-capacity-action* 2))
+               )
+
+          (prepare-solution-for-neighborhood-exploration wc1)
+
+          (setf ac1 (client-at `(1 1) wc1))
+          (setf ac2 (client-at `(1 2) wc1))
+          (setf ac3 (client-at `(1 3) wc1))
+          (setf ad  (client-at `(1 4) wc1))
+
+          (bformat t "Testing undo-delta-cost-computation (basic-feasibility)")
+
+          (initialize-action-for-delta-cost-computation wc1 p1 action*)
+
+          (pp-solution wc1 t)
+
+          (format t "initial routes-feasibility-array ~a~%"
+                  (delta-routes-feasibility action*))
+
+          ;;{{{ selecting from the middle of the route
+          (format t "~%Selecting from the middle of the route~%")
+          (format t "Stack before ~a: ~a~%"
+                  op1 (delta-routes-feasibility-stack action*))
+          (compute-delta-cost-after op1 wc1 p1 action*)
+          (format t "routes-feasibility-array ~a~%"
+                  (delta-routes-feasibility action*))
+
+          (format t "stack after ~a: ~a~%"
+                  op1 (delta-routes-feasibility-stack action*))
+          (simulate-neighborhood-operation op1 wc1)
+          (pp-solution wc1 t)
+
+          ;;}}}
+
+          ;;{{{ selecting from the beginning of the route
+          (format t "~%Selecting from the beginning of the route~%")
+          (compute-delta-cost-after op2 wc1 p1 action*)
+          (format t "stack after ~a: ~a~%"
+                  op2 (delta-routes-feasibility-stack action*))
+          (format t "delta-cost after ~a: ~a~%"
+                  op2 (delta-routes-feasibility action*))
+          (simulate-neighborhood-operation op2 wc1)
+          (pp-solution wc1 t)
+          ;;}}}
+
+          ;; ;;{{{ selecting from the end of the route
+          (compute-delta-cost-after op3 wc1 p1 action*)
+          (format t "stack after ~a: ~a~%"
+                  op3 (delta-routes-feasibility-stack action*))
+          (format t "delta-cost after ~a: ~a~%"
+                  op3 (delta-routes-feasibility action*))
+          (simulate-neighborhood-operation op3 wc1)
+          (pp-solution wc1 t)
+          ;; ;;}}}
+
+          ;;;{{{ let's restore the delta-cost
+          (format t "Restoring to the previous state~%")
+          (undo-neighborhood-operation op3 wc1)
+          (undo-delta-cost-computation op3 wc1 p1 action*)
+          (pp-solution wc1 t)
+          (format t "  delta-cost after undo: ~a~%"
+                  (delta-routes-feasibility action*))
+          (format t "  delta-routes-feasibility-stack: ~a~%"
+                  (delta-routes-feasibility-stack action*))
+          ;;;}}}
+
+
+          ;;;{{{ let's restore (again) the delta-cost
+          (format t "Restoring to the previous state~%")
+          (undo-neighborhood-operation op2 wc1)
+          (undo-delta-cost-computation op2 wc1 p1 action*)
+          (pp-solution wc1 t)
+          (format t "  delta-cost after undo: ~a~%"
+                  (delta-routes-feasibility action*))
+          (format t "  delta-routes-feasibility-stack: ~a~%"
+                  (delta-routes-feasibility-stack action*))
+          ;;;}}}
+
+                ;;;{{{ let's restore the delta-cost
+          (format t "Restoring to the previous state~%")
+          (undo-neighborhood-operation op1 wc1)
+          (undo-delta-cost-computation op1 wc1 p1 action*)
+          (pp-solution wc1 t)
+          (format t "  delta-cost after undo: ~a~%"
+                  (delta-routes-feasibility action*))
+          (format t "  delta-routes-feasibility-stack: ~a~%"
+                  (delta-routes-feasibility-stack action*))
+          ;;;}}}
+
+          )
+        ))
+    #+END_SRC
+    
+
+* finish-delta-cost-computation
+** description
+   When we call this function we should have already computed the =delta-cost-after= each operation (and probably the working-copy *is* the current neighbor).  This could be useful, for example, in cases where the cost of the neighbor cannot be computed operation-wise.  For example, in some problem we could, in the =compute-delta-cost-after= method, just mark which routes were modified and then recompute those routes.
+** method (t t basic-capacity-penalty-action)
+*** description
+    Here we define how we'll combine the information we have in the action after we have processed each individual operation.  The idea so far is to find out how much we should penalize.
+
+    When we call this method we should have two arrays with information about the feasibility of the neighbor solution.  The first of these arrays is the =original-routes-feasbility= array that has in the nth position, the feasibility of the nth route in the original solution.  The second array is =delta-routes-feasibility=, and this array has information about how the feasibility changed after the operations.
+
+    The idea in this case is that we need to compute exactly how does the penalty varies after the changes.  That's what we do in this function.
+*** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+    (defbehavior finish-delta-cost-computation :after
+        ((working-copy basic-working-copy)
+         problem
+         (action delta-basic-capacity-penalty-action))
+
+        :log-str "Computing delta penalty related to basic-capacity"
+
+      "Increase the basic-feasibility of the route by the demand of the selected client."
+
+      (let* ((result (delta-distance action))
+             (routes (routes working-copy))
+             (penalty (penalty-factor action)))
+
+        ;; here result is how much does the cost of this new solution
+        ;; changes after the operations. In (delta-distance action)
+        ;; we have the change in the distance travelled by the
+        ;; vehicles. If there are not penalties this is just
+        ;; the value we are looking for. Otherwise, we should
+        ;; add or remove values according to the penalties.
+
+        ;; now let's add the delta penalty cost
+        (loop for r in routes
+              for id = (id r)
+              for current-feasibility =
+                  (aref (original-routes-feasibility action) id)
+              for delta-feasibility =
+                  (aref (delta-routes-feasibility action) id)
+
+              doing (cond
+                      ;; they both are negative (It just got worse)
+                      ((and (< current-feasibility 0)
+                            (< delta-feasibility 0))
+                       ;; if they both are negative just add more penalty
+
+                       ;; (format t "Debug finish Dcost: cond 1, increasing in ~a~%"
+                       ;;         (* (- penalty) delta-feasibility))
+
+                       ;; add the penalty to total-penalty:
+                       (incf (total-penalty action)
+                             (* (- penalty) delta-feasibility))
+
+                       (incf result (* (- penalty) delta-feasibility)))
+
+
+                      ;; improvement but not enough :-[
+                      ;; the improvement does not make the solution feasible
+                      ;; then reduce the penalty in the difference
+                      ((and (< current-feasibility 0)
+                            (> delta-feasibility 0)
+                            (> (abs current-feasibility)
+                               (abs delta-feasibility)))
+                       ;; in this case reduce the penalty
+                       ;; from the result
+
+
+                       ;; (format t
+                       ;;         "Debug finish Dcost: cond 2, decreasing in ~a~%"
+                       ;;         (* penalty
+                       ;;            delta-feasibility))
+
+                       ;; decf the penalty from total-penalty:
+                       (decf (total-penalty action)
+                             (* penalty
+                                delta-feasibility))
+
+                       (decf result (* penalty
+                                       delta-feasibility)))
+
+                      ;; ;; improvement makes the route feasible
+                      ;; ;; decf the current penalty from the solution
+                      ((and (< current-feasibility 0)
+                            (> delta-feasibility 0)
+                            (>= (abs delta-feasibility)
+                                (abs current-feasibility)))
+                       ;; in this case only reduce the previous penalty
+
+
+                       ;; (format t
+                       ;;         "Debug finish Dcost: cond 3, decreasing in ~a~%"
+                       ;;         (* penalty
+                       ;;            (- current-feasibility)))
+
+                       (decf (total-penalty action)
+                             (* penalty
+                                (- current-feasibility)))
+
+                       (decf result (* penalty
+                                       (- current-feasibility))))
+
+                      ;; TODO: NOW ADD THE OPPOSITE:
+                      ;; WHEN THE CURRENT FEASIBILITY IS POSITIVE
+                      ;; THE ONLY INTERESTING CASE IS WHEN
+                      ;; THE DELTA-FEASIBILITY IS NEGATIvE AND GREATER THAN
+                      ;; THE CURRENT-FEASIBILITY BECAUSE IN ANY OTHER CASE
+                      ;; THERE IS NO NEED TO PENALYZE.
+
+                      ((and (>= current-feasibility 0)
+                            (< delta-feasibility 0)
+                            (>= (abs delta-feasibility)
+                                (abs current-feasibility)))
+                       ;; in this case, increment the penalty in
+                       ;; (delta-feasibility - current-feasibility)
+
+                       (incf (total-penalty action)
+                             (* (- penalty)
+                                (+ current-feasibility
+                                   delta-feasibility)))
+
+                       (incf result (* (- penalty)
+                                       (+ current-feasibility
+                                          delta-feasibility))))))
+        ;; return result
+        result))
+    #+END_SRC
+
+*** tests
+    #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+    (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                        (5 0 6 7 2 4)  ;1
+                                        (1 8 0 3 9 1)  ;2
+                                        (4 5 1 0 5 7)  ;3
+                                        (4 5 1 5 0 6)  ;4
+                                        (1 5 7 6 9 0)) ;5
+                                        ;0 1 2 3 4 5 
+                           :demands '(20 10 15 40 30)
+                           :capacity 30)
+      (with-basic-cvrp-solution (s1 ((1 3) (4) (5 2)) p1)
+        (let* ((wc1 (basic-working-copy s1))
+               (action (delta-cvrp-action 
+                        :delta-distance 0
+                        :delta-routes-feasibility #(0 -2 0 -3))))
+
+          (bformat t "Testing finish-delta-cost-computation")
+
+          (prepare-solution-for-neighborhood-exploration wc1)
+
+          (initialize-action-for-delta-cost-computation wc1 p1 action)
+
+          (setf (delta-routes-feasibility action) #(0 -1 0 -3))
+
+          (format t "routes-feasibility: ~a~%"
+                  (delta-routes-feasibility action))
+          (format t "original-routes-feasibility: ~a~%"
+                  (original-routes-feasibility action))
+
+
+          (finish-delta-cost-computation wc1 p1 action)
+
+          (format t "total-penalty ~a~%"
+                  (total-penalty action))
+
+          )))
+    #+END_SRC
+** method (t t basic-capacity-penalty-action*)
+*** description
+    This code is a *very ugly* code duplication with the basic-capacity-penalty-action, but right now I'm not sure how to avoid it and I also want to test it.  Later I'll deal with that.
+
+    The following description is taken from the method for basic-capacity-penalty-action.
+    
+    +Here we define how we'll combine the information we have in the action after we have processed each individual operation.  The idea so far is to find out how much we should penalize.+
+
+    +When we call this method we should have two arrays with information about the feasibility of the neighbor solution.  The first of these arrays is the =original-routes-feasbility= array that has, in the nth position, the feasibility of the nth route in the original solution.  The second array is =delta-routes-feasibility=, and this array has information about how the feasibility changed after the operations.+
+
+    +The idea in this case is that we need to compute exactly how does the penalty varies after the changes.  That's what we do in this function.+
+*** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+    (defbehavior finish-delta-cost-computation :after
+        ((working-copy basic-working-copy)
+         problem
+         (action delta-basic-capacity-penalty-action*))
+
+        :log-str "Computing delta penalty related to basic-capacity"
+
+      "Increase the basic-feasibility of the route by the demand of the selected client."
+
+      (let* ((result (delta-distance action))
+             (routes (routes working-copy))
+             (penalty (penalty-factor action)))
+
+        ;; here result is how much does the cost of this new solution
+        ;; changes after the operations. In (delta-distance action)
+        ;; we have the change in the distance travelled by the
+        ;; vehicles. If there are not penalties this is just
+        ;; the value we are looking for. Otherwise, we should
+        ;; add or remove values according to the penalties.
+
+        ;; now let's add the delta penalty cost
+        (loop for r in routes
+              for id = (id r)
+              for current-feasibility =
+                  (aref (original-routes-feasibility action) id)
+              for delta-feasibility =
+                  (aref (delta-routes-feasibility action) id)
+
+              doing (cond
+                      ;; they both are negative (It just got worse)
+                      ((and (< current-feasibility 0)
+                            (< delta-feasibility 0))
+                       ;; if they both are negative just add more penalty
+
+                       ;; (format t "Debug finish Dcost: cond 1, increasing in ~a~%"
+                       ;;         (* (- penalty) delta-feasibility))
+
+                       ;; add the penalty to total-penalty:
+                       (incf (total-penalty action)
+                             (* (- penalty) delta-feasibility))
+
+                       (incf result (* (- penalty) delta-feasibility)))
+
+
+                      ;; improvement but not enough :-[
+                      ;; the improvement does not make the solution feasible
+                      ;; then reduce the penalty in the difference
+                      ((and (< current-feasibility 0)
+                            (> delta-feasibility 0)
+                            (> (abs current-feasibility)
+                               (abs delta-feasibility)))
+                       ;; in this case reduce the penalty
+                       ;; from the result
+
+
+                       ;; (format t
+                       ;;         "Debug finish Dcost: cond 2, decreasing in ~a~%"
+                       ;;         (* penalty
+                       ;;            delta-feasibility))
+
+                       ;; decf the penalty from total-penalty:
+                       (decf (total-penalty action)
+                             (* penalty
+                                delta-feasibility))
+
+                       (decf result (* penalty
+                                       delta-feasibility)))
+
+                      ;; ;; improvement makes the route feasible
+                      ;; ;; decf the current penalty from the solution
+                      ((and (< current-feasibility 0)
+                            (> delta-feasibility 0)
+                            (>= (abs delta-feasibility)
+                                (abs current-feasibility)))
+                       ;; in this case only reduce the previous penalty
+
+
+                       ;; (format t
+                       ;;         "Debug finish Dcost: cond 3, decreasing in ~a~%"
+                       ;;         (* penalty
+                       ;;            (- current-feasibility)))
+
+                       (decf (total-penalty action)
+                             (* penalty
+                                (- current-feasibility)))
+
+                       (decf result (* penalty
+                                       (- current-feasibility))))
+
+                      ;; TODO: NOW ADD THE OPPOSITE:
+                      ;; WHEN THE CURRENT FEASIBILITY IS POSITIVE
+                      ;; THE ONLY INTERESTING CASE IS WHEN
+                      ;; THE DELTA-FEASIBILITY IS NEGATIvE AND GREATER THAN
+                      ;; THE CURRENT-FEASIBILITY BECAUSE IN ANY OTHER CASE
+                      ;; THERE IS NO NEED TO PENALYZE.
+
+                      ((and (>= current-feasibility 0)
+                            (< delta-feasibility 0)
+                            (>= (abs delta-feasibility)
+                                (abs current-feasibility)))
+                       ;; in this case, increment the penalty in
+                       ;; (delta-feasibility - current-feasibility)
+
+                       (incf (total-penalty action)
+                             (* (- penalty)
+                                (+ current-feasibility
+                                   delta-feasibility)))
+
+                       (incf result (* (- penalty)
+                                       (+ current-feasibility
+                                          delta-feasibility))))))
+        ;; return result
+        result))
+    #+END_SRC
+
+*** tests
+    #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+    (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                        (5 0 6 7 2 4)  ;1
+                                        (1 8 0 3 9 1)  ;2
+                                        (4 5 1 0 5 7)  ;3
+                                        (4 5 1 5 0 6)  ;4
+                                        (1 5 7 6 9 0)) ;5
+                                        ;0 1 2 3 4 5 
+                           :demands '(20 10 15 40 30)
+                           :capacity 30)
+      (with-basic-cvrp-solution (s1 ((1 3) (4) (5 2)) p1)
+        (let* ((wc1 (basic-working-copy s1))
+               (action (delta-cvrp-action 
+                        :delta-distance 0
+                        :delta-routes-feasibility #(0 -2 0 -3))))
+
+          (bformat t "Testing finish-delta-cost-computation")
+
+          (prepare-solution-for-neighborhood-exploration wc1)
+
+          (initialize-action-for-delta-cost-computation wc1 p1 action)
+
+          (setf (delta-routes-feasibility action) #(0 -1 0 -3))
+
+          (format t "routes-feasibility: ~a~%"
+                  (delta-routes-feasibility action))
+          (format t "original-routes-feasibility: ~a~%"
+                  (original-routes-feasibility action))
+
+
+          (finish-delta-cost-computation wc1 p1 action)
+
+          (format t "total-penalty ~a~%"
+                  (total-penalty action))
+
+          )))
+    #+END_SRC
+** method :before (t t basic-penalty-action*)
+*** description
+    Here we define how to store the info in the basic-penalty-action* so we can later undo this operation.
+
+    Here we should just add to the stack the value of the total-penalty.
+*** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+    (defbehavior finish-delta-cost-computation :before
+      ((working-copy t) (problem t) (action basic-penalty-action*))
+      :log-str "Storing (total-penalty) in basic-penalty-action*"
+      (push (list (total-penalty action))
+            (total-penalty-stack action)))
+     #+END_SRC
+*** tests
+    #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+    (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                        (5 0 6 7 2 4)  ;1
+                                        (1 8 0 3 9 1)  ;2
+                                        (4 5 1 0 5 7)  ;3
+                                        (4 5 1 5 0 6)  ;4
+                                        (1 5 7 6 9 0)) ;5
+                                        ;0 1 2 3 4 5 
+                           :demands '(20 10 15 40 30)
+                           :capacity 30)
+      (with-basic-cvrp-solution (s1 ((1 3) (4) (5 2)) p1)
+        (let* ((wc1 (basic-working-copy s1))
+               (action (delta-cvrp-action* 
+                        :delta-distance 0
+                        :delta-routes-feasibility #(0 -2 0 -3))))
+
+          (bformat t "Testing finish-delta-cost-computation")
+
+          (prepare-solution-for-neighborhood-exploration wc1)
+
+          (initialize-action-for-delta-cost-computation wc1 p1 action)
+
+          (setf (delta-routes-feasibility action) #(0 -1 0 -3))
+
+          (format t "routes-feasibility: ~a~%"
+                  (delta-routes-feasibility action))
+          (format t "original-routes-feasibility: ~a~%"
+                  (original-routes-feasibility action))
+
+
+          (finish-delta-cost-computation wc1 p1 action)
+
+          (format t "total-penalty ~a~%"
+                  (total-penalty action))
+
+          (format t "stack: ~a~%"
+                  (total-penalty-stack action))
+
+          )))
+    #+END_SRC
+
+
+* undo-finish-delta-cost-computation
+** description
+   In this section I'll add the methods to undo the finish-delta-cost-computation.
+
+   In the current implementation, the action* classes have a stack where they store the state of the action before the computation of a delta-cost and the call to finish-delta-cost-computation.  With this approach, to undo a delta cost computation we just need to pop the stack and set the value to the corresponding slots.
+
+   To use this we can use the macro make-undo-delta-cost-computation.
+** method (t t basic-penalty-action*)
+*** description
+    In this case we just need to pop the value of total-penalty, that so far is the only slot that is modified in the finish-delta-cost-computation.
+*** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+    (make-undo-delta-cost-computation
+        undo-finish-delta-cost-computation
+        (wc problem (action delta-basic-capacity-penalty-action*))
+        (old-penalty) total-penalty-stack
+         "Restoring total-penalty"
+      (setf (total-penalty action) old-penalty))
+      #+END_SRC
+
+*** tests
+    #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+    (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                        (5 0 6 7 2 4)  ;1
+                                        (1 8 0 3 9 1)  ;2
+                                        (4 5 1 0 5 7)  ;3
+                                        (4 5 1 5 0 6)  ;4
+                                        (1 5 7 6 9 0)) ;5
+                                        ;0 1 2 3 4 5 
+                           :demands '(20 10 15 40 30)
+                           :capacity 30)
+      (with-basic-cvrp-solution (s1 ((1 3) (4) (5 2)) p1)
+        (let* ((wc1 (basic-working-copy s1))
+               (action (delta-cvrp-action*
+                        :delta-distance 0
+                        :delta-routes-feasibility #(0 -2 0 -3))))
+
+          (bformat t "Testing finish-delta-cost-computation")
+
+          (prepare-solution-for-neighborhood-exploration wc1)
+
+          (initialize-action-for-delta-cost-computation wc1 p1 action)
+
+          (format t "total-penalty: ~a~%" (total-penalty action))
+
+          (setf (delta-routes-feasibility action) #(0 -1 0 -3))
+
+          (format t "routes-feasibility: ~a~%"
+                  (delta-routes-feasibility action))
+          (format t "original-routes-feasibility: ~a~%"
+                  (original-routes-feasibility action))
+
+          (finish-delta-cost-computation wc1 p1 action)
+
+          (format t "total-penalty ~a~%"
+                  (total-penalty action))
+
+          (format t "total-penalty stack ~a~%"
+                  (total-penalty-stack action))
+
+          (undo-finish-delta-cost-computation wc1 p1 action)
+
+          (format t "total-penalty after undo ~a~%"
+                  (total-penalty action))
+
+          )))
+    #+END_SRC
+
+
+* delta-cost
+** description
+   This is the function that will receive a solution, an action and a list with the operations that were made to the solution and will return the delta cost after applying all those operations.
+
+   I think that in the case of the probably we could create only once the array with the feasibility of the route.
+
+   This function should do the following:
+     - Initialize for delta-cost
+     - Foreach operation in the neighborhood
+       - compute its delta-cost
+       - simulate the operation
+     - finish-delta-cost-computation
+     - return the value
+** method (list basic-working-copy t t)
+*** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+     (defmethod delta-cost ((operations list)
+                            (working-copy basic-working-copy)
+                            problem
+                            action)
+       "Returns the delta-cost of the neighbor defined by the set of operations passed as the first argument."
+
+       ;; let's create a new working-copy with the same solution
+       (let* ((wc (basic-working-copy (solution working-copy))))
+         ;; let's initialize the wc
+         (prepare-solution-for-neighborhood-exploration wc)
+         ;; let's initialize the action
+         (initialize-action-for-delta-cost-computation wc problem action)
+
+         ;; let's compute delta-cost and simulate the ops
+         (loop for op in operations
+               do (compute-delta-cost-after op wc problem action)
+               do (simulate-neighborhood-operation op wc))
+         ;; let's finish the delta-cost computation
+         (finish-delta-cost-computation wc problem action)
+
+
+         ;; return the distance plus the total penalty
+         (+ (delta-distance action)
+            (total-penalty action))))
+   #+END_SRC
+*** tests
+**** test selecting and inserting from the same position
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                           (5 0 6 7 2 4)  ;1
+                                           (1 8 0 3 9 1)  ;2
+                                           (4 5 1 0 5 7)  ;3
+                                           (4 5 1 5 0 6)  ;4
+                                           (1 5 7 6 9 0)) ;5
+                                           ;0 1 2 3 4 5 
+                               :demands '(20 10 15 40 30)
+                               :capacity 40)
+         (with-basic-cvrp-solution (s1 ((1 3) (4) (5) (2)) p1)
+           (let* ((wc1 (basic-working-copy s1))
+                  (action (delta-cvrp-action))
+                  (c1 0)
+                  (op1 (op-select-client 1 1 c1))
+                  (op2 (op-insert-client 1 1 c1))
+                  (op-list (list op1 op2))
+                  (result -1))
+
+
+             (bformat t "Testing delta-cost")
+
+             (prepare-solution-for-neighborhood-exploration wc1)
+
+             (pp-solution wc1 t) (terpri)
+
+             (setf result (delta-cost op-list wc1 p1 action))
+
+             (format t "Delta-cost after ~a: ~a~%"
+                     op-list result)
+             (check-= 0 (delta-cost op-list wc1 p1 action)))))
+     #+END_SRC
+**** tests making solution infeasible
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                           (5 0 6 7 2 4)  ;1
+                                           (1 8 0 3 9 1)  ;2
+                                           (4 5 1 0 5 7)  ;3
+                                           (4 5 1 5 0 6)  ;4
+                                           (1 5 7 6 9 0)) ;5
+                                           ;0 1 2 3 4 5 
+                               :demands '(20 10 15 40 30)
+                               :capacity 40)
+         (with-basic-cvrp-solution (s1 ((1 3) (4) (5) (2)) p1)
+           (let* ((wc1 (basic-working-copy s1))
+                  (action (delta-cvrp-action))
+                  (c1 0)
+                  (op1 (op-select-client 1 2 c1))
+                  (op2 (op-insert-client 2 2 c1))
+                  (op-list (list op1 op2))
+                  (result -1))
+
+
+             (bformat t "Testing delta-cost")
+
+             (prepare-solution-for-neighborhood-exploration wc1)
+
+             (pp-solution wc1 t) (terpri)
+
+             (setf result (delta-cost op-list wc1 p1 action))
+
+             (format t "Delta-cost after ~a: ~a~%"
+                     op-list result)
+
+             (format t "delta-distance: ~a, penalty: ~a~%"
+                     (delta-distance action)
+                     (total-penalty action))
+             ;; (check-= 0 (delta-cost op-list wc1 p1 action))
+             )))
+     #+END_SRC
+
+**** tests making infeasible solution feasible
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                           (5 0 6 7 2 4)  ;1
+                                           (1 8 0 3 9 1)  ;2
+                                           (4 5 1 0 5 7)  ;3
+                                           (4 5 1 5 0 6)  ;4
+                                           (1 5 7 6 9 0)) ;5
+                                           ;0 1 2 3 4 5 
+                               :demands '(20 10 15 40 30)
+                               :capacity 40)
+         (with-basic-cvrp-solution (s1 ((1) (3 4) (5) (2)) p1)
+           (let* ((wc1 (basic-working-copy s1))
+                  (action (delta-cvrp-action))
+                  (c1 0)
+                  (op1 (op-select-client 2 1 c1))
+                  (op2 (op-insert-client 1 1 c1))
+                  (op-list (list op1 op2))
+                  (result -1))
+
+
+             (bformat t "Testing delta-cost")
+
+             (prepare-solution-for-neighborhood-exploration wc1)
+
+             (pp-solution wc1 t) (terpri)
+
+             (setf result (delta-cost op-list wc1 p1 action))
+
+             (format t "Delta-cost after ~a: ~a~%"
+                     op-list result)
+
+             (format t "delta-distance: ~a, penalty: ~a~%"
+                     (delta-distance action)
+                     (total-penalty action))
+             ;; (check-= 0 (delta-cost op-list wc1 p1 action))
+             )))
+     #+END_SRC
+** tests for the actions*
+*** description
+    In this section I'm going to test how well the actions* store their data in the stacks.
+*** tests
+    #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+    (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                           (5 0 6 7 2 4)  ;1
+                                           (1 8 0 3 9 1)  ;2
+                                           (4 5 1 0 5 7)  ;3
+                                           (4 5 1 5 0 6)  ;4
+                                           (1 5 7 6 9 0)) ;5
+                                           ;0 1 2 3 4 5 
+                               :demands '(20 10 15 40 30)
+                               :capacity 40)
+         (with-basic-cvrp-solution (s1 ((1 3 4) (5 2)) p1)
+           (let* ((wc1 (basic-working-copy s1))
+                  (action (delta-cvrp-action*))
+                  (c1 0)
+                  (op1 (op-select-client 1 2 c1))
+                  (op2 (op-insert-client 2 1 c1))
+                  (op-list (list op1 op2))
+                  (result -1))
+
+
+             (bformat t "Testing delta-cost for the actions*")
+
+             (prepare-solution-for-neighborhood-exploration wc1)
+
+             (pp-solution wc1 t) (terpri)
+
+             (let* ((wc (basic-working-copy (solution wc1))))
+               ;; let's initialize the wc
+               (prepare-solution-for-neighborhood-exploration wc)
+               ;; let's initialize the action
+               (initialize-action-for-delta-cost-computation wc p1 action)
+
+               ;; let's compute delta-cost and simulate the ops
+               (loop for op in op-list
+                     do (compute-delta-cost-after op wc p1 action)
+                     do (format t "After ~a, distance-stack is ~a and delta-distance is: ~a~%"
+                                op
+                                (delta-distance-stack action)
+                                (delta-distance action))
+                     do (format t "After ~a, feasiblity-stack is ~a and array is:~%   ~a~%"
+                                op
+                                (delta-routes-feasibility-stack action)
+                                (delta-routes-feasibility action))
+                     do (simulate-neighborhood-operation op wc))
+               ;; let's finish the delta-cost computation
+               (finish-delta-cost-computation wc p1 action)
+               (format t "total-penalty-stack: ~a~%"
+                       (total-penalty-stack action))
+
+
+               ;; return the distance plus the total penalty
+               (setf result (+ (delta-distance action)
+                               (total-penalty action)))
+               )
+         
+
+             (format t "Delta-cost after the operations: ~a~%"
+                     result)
+             )))
+    #+END_SRC
+
+
+
+* delta-cost*
+  
+** description
+   This was added on 2020-12-27.
+   
+   The idea of this delta-cost is to avoid the creation of a new working-copy on each call.  To do that, we'll pass an already initialized working-copy, and after all the operations are simulated, we restore it to the original state.
+
+   This should be faster than the actual code.  Right now I'll make it a standard function.  If we need to change that, I'll do it later.
+** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+    (defun delta-cost* (operations
+                        working-copy
+                        problem
+                        action)
+      "Returns the delta-cost of the neighbor defined by the set of operations passed as the first argument. In this case we leave the working-copy untouched after the delta-cost computation, and we can reuse it to compute the cost of another neighbor. We also assume that the action has already been initialized.
+    In this case action should be an action*, otherwise we won't be able to undo the operations."
+
+
+
+      ;; let's create a new working-copy with the same solution
+      (let* ((wc working-copy)
+             (delta-cost 0))
+
+        ;; let's compute delta-cost and simulate the ops
+        (loop for op in operations
+              do (compute-delta-cost-after op wc problem action)
+              do (simulate-neighborhood-operation op wc))
+
+        ;; let's finish the delta-cost computation
+        (finish-delta-cost-computation wc problem action)
+
+        ;; now let's store the value of the delta-cost
+        (setf delta-cost (+ (delta-distance action)
+                            (total-penalty action)))
+
+        ;; now let's restore the working-copy to it's original state
+        ;; first, let's undo the finish-delta-cost-computation
+        (undo-finish-delta-cost-computation wc problem action)
+
+        ;; now let's undo each of the operations
+        (loop for op in (reverse operations)
+              do (undo-delta-cost-computation op wc problem action)
+              do (undo-neighborhood-operation op wc))
+        ;; finally return the delta-cost
+        delta-cost))
+  #+END_SRC
+
+** tests
+*** test selecting and inserting from the same position
+    #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+    (with-cvrp-problem (p1 :distances `(;0 1 2 3 4 5
+                                        (0 2 3 4 5 6)  ;0
+                                        (5 0 6 7 2 4)  ;1
+                                        (1 8 0 3 9 1)  ;2
+                                        (4 5 1 0 5 7)  ;3
+                                        (4 5 1 5 0 6)  ;4
+                                        (1 5 7 6 9 0)) ;5
+                                        ;0 1 2 3 4 5 
+                              :demands '(20 10 15 40 30)
+                              :capacity 40)
+        (with-basic-cvrp-solution (s1 ((1 3) (4) (5) (2)) p1)
+          (let* ((wc (basic-working-copy s1))
+                 (action (delta-cvrp-action*))
+                 (c1 0)
+                 (op1 (op-select-client 1 1 c1))
+                 (op2 (op-insert-client 1 1 c1))
+                 (op3 (op-insert-client 2 1 c1))
+                 (result -1)
+                 )
+
+
+            (bformat t "Testing delta-cost*")
+
+            ;; first let's initialize the working-copy
+            ;; and the action
+            (prepare-solution-for-neighborhood-exploration wc)
+            (initialize-action-for-delta-cost-computation wc p1 action)
+        
+            ;; let's print the solution
+            (pp-solution wc t) (terpri)
+            ;; let's print the action
+            (format t "Action: ~a~%" action)
+
+            (format t "Let's compute delta-cost* after one selection~%")
+
+            (setf result (delta-cost* (list op1) wc p1 action))
+
+            (format t "  delta-cost: ~a~%" result)
+            (format t "  Solution after delta-cost*:~%   ")
+            ;; let's print the solution
+            (pp-solution wc t) (terpri)
+            (format t "  Action after delta-cost*: ~a~%" action)
+
+            (format t "========================================~%")
+        
+            (format t "Let's compute delta-cost* after two operations~%")
+
+            (setf result (delta-cost* (list op1 op2) wc p1 action))
+
+            (format t "  delta-cost: ~a~%" result)
+            (format t "  Solution after delta-cost*:~%   ")
+            ;; let's print the solution
+            (pp-solution wc t) (terpri)
+            (format t "  Action after delta-cost*: ~a~%" action)
+        
+
+            (format t "========================================~%")
+        
+            (format t "Let's compute delta-cost* after other operations~%")
+
+            (setf result (delta-cost* (list op1 op3) wc p1 action))
+
+            (format t "  delta-cost: ~a~%" result)
+            (format t "  Solution after delta-cost*:~%   ")
+            ;; let's print the solution
+            (pp-solution wc t) (terpri)
+            (format t "  Action after delta-cost*: ~a~%" action)
+        
+            ;; (setf result (delta-cost op-list wc1 p1 action))
+
+            ;; (format t "Delta-cost after ~a: ~a~%"
+            ;;         op-list result)
+            ;; (check-= 0 (delta-cost op-list wc1 p1 action))
+            )))
+    #+END_SRC
+   
+
+* get-(delta-)cost-from-action** description
+   In this section we'll define two generic functions to get the actual cost from an action.  In one case, we'll have it for the actual evaluation of a solution, and in the second case for the delta-cost actions
+** get-cost-from-action
+*** generic-function
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+  ;;; A generic function to get the actual cost from an action.
+  (defgeneric get-cost-from-action (action)
+    (:documentation "Computes the cost from a given action."))
+  #+END_SRC
+*** method (basic-penalty-action)
+**** description
+     This is the standard cost calculation in a standard VRP.  In this method we compute the cost as the sum of the total-distance plus the total-penalty multiplied by the penalty factor.
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+      (defmethod get-cost-from-action ((action basic-penalty-action))
+        "Returns the cost stored in the given action."
+
+        (+ (total-distance action)
+           (total-penalty action)))
+    #+END_SRC
+**** tests
+***** testing a full cvrp solution
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+      (let* ((c1 (basic-cvrp-client 1 30))
+             (c2 (basic-cvrp-client 2 20))
+             (c3 (basic-cvrp-client 3 40))
+             (c4 (basic-cvrp-client 4 50))
+             (v1 (cvrp-vehicle 1 60 0))
+             (v2 (cvrp-vehicle 1 70 0))
+             (d0 (basic-depot))
+             (r1 (route-for-simulation :id 1 :vehicle v1
+                                       :depot d0 :clients (list c1 c2)))
+             (r2 (route-for-simulation :id 1 :vehicle v2
+                                       :depot d0 :clients (list c3 c4)))
+             (s1 (basic-solution :id 1 :routes (list r1 r2)))
+
+             (distance #2A ((0 1 2 3 5)
+                            (1 0 4 5 6)
+                            (2 4 0 6 7)
+                            (3 5 6 0 8)
+                            (5 6 7 8 0)))
+             (dp (make-instance 'distance-problem
+                                :distance-matrix distance))
+             (action (basic-cvrp-action))
+             (*vrp-logging* 0))
+        (bformat t "Testing simulate-solution")
+        (simulate-solution s1 dp action)
+        ;; (format t "get-cost-from-action: ~a~%"
+        ;;         (get-cost-from-action action))
+        (check-= 20023 (get-cost-from-action action)))
+      #+END_SRC
+      
+** get-delta-cost-from-action
+*** generic-function
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+  ;;; A generic function to get the actual cost from an action.
+  (defgeneric get-delta-cost-from-action (action)
+    (:documentation "Computes the delta cost from a given action."))
+  #+END_SRC
+*** method (basic-penalty-action)
+**** description
+     This is the standard cost calculation in a standard VRP.  In this method we compute the cost as the sum of the delta-distance plus the total-penalty multiplied by the penalty factor.
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-delta-cost.lisp
+       (defmethod get-delta-cost-from-action ((action basic-penalty-action))
+         "Returns the cost stored in the given action."
+
+         (+ (delta-distance action)
+            (total-penalty action)))
+    #+END_SRC
+**** tests
+***** test selecting and inserting from the same position
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                            (5 0 6 7 2 4)  ;1
+                                            (1 8 0 3 9 1)  ;2
+                                            (4 5 1 0 5 7)  ;3
+                                            (4 5 1 5 0 6)  ;4
+                                            (1 5 7 6 9 0)) ;5
+                                            ;0 1 2 3 4 5 
+                                :demands '(20 10 15 40 30)
+                                :capacity 40)
+          (with-basic-cvrp-solution (s1 ((1 3) (4) (5) (2)) p1)
+            (let* ((wc (basic-working-copy s1))
+                   (action (delta-cvrp-action))
+                   (c1 0)
+                   (op1 (op-select-client 1 1 c1))
+                   (op2 (op-insert-client 1 1 c1))
+                   (ops-list (list op1 op2))
+                   (result -1))
+
+
+              (bformat t "Testing delta-cost")
+
+              (prepare-solution-for-neighborhood-exploration wc)
+
+              (initialize-action-for-delta-cost-computation wc p1 action)
+
+              (loop for op in ops-list
+                    do (compute-delta-cost-after op wc p1 action)
+                    do (simulate-neighborhood-operation op wc))
+        
+              (finish-delta-cost-computation wc p1 action)
+
+              (format t "Delta-cost after ~a: ~a~%"
+                      ops-list (get-delta-cost-from-action action))
+        
+              (check-= 0 (get-delta-cost-from-action action)))))
+      #+END_SRC
+***** tests making solution infeasible
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                            (5 0 6 7 2 4)  ;1
+                                            (1 8 0 3 9 1)  ;2
+                                            (4 5 1 0 5 7)  ;3
+                                            (4 5 1 5 0 6)  ;4
+                                            (1 5 7 6 9 0)) ;5
+                                            ;0 1 2 3 4 5 
+                                :demands '(20 10 15 40 30)
+                                :capacity 40)
+          (with-basic-cvrp-solution (s1 ((1 3) (4) (5) (2)) p1)
+            (let* ((wc (basic-working-copy s1))
+                   (action (delta-cvrp-action))
+                   (c1 0)
+                   (op1 (op-select-client 1 2 c1))
+                   (op2 (op-insert-client 2 2 c1))
+                   (ops-list (list op1 op2)))
+
+
+              (bformat t "Testing get-delta-cost-from-action")
+
+
+              (prepare-solution-for-neighborhood-exploration wc)
+              (format t "Solution:~%")
+              (pp-solution wc t) (terpri)
+
+              (initialize-action-for-delta-cost-computation wc p1 action)
+
+              (loop for op in ops-list
+                    do (compute-delta-cost-after op wc p1 action)
+                    do (simulate-neighborhood-operation op wc))
+
+              (finish-delta-cost-computation wc p1 action)
+
+              (format t "New solution:~%")
+              (pp-solution wc t) (terpri)
+
+
+              (format t "Delta-cost after ~a: ~a~%"
+                      ops-list (get-delta-cost-from-action action))
+
+              (check-= 14999 (get-delta-cost-from-action action))
+              )))
+      #+END_SRC
+
+***** tests making infeasible solution feasible
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                            (5 0 6 7 2 4)  ;1
+                                            (1 8 0 3 9 1)  ;2
+                                            (4 5 1 0 5 7)  ;3
+                                            (4 5 1 5 0 6)  ;4
+                                            (1 5 7 6 9 0)) ;5
+                                            ;0 1 2 3 4 5 
+                                :demands '(20 10 15 40 30)
+                                :capacity 40)
+          (with-basic-cvrp-solution (s1 ((1) (4 3) (5) (2)) p1)
+            (let* ((wc (basic-working-copy s1))
+                   (action (delta-cvrp-action))
+                   (c1 0)
+                   (op1 (op-select-client 2 2 c1))
+                   (op2 (op-insert-client 1 2 c1))
+                   (ops-list (list op1 op2)))
+
+
+              (bformat t "Testing get-delta-cost-from-action")
+
+              (prepare-solution-for-neighborhood-exploration wc)
+              (format t "Solution:~%")
+              (pp-solution wc t) (terpri)
+
+              (initialize-action-for-delta-cost-computation wc p1 action)
+
+              (loop for op in ops-list
+                    do (compute-delta-cost-after op wc p1 action)
+                    do (simulate-neighborhood-operation op wc))
+
+              (finish-delta-cost-computation wc p1 action)
+
+              (format t "New solution:~%")
+              (pp-solution wc t) (terpri)
+
+
+              (format t "Delta-cost after ~a: ~a~%"
+                      ops-list (get-delta-cost-from-action action))
+
+              (check-= -14999 (get-delta-cost-from-action action))
+              )))
+      #+END_SRC

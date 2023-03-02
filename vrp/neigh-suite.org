@@ -1,0 +1,366 @@
+#+TITLE: Neighborhood Enviroment
+#+AUTHOR: Hector F. Masson
+#+EMAIL: h.masson1911@gmail.com
+
+
+
+* Description
+  In this file I'll explain some general or main things about the system.
+
+
+* Utilities
+** Add the package to the tangled file
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-utilities.lisp 
+     (in-package :vrp)
+   #+END_SRC
+
+** A function to tangle all the files
+   #+BEGIN_SRC emacs-lisp +n -r :results none :exports code :tangle ../src/neigh-emacs-utils.el
+   (progn
+     (defvar neigh-tangle-list
+       `("neigh-class-macros.org"
+         "neigh-classes.org"
+         "neigh-criterion.org"
+         "neigh-compatibility.org"
+         "neigh-cardinality.org"
+         "neigh-indexer.org"
+         "neigh-exploration.org"
+         "neigh-statistics.org"
+         "neigh-exploration-heuristics.org"
+         "neigh-data.org"
+         "neigh-search-strategies.org"
+         "neigh-algorithms.org")
+       "A list with all the files that should be tangled for the system neigh.")
+
+     (defun neigh-tangle-all-files ()
+       "Tangles all the required files for the vrp-suite."
+       (interactive)
+       (dolist (file neigh-tangle-list)
+         (org-babel-tangle-file file))))
+   #+END_SRC
+
+** A file to load all the tangled files
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-load-files.lisp
+   (dolist (f (list "src/neigh-configuration.lisp"
+                    "src/neigh-utilities.lisp"     
+                    "src/neigh-class-macros.lisp"
+                    "src/neigh-classes.lisp"
+                    "src/neigh-generic-functions.lisp"
+                    "src/neigh-criterion.lisp"
+                    "src/neigh-cardinality.lisp"
+                    "src/neigh-indexer.lisp"
+                    "src/neigh-compatibility.lisp"
+                    "src/neigh-exploration.lisp"
+              ;;    "src/neigh-statistics.lisp"
+                    "src/neigh-exploration-heuristics.lisp"
+                    "data/neigh-data.lisp"
+                    "src/neigh-strategies.lisp"
+                    "src/neigh-algorithms.lisp"
+                    ))
+     (format t "Loading ~a...~%" f)
+     (load f))
+   #+END_SRC
+
+** A slice function for a list
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-utilities.lisp 
+     (defun slice (lista start end)
+       (loop for i from start to end
+          collecting (nth (1- i) lista)))
+   #+END_SRC
+
+** A function to update list to clients ids in solution
+   #+BEGIN_SRC lisp
+     (defun insert-clients-ids (route position cant)
+       (declare (special trace-clients-ids-in-solution))
+       (if (= 1 position)
+           (dotimes (x cant)
+             (push 0 (nth (1- route) trace-clients-ids-in-solution)))
+           (dotimes (x cant)
+             (push 0 (cdr (nthcdr (- position 2)
+                                  (nth (1- route) trace-clients-ids-in-solution)))))))
+
+
+     (defun remove-clients-ids (route position cant)
+       (declare (special trace-clients-ids-in-solution))
+       (let* ((slice1 (slice trace-clients-ids-in-solution 1 (1- route)))
+              (work-route (nth (1- route) trace-clients-ids-in-solution))
+              (slice2 (slice work-route 1 (1- position)))
+              (slice3 (slice work-route (+ position cant) (length work-route)))
+              (slice4 (slice trace-clients-ids-in-solution (1+ route) (length trace-clients-ids-in-solution))))
+         (setf trace-clients-ids-in-solution
+               (append slice1 (list (append slice2 slice3)) slice4))))
+   #+END_SRC
+
+** A predicate function that compares two lists
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-utilities.lisp 
+     (defun comp-less-lsts (lst1 lst2)
+       (if (or (zerop (length lst1))
+               (zerop (length lst2)))
+           ;; if branch
+           (if (and (zerop (length lst1))
+                    (zerop (length lst2)))
+               nil
+               (if (zerop (length lst1))
+                   t
+                   nil))
+           ;; else branch
+           (let ((x (first lst1))
+                 (y (first lst2)))
+             (if (< x y)
+                 t
+                 (if (< y x)
+                     nil
+                     (comp-less-lsts (rest lst1)
+                                     (rest lst2)))))))
+            
+   #+END_SRC
+
+** A binary search function to determine to what range a given number belongs
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-utilities.lisp 
+     (defun finder (obj list start end fn)
+       (let* ((range (- end start)))
+         (if (zerop range)
+             start
+             (let ((mid (+ start (truncate (/ range 2)))))
+               (let ((obj2 (nth mid list)))
+                 (if (funcall fn obj obj2)
+                     (finder obj list start (1- mid) fn)
+                     (let ((obj3 (nth (1+ mid) list)))
+                       (if (not (funcall fn obj obj3))
+                           (finder obj list (1+ mid) end fn)
+                           mid))))))))
+
+     (defun binary-search (obj list &key (fn #'<))
+       (finder obj list 0 (1- (length list)) fn))
+   #+END_SRC
+
+
+* Neigh configuration file
+** Adding the package to this file
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-configuration.lisp 
+     (in-package :vrp)
+   #+END_SRC
+** Indexing function
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-configuration.lisp 
+     (defparameter *from-index-to-coords-indexer-function* 'index-to-coords-classic-indexer)
+
+     (defparameter *from-coords-to-indexer-indexer-function* 'coords-to-index-classic-indexer)
+   #+END_SRC
+** Exploration strategy for combinatorial search
+   This parameter defines the neighborhood exploration strategy that will be used
+   to sample solutions from neighborhood's regions in the combinatorial search.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-configuration.lisp 
+     (defparameter *exploration-strategy-for-combinatorial-search* 'uniform-search)
+   #+END_SRC
+** Lower and upper bounds for select subroute operation
+   This parameters define the minmum and maximum values that a subroute length can take.
+   
+   The parameter =*upper-bound-for-subroute-length*= is actually the value that is 
+   substracted to the route length.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-configuration.lisp 
+     (defparameter *lower-bound-for-subroute-length* 1)
+
+     (defparameter *upper-bound-for-subroute-length* 0)
+   #+END_SRC
+
+** Classification of subroute lengths
+   This parameters define how a subroute is classified according to its length.
+   It is important to notice that both lits have the same length, since an integer
+   in the second list represent the least length for a subroute of that classification
+   in the first list.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-configuration.lisp 
+     (defparameter *subroute-length-classifications* '(short medium large))
+
+     (defparameter *subroute-length-upper-bounds* '(1 5 10))
+   #+END_SRC
+
+** Some metaparameters for the exploration-exploitation-algorithm
+   This parameters define some features in the metaheuristic like the kind of statistical
+   technique that will be used, also the type of exploration strategy in the intensification
+   or exploitation phase, and the proportion in the number of solutions that are analyzed in
+   exploration or intensification.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-configuration.lisp 
+     (defparameter *exploration-strategy-for-intensification-phase* 'exhaustive-search)
+     (defparameter *statistical-technique* 'mean-technique)
+     (defparameter *exploration-proportion* 1/2)
+     (defparameter *intensification-proportion* 1/2)
+     (defparameter *max-number-of-sol-by-region* 30)
+     (defparameter *linear-constant-in-total-to-explore* 5)
+     (defparameter *clients-order-in-total-to-explore* 2)
+   #+END_SRC
+
+
+* Generic functions
+** Adding the package to this file
+   
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-generic-functions.lisp 
+     (in-package :vrp)
+   #+END_SRC
+
+** Function to parse the neighborhood criterion
+   This function parses a particular list of symbols and numbers
+   defining a neighborhood operation and, creates an instance of
+   that operation.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-generic-functions.lisp 
+     (defgeneric create-neigh-operation-from (symbol element)
+       (:documentation "Returns an instance of a neighborhood operation."))
+   #+END_SRC
+
+** Function to compute the neighborhood cardinality
+   This function computes the cardinality of the neighborhood produced by applying the neighborhhod
+   criterion to the given solution of the VRP. Furthermore, this function creates a tree in which
+   all the information that is needed for further processing over this neighborhood is stored. 
+
+   This /neighborhood-tree/ will be explain more deeply in comming sections. However, its main 
+   purpose is making processing over the neighborhood more efficient.
+
+   
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-generic-functions.lisp 
+     (defgeneric count-neighbors (op sol other-ops default)
+       (:documentation "Returns how many neighbors this solution has according to this op."))
+   #+END_SRC
+
+** Function to compute the i-th neighbor solution
+   This function computes the coordinate list that corresponds with the ith neighbor solution.
+   
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-generic-functions.lisp 
+     (defgeneric nth-neighbor (tree index)
+       (:documentation "Returns the nth neighbor /operation list/ according to this neighborhood tree or nil if index is greater than total."))
+   #+END_SRC
+
+** Function to compute the index of a given coordinate list
+   This function computes the index that corresponds with a given coordinate list.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-generic-functions.lisp 
+     (defgeneric ops-neighbor (tree ops default)
+       (:documentation "Returns the index for this /operation list/ according to this neighborhood tree or nil if ops are not valid."))
+   #+END_SRC
+
+** Function to compute the i-th neighbor solution of a branch in the neighborhood tree
+   This function computes the coordinate list that corresponds with the ith neighbor solution
+   in a given branch of the neighborhood tree. The branch is defined by its info and possibilities,
+   where /branch-info/ is an integer list that contains the values that represent the branch.
+   
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-generic-functions.lisp 
+     (defgeneric nth-branch-neighbor (tree index branch-info branch-poss)
+       (:documentation "Returns the nth branch neighbor /coordinate list/ according to this neighborhood tree or nil if index is greater than total."))
+   #+END_SRC
+
+** Function to compute the index of a given coordinate list of a branch in the neighborhood tree
+   This function computes the index that corresponds with a given coordinate list.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-generic-functions.lisp 
+     (defgeneric ops-branch-neighbor (tree ops branch-info branch-poss default)
+       (:documentation "Returns the index for this /operation list/ according to this neighborhood tree or nil if ops are not valid."))
+   #+END_SRC
+
+** Function to compute the cardinality of a region or branch in the /neighborhood-tree/
+   This function returns the number of solutions in the neighborhood that belong to the
+   current region or branch.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-generic-functions.lisp 
+     (defgeneric branch-cardinality (tree ops index branch)
+       (:documentation "This function returns the cardinality in the current region or branch 
+       of the neighborhood tree. When index is nil, we are going down in the tree."))
+   #+END_SRC
+
+** Function to create the neighborhood operation corresponding to a coordinate
+   This function transforms a given coordinate in its corresponding neighborhood operation.
+   
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-generic-functions.lisp 
+     (defgeneric from-coordinate-to-operation (symbol coordinate)
+       (:documentation "Returns an instance of the neighborhood operation that correspond with a given coordinate."))
+   #+END_SRC
+
+** Function to transform a vrp solution into a counting solution
+   This function transforms a given vrp solution into a solution for counting in the neighborhood.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-generic-functions.lisp 
+     (defgeneric transform-to-counting-solution (vrp-sol)
+       (:documentation "Returns an instance of a counting solution."))
+   #+END_SRC
+
+** Function to compute how selection operations positions change after an operation over the route
+   This function computes how position of selected operations changes after execute an operation
+   over its route.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-generic-functions.lisp 
+     (defgeneric compute-delta-position (symbol coordinate route position)
+       (:documentation "Returns in how many varies a select operation position after performing an operation."))
+   #+END_SRC
+
+** Function to create the factor level corresponding to a coordinate list
+   This function transforms a given coordinate into its corresponding factor level.
+   
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-generic-functions.lisp 
+     (defgeneric from-coordinate-to-level (symbol coordinate)
+       (:documentation "Returns the level of the factor that corresponds with the current coordinate."))
+   #+END_SRC
+** Function from-coordinate-list-to-branch-info
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-generic-functions.lisp 
+      (defgeneric from-coordinate-list-to-branch-info (coordinate-list))
+    #+END_SRC
+** Function from-branch-info-to-branch/region-tuple
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-generic-functions.lisp 
+       (defgeneric from-branch-info-to-branch-tuple (branch-info))
+
+       (defgeneric from-branch-info-to-region-tuple (branch-info))
+     #+END_SRC
+** Function from-coordinate-list-to-branch-tuple
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-generic-functions.lisp 
+       (defgeneric from-coordinate-list-to-branch-tuple (branch-info))
+
+       (defgeneric from-coordinate-list-to-region-tuple (branch-info))
+     #+END_SRC
+** Function exhaustive-search
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-generic-functions.lisp 
+     (defgeneric exhaustive-search (obj))
+   #+END_SRC
+** Function uniform-search
+  #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-generic-functions.lisp 
+     (defgeneric uniform-search (obj))
+   #+END_SRC
+** Function is-exhausted-p
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-generic-functions.lisp 
+     (defgeneric is-exhausted-p (obj))
+   #+END_SRC
+** Function count-neighbors
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-generic-functions.lisp
+      (defgeneric count-neighbors (op sol other-ops default))
+    #+END_SRC
+   
+   
+   
+
+* How to read the files in the neigh system
+  It's recommended to read first =neigh-suite.org= and =neigh-tutorials.org= files, and then:
+
+  1- =neigh-classes.org=, First read this file to lear about the classes that are defined in the neigh system.
+
+  2- =neigh-cardinality.org=, Then read this file to understand the first functionality of the neigh system, which is computing the cardinality of a neighborhood of the VRP.
+
+  3- =neigh-indexer.org=, Then read this file to learn about different functions for ordering the solutions in a neighborhood of the VRP.
+
+  4- =neigh-exploration.org=, Then read this file to learn of different strategies defined in ths neigh system to generate solutions in a neighborhood of the VRP.
+
+  5- =neigh-statistics.org=, Then read this file to learn about the statistical techniques used in the neigh systems to identify the most promising regions in a neighborhood of the VRP.
+
+  6- =neigh-exploration-heuristics.org=, Then read this file in which a two phase exploration algorithm is defined to explore the neighborhood in a combinatorial way (using a combinatorial generator for a custom neighborhood), then identify promising regions and finally make a sequential exploration of the neighborhood.
+
+
+* TODO list
+
+** TODO Define the data for results
+** TODO Thinking about using a generator isntead of a list in the sequential generator
+** TODO Define the simulator were the results will be computed
+
+** TODO [[file:neigh-statistics.org::*Regresion%20tree][Customize the regression tree]]
+
+** TODO [[file:neigh-statistics.org::*Non-parametric%20techniques][Write the non-parametric techniques]]

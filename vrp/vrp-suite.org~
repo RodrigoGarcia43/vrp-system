@@ -1,0 +1,2335 @@
+#+TITLE: VRP solver environment
+#+AUTHOR: Fernando Rodriguez Flores
+#+DATE 2018-07-29 
+#+TODO: TODO BROKEN | DONE
+
+
+* TODO Introduction
+  In this section we'll add the introduction and a general description of the system.
+
+* Literate programming configuration
+  In this section will have the configuration of the literate programming environment.  So far we'll only have some snippets for the addition of source blocks.
+
+  #+BEGIN_SRC elisp :results none
+    (define-key org-mode-map (kbd "M-m M-o M-t")
+      (lambda () (interactive)
+        (let* ((yas? yas-minor-mode))
+          (yas-minor-mode 1)                                           
+          (insert "slobtt")
+          (yas-expand)
+          (yas-minor-mode (if yas? 1 0)))))
+     (define-key org-mode-map (kbd "M-m M-o M-k")
+      (lambda () (interactive)
+        (let* ((yas? yas-minor-mode))
+          (yas-minor-mode 1)                                           
+          (insert "slnct")
+          (yas-expand)
+          (yas-minor-mode (if yas? 1 0)))))
+    (define-key org-mode-map (kbd "M-m M-o M-w")
+      (lambda () (interactive)
+        (let* ((yas? yas-minor-mode))
+          (yas-minor-mode 1)                                           
+          (insert "slobntp")
+          (yas-expand)
+          (yas-minor-mode (if yas? 1 0)))))
+     (define-key org-mode-map (kbd "M-m M-o M-g")
+       (lambda () (interactive)
+         (let* ((yas? yas-minor-mode))
+           (yas-minor-mode 1)                                           
+           (insert "vrpg")
+           (yas-expand)
+           (yas-minor-mode (if yas? 1 0)))))
+     (define-key org-mode-map (kbd "M-m M-o M-c")
+       (lambda () (interactive)
+         (let* ((yas? yas-minor-mode))
+           (yas-minor-mode 1)                                           
+           (insert "vrpc")
+           (yas-expand)
+           (yas-minor-mode (if yas? 1 0)))))
+  #+END_SRC
+
+* Package definition
+
+The first thing to do is to create the package we are going to be working in.
+
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-package.lisp 
+(defpackage :vrp
+  (:use :cl-user :common-lisp)
+  (:shadow random round)
+  (:export with-basic-solution
+           pp-solution
+           bformat
+           build-neighborhood-tree
+           exhaustive-exploration
+           then
+           else))
+
+(in-package :vrp)
+#+END_SRC
+
+We shadowed =random= because we'll be using an implementation independent random numbers generation, but I want this to be completely transparent to the users, who will be able to use =(random)= as if it were the "normal" =random=.
+* The reproducible random-number-generation
+** documentation
+   We want our results to be reproducible, so we need a reproducible random numbers generation system.  This is done in this section.
+
+   Actually, we are going to use the following code, that was taken from a portable random number generation library for common lisp.
+** code
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-random-number-generation.lisp 
+
+   ;;; File with functions to generate portable random numbers.
+   ;;; Taken from random-state [add-reference]
+
+   (in-package :vrp)
+
+
+   ;;;{{{ utilities
+   (declaim (inline truncate-bits))
+   (declaim (ftype (function ((integer 0) (integer 0)) (integer 0))))
+   (defun truncate-bits (x bits)
+     (logand x (1- (ash 1 bits))))
+
+   (declaim (inline truncate32))
+   (declaim (ftype (function (integer) (unsigned-byte 32)) truncate32))
+   (defun truncate32 (x)
+     (logand x #xFFFFFFFF))
+
+   (declaim (inline truncate64))
+   (declaim (ftype (function (integer) (unsigned-byte 64)) truncate64))
+   (defun truncate64 (x)
+     (logand x #xFFFFFFFFFFFFFFFF))
+
+   (defun byte-array-to-int (array)
+     (loop with int = 0
+           for i from 0 below (length array)
+           do (setf (ldb (byte 8 (* i 8)) int) (aref array i))
+           finally (return int)))
+
+   (defun hopefully-sufficiently-random-seed ()
+     #+unix
+     (let ((seq (make-array 8 :element-type '(unsigned-byte 8))))
+       (with-open-file (stream #P"/dev/urandom" :element-type '(unsigned-byte 8))
+         (read-sequence seq stream))
+       (byte-array-to-int seq))
+     #+(and win32 sb-dynamic-core)
+     (byte-array-to-int (sb-win32:crypt-gen-random 8))
+     #-(or unix (and win32 sb-dynamic-core))
+     (logxor #+sbcl (sb-ext:get-bytes-consed)
+             (get-internal-real-time)
+             (get-universal-time)))
+
+   (defun 32bit-seed-array (size seed)
+     (declare (optimize speed))
+     (let ((array (make-array size :element-type '(unsigned-byte 32))))
+       (setf (aref array 0) (truncate32 seed))
+       ;; Using generator from:
+       ;; Line 25 of Table 1 in "The Art of Computer Programming Vol. 2" (2nd Ed.), pp 102
+       (loop for i from 1 below size
+             do (setf (aref array i)
+                      (truncate32 (* 69069 (aref array (1- i))))))
+       array))
+
+   (defun 64bit-seed-array (size seed)
+     (declare (optimize speed))
+     (let ((array (make-array size :element-type '(unsigned-byte 64))))
+       (setf (aref array 0) (truncate64 seed))
+       (loop for i from 1 below size
+             do (setf (aref array i)
+                      (truncate64 (+ (* 6364136223846793005
+                                        (logxor (aref array (1- i))
+                                                (ash (aref array (1- i)) -62)))
+                                     i))))
+       array))
+
+   (defun barr (bytes &rest contents)
+     (make-array (length contents) :element-type `(unsigned-byte ,bytes) :initial-contents contents))
+
+   (defmacro incfmod (place mod &optional (delta 1))
+     `(setf ,place (mod (+ ,place ,delta) ,mod)))
+
+   ;;;}}}
+
+
+   ;;;;;{{{ random number generation functions
+
+   ;;;{{{ basic generator class 
+   (defclass basic-generator ()
+     ((seed :initarg :seed :reader seed :writer set-seed)
+      (bytes :initform (error "Missing BYTES initform from generator definition.")
+             :reader bytes))
+     (:default-initargs
+      :seed (error "SEED required.")))
+
+   (defmethod print-object ((generator basic-generator) stream)
+     (print-unreadable-object (generator stream :type T)
+       (format stream "~s" (seed generator))))
+   ;;;}}}
+
+   (defvar *current-generator* nil
+     "The current generator.")
+
+   ;;;{{{ macro define-generator-generic
+   (defmacro define-generator-generic (name (generator &rest args) &rest options)
+     (let* ((inner-name (symb name "%")))
+       `(progn
+          (defgeneric ,inner-name (,generator ,@args) ,@options)
+
+          ;; (defmethod ,inner-name (,generator ,@args)
+          ;;   (,name (global-generator ,generator)
+          ;;          ,@(remove-if (lambda (a) (find a lambda-list-keywords)) args)))
+          (defun ,name ,args
+            (,inner-name *current-generator* ,@(remove-if (lambda (a) (find a lambda-list-keywords)) args))))))
+   ;;;}}}
+
+   ;;;{{{ random-byte
+   (define-generator-generic random-byte (generator))
+   ;;;}}}
+
+   ;;;{{{ random-bytes
+   (define-generator-generic random-bytes (generator bytes))
+
+   (defmethod random-bytes% ((generator basic-generator) (bytes integer))
+     ;; (declare (optimize speed))
+     (let ((chunk (bytes generator)))
+       (cond ((= bytes chunk)
+              (random-byte% generator))
+             ((< bytes chunk)
+              (truncate-bits (random-byte% generator) bytes))
+             (T
+              (let ((random 0))
+                ;; Fill upper bits
+                (loop for i downfrom (- bytes chunk) above 0 by chunk
+                      for byte = (random-byte% generator)
+                      do (setf (ldb (byte chunk i) random) byte))
+                ;; Fill lowermost bits.
+                ;; This will cause spilling on misaligned boundaries, but we don't care.
+                (setf (ldb (byte chunk 0) random) (random-byte% generator))
+                random)))))
+   ;;;}}}
+
+   ;;;{{{ random unit
+   (define-generator-generic random-unit (generator))
+
+   (defmethod random-unit% ((generator basic-generator))
+     ;; (declare (optimize speed))
+     (let* ((bits #.(integer-length most-positive-fixnum))
+            (random (random-bytes% generator bits)))
+       (/ (float (the (integer 0) random) 0.0d0) most-positive-fixnum)))
+   ;;;}}}
+
+   ;;;{{{ random-float
+   (define-generator-generic random-float (generator from to))
+
+   (defmethod random-float% :around ((generator basic-generator) (from real) (to real))
+     ;; (declare (optimize speed))
+     (if (< from to)
+         (call-next-method)
+         (call-next-method generator to from)))
+
+   (defmethod random-float% ((generator basic-generator) (from real) (to real))
+     ;; (declare (optimize speed))
+     (+ from (* (- to from) (random-unit% generator))))
+   ;;;}}}
+
+   ;;;{{{ random-int
+   (define-generator-generic random-int (generator from to))
+
+   (defmethod random-int% :around ((generator basic-generator) (from integer) (to integer))
+     ;; (declare (optimize speed))
+     (if (< from to)
+         (call-next-method)
+         (call-next-method generator to from)))
+
+   (defmethod random-int% ((generator basic-generator) (from integer) (to integer))
+     ;; (declare (optimize speed))
+     (cond ((and (typep from 'fixnum) (typep to 'fixnum))
+            (let* ((range (- to from))
+                   (bits (integer-length range))
+                   (random (random-bytes% generator bits)))
+              (declare (type (integer 0) random range))
+              (+ from
+                 (if (= 0 (logand range (1+ range)))
+                     random
+                     (round (* range (/ random (ash 1 bits))))))))))
+   ;;;}}}
+
+   ;;;{{{ reseed
+   (define-generator-generic reseed (generator &optional new-seed))
+
+   (defmethod reseed% :around ((generator basic-generator) &optional new-seed)
+     (let ((seed (or new-seed (hopefully-sufficiently-random-seed))))
+       (set-seed seed generator)
+       (call-next-method generator seed))
+     generator)
+   ;;;}}}
+
+
+   ;;;;;}}}
+
+
+   ;;;;;{{{ random number generators
+
+   (defmacro new-instance-of (class)
+     `(let* ((result (make-instance ',class :seed 1)))
+        (reseed% result)
+        ;; return result
+        result))
+
+   ;;;{{{ linear congruence
+   (defclass linear-congruence-class (basic-generator)
+     ((state :accessor state)
+      (multiplier :initarg :multiplier :reader multiplier :writer set-multiplier)
+      (increment :initarg :increment :reader increment :writer set-increment)
+      (bytes :initarg :bytes :writer set-bytes))
+     (:default-initargs
+      :bytes 64
+      :multiplier 6364136223846793005
+      :increment 1442695040888963407))
+
+   (defmethod reseed% ((generator linear-congruence-class) &optional new-seed)
+     (setf (state generator) (mod new-seed (1- (ash 1 (bytes generator))))))
+
+   (defmethod random-byte% ((generator linear-congruence-class))
+     (let ((c (increment generator))
+           (a (multiplier generator))
+           (x (state generator))
+           (b (bytes generator)))
+       ;(declare (optimize speed) (type integer b c a x))
+       (let ((new (mod (+ c (* x a)) (1- (ash 1 b)))))
+         (setf (state generator) new)
+         new)))
+
+   (defparameter linear-congruence (new-instance-of linear-congruence-class))
+   ;;;}}}
+
+   ;;;{{{ mersenne-twister
+   (defclass mersenne-twister (basic-generator)
+     ((n :initarg :n :reader n)
+      (m :initarg :m :reader m)
+      (upper :initarg :upper :reader upper)
+      (lower :initarg :lower :reader lower)
+      (matrix :initarg :matrix :reader matrix :writer set-matrix)
+      (index :initarg :index :accessor index)
+      (magic :initarg :magic :reader magic)
+      (shiftops :initarg :shiftops :reader shiftops)))
+
+   (defmethod reseed% :after ((generator mersenne-twister) &optional new-seed)
+     (declare (ignore new-seed))
+     (setf (index generator) (n generator)))
+
+   (defmacro %inner-mersenne-twister (bytes)
+     `(let ((i 0)
+            (n (n generator))
+            (m (m generator))
+            (upper (upper generator))
+            (lower (lower generator))
+            (matrix (matrix generator))
+            (magic (magic generator))
+            (shiftops (shiftops generator)))
+        ;; (declare (optimize speed)
+        ;;          (ftype (function (mersenne-twister) (unsigned-byte 16)) index)
+        ;;          (type (simple-array (unsigned-byte ,bytes)) matrix magic)
+        ;;          (type (unsigned-byte 16) n m i))
+        (flet ((magic (i) (aref magic i))
+               (matrix (i) (aref matrix i)))
+          ;; (declare (inline magic matrix))
+          (when (= (the integer (index generator)) n)
+            (loop while (< i (- n m))
+                  for x = (logior (logand (matrix i) upper)
+                                  (logand (matrix (1+ i)) lower))
+                  do (setf (aref matrix i)
+                           (logxor (matrix (+ i m))
+                                   (ash x -1)
+                                   (magic (mod x 2))))
+                     (incf i))
+            (loop while (< i (1- n))
+                  for x = (logior (logand (matrix i) upper)
+                                  (logand (matrix (1+ i)) lower))
+                  do (setf (aref matrix i)
+                           (logxor (matrix (+ i (- m n)))
+                                   (ash x -1)
+                                   (magic (mod x 2))))
+                     (incf i))
+            (setf (index generator) 0))
+          (let ((result (matrix (index generator))))
+            ;; (declare (type (unsigned-byte ,bytes) result))
+            (setf (index generator) (the fixnum (1+ (index generator))))
+            (loop for (shift mask) across shiftops
+                  do (setf result (logxor result
+                                          (logand (ash (the (unsigned-byte ,bytes) result)
+                                                       (the (signed-byte 16) shift))
+                                                  (the (unsigned-byte ,bytes) mask)))))
+            result))))
+
+   (defclass mersenne-twister-32-class (mersenne-twister)
+     ((bytes :initform 32))
+     (:default-initargs
+      :n 624
+      :m 397
+      :upper #x80000000
+      :lower #x7fffffff
+      :magic (barr 32 0 #x9908b0df)
+      :shiftops #((-11 #xFFFFFFFF)
+                  (  7 #x9D2C5680)
+                  ( 15 #xEFC60000)
+                  (-18 #xFFFFFFFF))))
+
+   (defmethod reseed% ((generator mersenne-twister-32-class) &optional new-seed)
+     (set-matrix (32bit-seed-array (n generator) new-seed) generator))
+
+   (defmethod random-byte% ((generator mersenne-twister-32-class))
+     (%inner-mersenne-twister 32))
+
+   (defclass mersenne-twister-64-class (mersenne-twister)
+     ((bytes :initform 64))
+     (:default-initargs
+      :n 312
+      :m 156
+      :upper #xFFFFFFFF80000000
+      :lower #x000000007FFFFFFF
+      :magic (barr 64 0 #xB5026F5AA96619E9)
+      :shiftops #1A((-29 #x5555555555555555)
+                    ( 17 #x71D67FFFEDA60000)
+                    ( 37 #xFFF7EEE000000000)
+                    (-43 #xFFFFFFFFFFFFFFFF))))
+
+   (defmethod reseed% ((generator mersenne-twister-64-class) &optional new-seed)
+     (set-matrix (64bit-seed-array (n generator) new-seed) generator))
+
+   (defmethod random-byte% ((generator mersenne-twister-64-class))
+     (%inner-mersenne-twister 64))
+
+   (defparameter mersenne-twister-32 (new-instance-of mersenne-twister-32-class))
+   (defparameter mersenne-twister-64 (new-instance-of mersenne-twister-64-class))
+   (defparameter mt32 (new-instance-of mersenne-twister-32-class))
+   (defparameter mt64 (new-instance-of mersenne-twister-64-class))
+
+   ;;;}}}
+
+   ;;;{{{ middle-square
+   (defclass middle-square-class (basic-generator)
+     ((bytes :writer set-bytes :initform 32)
+      (state :accessor state)))
+
+   (defmethod reseed% ((generator middle-square-class) &optional new-seed)
+     (setf (state generator) new-seed)
+     (set-bytes (integer-length new-seed) generator))
+
+   (defmethod random-byte% ((generator middle-square-class))
+     (let* ((digits (bytes generator))
+            (square (expt (state generator) 2))
+            (offset (floor (/ (max 0 (- (integer-length square) digits)) 2)))
+            (new (ldb (byte digits offset) square)))
+       (setf (state generator) new)
+       (values new (bytes generator))))
+
+   (defparameter middle-square (new-instance-of middle-square-class))
+
+   ;;;}}}
+
+   ;;;{{{ pcg
+   (defclass pcg-class (basic-generator)
+     ((state :initarg :state :accessor state)
+      (inc :initarg :inc :accessor inc)
+      (bytes :initform 32))
+     (:default-initargs
+      :state #x853c49e6748fea9b
+      :inc #xda3e39cb94b95bdb))
+
+   (defmethod reseed% ((generator pcg-class) &optional new-seed)
+     (setf (state generator) 0)
+     (setf (inc generator) (truncate64 (logior 1 (ash new-seed 1))))
+     (random-byte% generator)
+     (setf (state generator) (truncate64 (+ (state generator) new-seed)))
+     (random-byte% generator))
+
+   (defmethod random-byte% ((generator pcg-class))
+     ;; (declare (optimize speed))
+     (let ((oldstate (the (unsigned-byte 64) (state generator))))
+       (setf (state generator) (truncate64
+                                (+ (truncate64 (* oldstate #x6364136223846793005))
+                                   (the (unsigned-byte 64) (inc generator)))))
+       (let* ((xorshifted (ash (logxor (ash oldstate -18) oldstate) -27))
+              (rot (ash oldstate -59)))
+         (truncate32
+          (logior (ash xorshifted (- rot))
+                  (ash xorshifted (logand (- rot) 31)))))))
+
+   (defparameter pcg (new-instance-of pcg-class))
+   ;;;}}}
+
+   ;;;{{{ tt800
+   (defclass tt800-class (basic-generator)
+     ((magic :initform (barr 32 0 #x8ebfd028) :reader magic)
+      (shiftops :initform #((  7 #x2b5b2500)
+                            ( 15 #xdb8b0000)
+                            (-16 #xffffffff)) :reader shiftops)
+      (n :initform 25 :reader n)
+      (m :initform 7 :reader m)
+      (index :initform 0 :accessor index)
+      (matrix :initform NIL :reader matrix :writer set-matrix)
+      (bytes :initform 32)))
+
+   (defmethod reseed% ((generator tt800-class) &optional new-seed)
+     (set-matrix (32bit-seed-array (n generator) new-seed) generator)
+     (setf (index generator) (n generator)))
+
+   (defmethod random-byte% ((generator tt800-class))
+     (let ((i 0)
+           (n (n generator))
+           (m (m generator))
+           (matrix (matrix generator))
+           (magic (magic generator))
+           (shiftops (shiftops generator)))
+       ;; (declare (optimize speed)
+       ;;          (ftype (function (tt800) (unsigned-byte 8)) index)
+       ;;          (type (simple-array (unsigned-byte 32)) matrix magic)
+       ;;          (type (simple-array list 1) shiftops)
+       ;;          (type (unsigned-byte 8) n m i))
+       (flet ((matrix (n) (aref matrix n))
+              (magic (n) (aref magic n)))
+         (declare (inline matrix magic))
+         (when (= (the integer (index generator)) n)
+           (loop while (< i (- n m))
+                 do (setf (aref matrix i)
+                          (logxor (matrix (+ i m))
+                                  (ash (matrix i) -1)
+                                  (magic (mod (matrix i) 2))))
+                    (incf i))
+           (loop while (< i n)
+                 do (setf (aref matrix i)
+                          (logxor (matrix (+ i (- m n)))
+                                  (ash (matrix i) -1)
+                                  (magic (mod (matrix i) 2))))
+                    (incf i))
+           (setf (index generator) 0))
+         (let ((result (matrix (index generator))))
+           (declare (type (unsigned-byte 32) result))
+           (incf (index generator))
+           (loop for (shift mask) across shiftops
+                 do (setf result (logxor result (logand (ash result (the (signed-byte 6) shift))
+                                                        (the (unsigned-byte 32) mask)))))
+           result))))
+
+   (defparameter tt800 (new-instance-of tt800-class))
+   ;;;}}}
+
+   ;;;;;}}}
+
+
+   ;;;{{{ initialize *current-generator*
+
+   ;; (setf *current-generator* (new-instance-of linear-congruence-class))
+   (setf *current-generator* (new-instance-of mersenne-twister-64-class))
+   ;;;}}}
+
+   ;;;{{{ random "things"
+   (defun random-int-matrix (rows columns from to)
+     "Returns a random matrix with the given rows and columns. Each element in the range from to."
+     (let* ((result (make-array (list rows columns) :initial-element 0)))
+       (dotimes (i rows)
+         (dotimes (j columns)
+           (setf (aref result i j) (random-int from to))))
+       ;; return result
+       result))
+   ;;;}}}
+
+   ;;;{{{ shadowing cl::random
+
+   (defgeneric random-any (min max)
+     (:documentation "A function to hide the random-int/float functions, and to make them similar to the original cl::random in the sense that the max value is never reached."))
+
+   (defmethod random-any ((min integer) (max integer))
+     (random-int min (1- max)))
+
+   (defmethod random-any ((min float) (max t))
+     (random-float min max))
+
+   (defmethod random-any ((min t) (max float))
+     (random-float min max))
+
+   (defun random (max &optional (min 0))
+     (random-any (min min max) (max min max)))
+   ;;;}}}
+
+   #+END_SRC
+
+ The most important part is the last one, where we shadow the =cl::random= function.  From this moment on, everytime that the function =random= is called in the =vrp= package, we are actually calling a portable and reproducible random number generation.
+
+** TODO Document how to use the new random number generation system
+*** how to set the seed
+    Apparently we should use the function =reseed= that receives the new-seed and automatically seeds the =*current-generator*=.
+*** how to change the generation method
+    Apparently, to do that, you only need to set the value of the variable =*current-generator*= to the new generation method.
+* Utilities
+  The lisp utilities will be stored in the file vrp-utilities.lisp, and the emacs ones will be tangled to emacs-utils.el.
+
+** declare the package in vrp-utilities
+   #+BEGIN_SRC lisp +n -r :results none :exports none :tangle ../src/vrp-utilities.lisp
+   (in-package :vrp)
+   #+END_SRC
+
+** symb,flatten and make-keyword
+   
+The first two utilities are symb and flatten.  The first one allows us to create symbols (useful for macro definitions), and flatten receives a tree and returns a flattened version of it.
+
+# The following line is to add the ;;;{{{ delimiters to the tangle file
+
+   #+BEGIN_SRC lisp :results none :exports none :tangle ../src/vrp-utilities.lisp
+   ;;;{{{ symb and flatten
+   #+END_SRC
+
+*** makstr and symb
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-utilities.lisp
+   (defun mkstr (&rest args)
+     "Returns a string with the concatenation of the args"
+     (string-upcase
+      (with-output-to-string (s)
+        (dolist (a args) (princ a s)))))
+
+   (defun symb (&rest args)
+     "Returns a symbol formed by the concatenation of the args."
+     (values (intern (apply #'mkstr args))))
+   #+END_SRC
+
+*** flatten
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-utilities.lisp
+    (defun flatten (x)
+      "Flattens a structure."
+      (labels ((rec (x acc)
+                 (cond ((null x) acc)
+                       ((atom x) (cons x acc))
+                       (t (rec (car x) (rec (cdr x) acc))))))
+        (rec x nil)))
+    #+END_SRC    
+
+
+# The following line is to add the ;;;{{{ delimiters to the tangle file
+
+#+BEGIN_SRC lisp :results none :exports none :tangle ../src/vrp-utilities.lisp
+;;;}}}
+#+END_SRC
+
+*** make-keyword
+    The idea is to create a keyword like =:name=.
+
+    To make a keyword you just need to insert the symbol into the =:keyword= package.
+
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-utilities.lisp
+    (defun make-keyword (&rest args)
+      (values (intern (apply #'mkstr args) :keyword)))
+    #+END_SRC
+    
+** macro with-gensym
+   The macro with-gensym:
+
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-utilities.lisp
+    ;;;{{{ with-gensym
+    (defmacro with-gensyms (syms &body body)
+      `(let ,(mapcar #'(lambda (s)
+                         `(,s (gensym (symbol-name ',s))))
+                       syms)
+         ,@body))
+    ;;;}}}
+   #+END_SRC
+** Syntactic sugar
+The following elements are syntactic sugar, to make the code more natural to read.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-utilities.lisp
+   ;;;{{{ syntatic sugar: then, else, while, for
+   (defmacro then (&body body)
+     "This is just a wrapper for progn."
+     `(progn ,@body))
+
+   (defmacro else (&body body)
+     "This is just a wrapper for progn."
+     `(progn ,@body))
+
+   (defmacro the-following (&body body)
+     "This is just a wrapper for progn."
+     `(progn ,@body))
+   ;;;}}}
+   #+END_SRC
+
+** +make keyword list+
+*** description
+    This function receives a list of symbols (a b c) and returns a list of the form (:a ,a :b ,b :c ,c) where ,x represents the symbol-value of the symbol x.
+*** code
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-utilities.lisp
+   (defmacro make-keyword-list (&rest symbols)
+     (let* ((l (mapcar (lambda (x) (list (make-keyword x) x))
+                       symbols)))
+       `',l))
+   #+END_SRC
+*** tests
+    #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+    (let* ((a 1)
+           (b 'hello)
+           (pepe "jose")
+           (l (make-keyword-list a b pepe)))
+      (bformat t "Testing make-keyword-list")
+      (print l))
+    #+END_SRC
+    
+** make special-decls
+*** description
+    Receives a list of symbols and declares them special.
+*** code
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-utilities.lisp
+   (defun make-special-decls (&rest symbols)
+     `(declare (special ,@symbols)))
+   #+END_SRC
+*** tests
+    #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+    (let* ((a 1)
+           (b 'hello)
+           (pepe "jose")
+           (l (make-special-decls 'a 'b 'pepe)))
+      (bformat t "Testing make-keyword-list")
+      (print l))
+    #+END_SRC
+    
+** Anaphoric macros
+   In this section I'll add some anaphoric macros.
+*** aif
+    This is an anaphoric version of if.
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-utilities.lisp
+    (defmacro aif (condition then &optional else)
+      `(let* ((it ,condition))
+         (if it ,then ,else)))
+     #+END_SRC
+
+** Macro for pretty-printing macroexpansions
+   There is a pattern that has appeared several times: I want to print a macroexpansion.  Until I find out how to make the results of a src block a macroexpansion, I'm going to use the following macro:
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-utilities.lisp
+   (defmacro pp-expand (expr)
+     `(print (macroexpand-1 ',expr)))
+   #+END_SRC
+
+** Macro with-elements
+*** description
+    The idea with this macro is to be able to do something like:
+    #+BEGIN_EXAMPLE
+    (with-elements ((log :log-string) args)
+      (process args))
+    #+END_EXAMPLE
+
+    This means to expect in args a sublist of the form:
+
+    #+BEGIN_EXAMPLE
+    (...  :log-string "the string to log" ...)
+    #+END_EXAMPLE
+
+    This macro removes that sublist from args and binds the symbol log to ="the string to log"=.
+
+    This can be used in the creation of moments where we can have several strings to log according to the logging level.
+*** add the ;;;{{{ separator to the file
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-utilities.lisp
+   ;;;{{{ macro with-elements
+   #+END_SRC
+    
+*** help functions
+    Some help functions to write the macro with-elements
+**** remove-something-description-from-list
+***** description
+      The idea is to have a function that receives a keyword and a list and returns the new list without the keyword and the element following it in the list.
+
+      Example:
+
+      #+BEGIN_EXAMPLE
+      (remove-something-description-from-list
+          :hello `(hello world :hello 4 :blue "red"))
+      #+END_EXAMPLE
+
+      returns the list =`(hell, world :blue "red")=.
+***** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-utilities.lisp
+      (defun remove-symbol-and-next-value-from-list (something list)
+        "Removes all the instances of the sublist (something else) from the list. something is a symbol that was passed as the first argument, and else is the sexp that follows that symbol.
+
+         The idea is to traverse the list, and not collecting something and the element following it."
+        (loop for element in list
+              with element-found = nil
+              with removed-elements = 0
+              if (and (eq element something)
+                      (not element-found)
+                      (= removed-elements 0))
+                 do (setf element-found t
+                       removed-elements 1)
+              else if (and element-found
+                           (= removed-elements 1))
+                 do (setf element-found nil
+                          removed-elements 0)
+              else collect element))
+      #+END_SRC
+***** tests
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+      (let* ((test-list `(hello world :hello 5 :blue "red")))
+        (deftests "testing remove-symbol-and-next-value-from-list:"
+          (check-list= `(hello world :blue "red")
+                       (remove-symbol-and-next-value-from-list :hello test-list))
+          (check-list= `(:hello 5 :blue "red")
+                       (remove-symbol-and-next-value-from-list 'hello test-list))
+          (check-list= `(hello world :hello 5)
+                      (remove-symbol-and-next-value-from-list :blue test-list))))
+      #+END_SRC 
+*** macro code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-utilities.lisp
+    (defmacro with-elements ((elements list) &body body)
+      ;;;{{{ Documentation
+      "Creates a context where the elements specified in elements are extracted
+    and removed from list.
+    Elements is a list of elements of the form: (var-name symbol-name)
+    var-name is the name used in the code, and symbol-name is the info
+    that should be extracted from list.
+     Example:
+       If list is '(:title hello :overlay 5 happy world)
+       in the the call to the macro:
+        (with-elements (((ovl :overlay)
+                         (title :title)) list)
+          code here...)
+        the user can refer to the variables ovl with value 5 and title with value 'hello. The content of list in the code will be: '(happy world)."
+      ;;;}}}
+
+      (let* ((var-declarations
+              (loop for (name keyword) in elements
+                    collect `(,name (getf ,list ,keyword))
+                    collect `(,list (remove-symbol-and-next-value-from-list
+                                     ,keyword ,list)))))
+        `(let* (,@var-declarations)
+           ,@body)))
+    #+END_SRC
+*** tests for the macro
+    #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+    (let* ((list '(:title hello :overlay 5 happy world)))
+     (with-elements (((ovl :overlay)
+                      (title :title)) list)
+       (deftests "Testing macro with-elements:"
+         (check-= 5 ovl)
+         (check-eq 'hello title)
+         (check-list= '(happy world) list))))
+    #+END_SRC
+
+*** add the ;;;}}} separator to the file
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-utilities.lisp
+   ;;;}}}
+   #+END_SRC
+** A variable to control whether or not to output debug information
+*** description
+    The idea is to have a global variable that controls whether or not to output debug info.
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-utilities.lisp
+   (defparameter *vrp-debug* t
+     "A variable that controls whether or not to output debug info.")
+   #+END_SRC   
+
+** A function to round numbers the way I would expect it to do it
+   This is taken from the Hypespec.  The =round= function is somewhat crazy in its behavior.  When the number is in the middle, it always rounds to the even number.  I don't want that.  I want it to round to the greatest one, when the number is exactly in the middle of two numbers.  That can be done with the following expression: =(ceiling (- x 1/2))=.
+
+   Because of that, I'm going to shadow the =round= function, and implement this one.
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-utilities.lisp
+   (defun round (x &optional (divisor 1))
+     (declare (ignore divisor))
+     (floor (+ x 1/2)))
+   #+END_SRC   
+
+** format-boxed
+*** description
+    This is a function very similar to format, but it prints two lines of `=', one above the format string and the other below.
+*** code
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-utilities.lisp
+   (defun format-boxed (stream format-str &rest format-args)
+     (let* ((string-to-print
+             (if format-args
+                 (apply 'format `(nil ,format-str ,@format-args))
+                 (funcall 'format nil format-str)))
+            (length (+ 2 (length string-to-print)))
+            (=-line (make-string length :initial-element #\=)))
+       (format stream "~a~% ~a~%~a~2%"
+               =-line string-to-print =-line)))
+
+   (setf (symbol-function 'bformat) #'format-boxed)
+   #+END_SRC   
+** numbers-from-to
+*** description
+    This function receives two integers and returns a list with all the integer numbers between the first argument and the second (both included).
+*** code v2
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-utilities.lisp
+   (defun numbers-in-range (a &optional b)
+       "Returns a list of numbers from a to b.  If optional arg b is ommited, return the numbers from 0 to a, both values included. If a > b, returns the empty list."
+       (let* ((min (if b a 0))
+              (max (if b b a)))
+         (if b
+             (if (<= a b)
+                 (loop for i from min to max collecting i))
+             ;; else if b
+             (loop for i from min to max collecting i))))
+   #+END_SRC   
+*** code v1
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-utilities.lisp
+   (defun numbers-in-range (a &optional b)
+       "Returns a list of numbers from a to b.  If optional arg b is ommited, return the numbers from 0 to a, both values included"
+       (let* ((min (if b a 0))
+              (max (if b b a)))
+       (if (< min max)
+           (loop for i from min to max collecting i)
+           (loop for i from min downto max collecting i))))
+   #+END_SRC   
+*** tests
+    #+BEGIN_SRC lisp +n -r :results output :exports both :tangle "../src/vrp-tests.lisp"
+    (progn
+      (print (numbers-in-range 3 8))
+      (print (numbers-in-range 5))
+      (print (numbers-in-range -3 5))
+      (print (numbers-in-range 5 -5)))
+    #+END_SRC
+
+    #+RESULTS:
+    : 
+    : (3 4 5 6 7 8) 
+    : NIL 
+    : (-3 -2 -1 0 1 2 3 4 5) 
+    : NIL 
+    
+** Functions to compute distance from a set of coordinates
+*** description
+    Here I'll add functions to compute matrix distances from a set of points.  
+*** distances functions
+    In this section I'll add several functions to compute the distance between two points.
+**** Manhattan distance
+***** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-utilities.lisp
+      (defun manhattan-distance (coord1 coord2)
+        "Returns the Manhattan distance between two points. Each point is a list with two elements."
+        (+ (abs (- (first  coord1) (first  coord2)))
+           (abs (- (second coord1) (second coord2)))))
+      #+END_SRC
+***** tests
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (let* ((coords '((0 0) (1 2) (3 4) (5 6) (7 8) (9 1) (2 3) (4 5))))
+        (format t "===========================
+      Testing manhattan distance:
+      ===========================~2%")
+        (loop for c1 in '((0 0) (1 2))
+              doing (format t "From ~a:~%" c1)
+              doing (loop for c2 in (rest coords)
+                          do (format t "  Manhattan distance from ~a to ~a: ~a~%"
+                                     c1 c2
+                                     (manhattan-distance c1 c2))))))
+      #+END_SRC
+
+**** Euclidean2d-distance
+***** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-utilities.lisp
+      (defun euclidean2d-distance (coord1 coord2)
+        "Returns the euclidean 2d distance between two coordinates.instances of has-coordinates.  This distance is like the standard norm 2 distance, but the results are always integer."
+        (round
+         (sqrt
+          (+ (expt (- (first coord1) (first coord2)) 2)
+             (expt (- (second coord1) (second coord2)) 2)))))
+      #+END_SRC
+***** tests
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (let* ((coords '((0 0) (1 2) (3 4) (5 6) (7 8) (9 1) (2 3) (4 5))))
+        (format t "=============================
+      Testing euclidean2d-distance:
+      =============================~2%")
+        (loop for c1 in '((0 0) (1 2))
+              do (format t "From ~a:~%" c1)
+              do (loop for c2 in (rest coords)
+                       do (format t "  Euclidean2d-distance from ~a to ~a: ~a (~a)~%"
+                                  c1 c2
+                                  (euclidean2d-distance c1 c2)
+                                  (sqrt
+                                   (+ (expt (- (first c1) (first c2)) 2)
+                                      (expt (- (second c1) (second c2)) 2)))))))
+      #+END_SRC
+*** make-distance-matrix
+**** description
+     In this section we write a function to create the distance matrix from a list of coordinates.  The idea is to receive a list with the coordinates and return a matrix with the distance between every pair of elements.  
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-utilities.lisp
+      (defun make-distance-matrix (coordinates
+                                   &optional
+                                     (distance-function #'euclidean2d-distance))
+        "Returns a distance matrix from a list with coordinates.
+        `coordinates' is a list with the coordinates for which we want to compute the distances, and `distance-function' is a function to calculate the distance between two coordinates."
+        (let* ((n (length coordinates))
+               (matrix (make-array (list n n)
+                                   :initial-element 0)))
+          ;; ;; (format t "length: ~a, array: ~a~%" n matrix)
+          (loop for c1 in coordinates
+                for i1 from 0
+                do (loop for c2 in coordinates
+                         for i2 from 0
+                         do (setf (aref matrix i1 i2)
+                                  (funcall distance-function c1 c2))))
+          ;; finally return the matrix
+          matrix))
+      #+END_SRC
+**** tests
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (let* ((coords '((0 0) (1 2) (3 4) (5 6) (7 8) (9 1) (2 3) (4 5)))
+            (manhattan-matrix
+             (make-distance-matrix coords 'manhattan-distance))
+            (euclidean2d-matrix
+             (make-distance-matrix coords 'euclidean2d-distance))
+            (n (length coords)))
+       (format t "=============================
+     Testing make-distance-matrix:
+     =============================~2%")
+       (format t "Manhattan-distance:~2%")
+       (loop for i from 0 below n
+             do (format t "  | ~2d" (aref manhattan-matrix i 0))
+             do (loop for j from 1 below n
+                      do (format t " ~2d" (aref manhattan-matrix i j)))
+             do (format t " |~%"))
+       (format t "~%Euclidean2d-distance:2~%")
+       (loop for i from 0 below n
+             do (format t "  | ~2d" (aref euclidean2d-matrix i 0))
+             do (loop for j from 1 below n
+                      do (format t " ~2d" (aref euclidean2d-matrix i j)))
+             do (format t " |~%"))
+
+       (format t "Checking the contents:~%")
+       (loop for i from 0 below n
+             for c1 in coords
+             do (loop for j from 0 below n
+                      for c2 in coords
+                      do (check-= (aref manhattan-matrix i j)
+                                  (manhattan-distance c1 c2)))))
+
+  
+     #+END_SRC
+** Add the package definition to the tests file
+   #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+   (in-package :vrp)
+   #+END_SRC
+
+** A file to load all the tangled files
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-load-files.lisp
+   (dolist (f (list "src/vrp-package.lisp"
+                    "src/vrp-utilities.lisp"
+                    "src/vrp-random-number-generation.lisp"
+                    "src/vrp-generic-functions.lisp"
+                    "src/vrp-class-definition-macro.lisp"))
+     (format t "Loading ~a...~%" f)
+     (load f))
+   #+END_SRC
+** Function in python to tangle really fast
+   #+BEGIN_SRC python +n -r :results none :exports code :tangle ../src/vrp-py-babel-tangle.sh
+#!/usr/bin/env python3
+# -*- mode: python -**
+
+import fileinput, os
+
+dests = dict()
+"""A dictionary associating absolute file names and file objects."""
+
+counter = dict()
+"""A dictionary associating file objects with count of emitted
+lines."""
+
+dest = None
+"""The current "destination", a file object"""
+
+buf = list()
+"""Buffered lines from the current code block.  Buffering is required
+because we need to drop leading spaces before writing to the file, and
+full contents is required to determine the number of spaces to remove.
+"""
+
+def match_begin(line):
+    """Read a single line and return a file object if it's a #+begin_src, None otherwise.
+
+Also create corresponding entries in dests and counter if they don't already exist."""
+    line = list(filter(
+        len,
+        line.lower().strip().split(" ")))
+
+    if line and line[0] == "#+begin_src":
+        try:
+            beg = line.index(":tangle")
+        except ValueError:
+            return False
+
+        dest = os.path.realpath(os.path.expanduser(line[beg+1]))
+        if not dest in dests.keys():
+            fo = open(dest, 'w')
+            dests[dest] = fo
+            counter[fo] = 0
+        else:
+            fo = dests[dest]
+            # Org mode does this
+            fo.write("\n")
+            counter[fo] += 1
+
+        return fo
+
+def match_end(line):
+    """Return True if line is a #+end_src"""
+    return line.lower().strip().startswith("#+end_src")
+
+def write_buffer(dest, buf):
+    """Drop extra leading spaces from buf, then write to dest."""
+    # First, count how many spaces on the left we must remove.
+    min = 1000
+    for line in buf:
+        ls = len(line.lstrip()) # Left strip
+        if ls: # Ignore empty lines
+            spaces = len(line) - ls
+            if spaces < min:
+                min = spaces
+
+    # Then write the buffer to the file, dropping the extra indent
+    for line in buf:
+        counter[dest] += 1
+        # If the line is empty, dropping the leading space will drop
+        # the terminal \n, and will suppress blank lines.  We don't
+        # want this._
+        dest.write(line[min:-1])
+        dest.write('\n')
+
+for line in fileinput.input():
+    if dest:
+        if match_end(line):
+            write_buffer(dest, buf)
+            buf = list()
+            dest = None
+        else:
+            buf.append(line)
+    else:
+        dest = match_begin(line)
+
+for fn, fo in dests.items():
+    fo.close()
+    fn = os.path.relpath(fn, ".")
+    c = str(counter[fo])
+    print("{0} {1} {2} lines".format(
+        fn,
+        "." * (70 - len(fn) - len(c)),
+        c))
+   #+END_SRC
+
+** Emacs syntax highlight
+   As the previous elements are syntactic sugar, the next emacs-lisp snippet tells the emacs' syntax-highlight mechanism to recognize them as such:
+
+   #+BEGIN_SRC emacs-lisp :results none :exports code :tangle ../vrp-emacs-utils.el
+(font-lock-add-keywords 'lisp-mode
+ '(("(\\(defmacro!\\)" 1 font-lock-keyword-face)
+   ("(defmacro! +\\([^ ]+\\)" 1 font-lock-function-name-face)
+   ("(\\(defbehavior\\)" 1 font-lock-keyword-face)
+   ("(defbehavior +\\([^ ]+\\)" 1 font-lock-function-name-face)
+   ("(\\(then\\)" 1 font-lock-keyword-face)
+   ("(\\(else\\)" 1 font-lock-keyword-face)
+   ("(\\(the-following\\)" 1 font-lock-keyword-face)))
+   #+END_SRC
+** Emacs functions to tangle all but the tests
+*** vrp-org-babel-tangle-collect-blocks-no-tests
+**** description
+     This function collects all the src blocks in the file except those that should be exported to the file passed in the arg excluded-file.
+
+     It is taken from ob-tangle.el from org version 9.2.
+**** code
+   #+BEGIN_SRC emacs-lisp :results none :exports code :tangle ../vrp-emacs-utils.el
+   (defun vrp-org-babel-tangle-collect-blocks-no-tests
+       (&optional language tangle-file exclude-file)
+     "Collect source blocks in the current Org file, excluding blocks
+   tangled to exclude-file.
+   Return an association list of source-code block specifications of
+   the form used by `org-babel-spec-to-string' grouped by language.
+   Optional argument LANGUAGE can be used to limit the collected
+   source code blocks by language.  Optional argument TANGLE-FILE
+   can be used to limit the collected code blocks by target file."
+     (setq exclude-file (or exclude-file "../src/vrp-tests.lisp"))
+     (let ((counter 0) last-heading-pos blocks)
+       (org-babel-map-src-blocks (buffer-file-name)
+         (let ((current-heading-pos
+                (org-with-wide-buffer
+                 (org-with-limited-levels (outline-previous-heading)))))
+           (if (eq last-heading-pos current-heading-pos) (cl-incf counter)
+             (setq counter 1)
+             (setq last-heading-pos current-heading-pos)))
+         (unless (org-in-commented-heading-p)
+           (let* ((info (org-babel-get-src-block-info 'light))
+                  (src-lang (nth 0 info))
+                  (src-tfile (cdr (assq :tangle (nth 2 info)))))
+             (unless (or (string= src-tfile "no")
+                         (and tangle-file (not (equal tangle-file src-tfile)))
+                         (and language (not (string= language src-lang)))
+                         (and exclude-file (string= exclude-file src-tfile)))
+               ;; Add the spec for this block to blocks under its
+               ;; language.
+               (let ((by-lang (assoc src-lang blocks))
+                     (block (org-babel-tangle-single-block counter)))
+                 (if by-lang (setcdr by-lang (cons block (cdr by-lang)))
+                   (push (cons src-lang (list block)) blocks)))))))
+       ;; Ensure blocks are in the correct order.
+       (mapcar (lambda (b) (cons (car b) (nreverse (cdr b))))
+               (nreverse blocks))))
+   #+END_SRC
+  
+*** vrp-org-babel-tangle-not-tests
+**** description
+     This function tangles all the src blocks in the file except those that should be tangled to the file passed in the optional arg excluded-file.  This arg defaults to "src/vrp-tests.lisp".  Other than that, it is exactly org-babel-tangle.
+
+     It is taken from ob-tangle.el from org version 9.2.
+**** code
+   #+BEGIN_SRC emacs-lisp :results none :exports code :tangle ../vrp-emacs-utils.el
+   (defun vrp-org-babel-tangle-no-tests
+       (&optional arg target-file lang exclude-file)
+     "Write code blocks to source-specific files.
+   Extract the bodies of all source code blocks from the current
+   file into their own source-specific files.
+   With one universal prefix argument, only tangle the block at point.
+   When two universal prefix arguments, only tangle blocks for the
+   tangle file of the block at point.
+   Optional argument TARGET-FILE can be used to specify a default
+   export file for all source blocks.  Optional argument LANG can be
+   used to limit the exported source code blocks by language."
+     (interactive "P")
+     (setq exclude-file (or exclude-file "../src/vrp-tests.lisp"))
+     (run-hooks 'org-babel-pre-tangle-hook)
+     ;; Possibly Restrict the buffer to the current code block
+     (save-restriction
+       (save-excursion
+         (when (equal arg '(4))
+       (let ((head (org-babel-where-is-src-block-head)))
+         (if head
+             (goto-char head)
+           (user-error "Point is not in a source code block"))))
+         (let ((block-counter 0)
+           (org-babel-default-header-args
+            (if target-file
+            (org-babel-merge-params org-babel-default-header-args
+                        (list (cons :tangle target-file)))
+              org-babel-default-header-args))
+           (tangle-file
+            (when (equal arg '(16))
+              (or (cdr (assq :tangle (nth 2 (org-babel-get-src-block-info 'light))))
+              (user-error "Point is not in a source code block"))))
+           path-collector)
+       (mapc ;; map over all languages
+        (lambda (by-lang)
+          (let* ((lang (car by-lang))
+             (specs (cdr by-lang))
+             (ext (or (cdr (assoc lang org-babel-tangle-lang-exts)) lang))
+             (lang-f (intern
+                  (concat
+                   (or (and (cdr (assoc lang org-src-lang-modes))
+                        (symbol-name
+                         (cdr (assoc lang org-src-lang-modes))))
+                   lang)
+                   "-mode")))
+             she-banged)
+            (mapc
+             (lambda (spec)
+           (let ((get-spec (lambda (name) (cdr (assoc name (nth 4 spec))))))
+             (let* ((tangle (funcall get-spec :tangle))
+                (she-bang (let ((sheb (funcall get-spec :shebang)))
+                                        (when (> (length sheb) 0) sheb)))
+                (tangle-mode (funcall get-spec :tangle-mode))
+                (base-name (cond
+                        ((string= "yes" tangle)
+                         (file-name-sans-extension
+                          (nth 1 spec)))
+                        ((string= "no" tangle) nil)
+                        ((> (length tangle) 0) tangle)))
+                (file-name (when base-name
+                         ;; decide if we want to add ext to base-name
+                         (if (and ext (string= "yes" tangle))
+                         (concat base-name "." ext) base-name))))
+               (when file-name
+                 ;; Possibly create the parent directories for file.
+                 (let ((m (funcall get-spec :mkdirp))
+                   (fnd (file-name-directory file-name)))
+               (and m fnd (not (string= m "no"))
+                    (make-directory fnd 'parents)))
+                 ;; delete any old versions of file
+                 (and (file-exists-p file-name)
+                  (not (member file-name (mapcar #'car path-collector)))
+                  (delete-file file-name))
+                 ;; drop source-block to file
+                 (with-temp-buffer
+               (when (fboundp lang-f) (ignore-errors (funcall lang-f)))
+               (when (and she-bang (not (member file-name she-banged)))
+                 (insert (concat she-bang "\n"))
+                 (setq she-banged (cons file-name she-banged)))
+               (org-babel-spec-to-string spec)
+               ;; We avoid append-to-file as it does not work with tramp.
+               (let ((content (buffer-string)))
+                 (with-temp-buffer
+                   (when (file-exists-p file-name)
+                     (insert-file-contents file-name))
+                   (goto-char (point-max))
+                   ;; Handle :padlines unless first line in file
+                   (unless (or (string= "no" (cdr (assq :padline (nth 4 spec))))
+                       (= (point) (point-min)))
+                     (insert "\n"))
+                   (insert content)
+                   (write-region nil nil file-name))))
+                 ;; if files contain she-bangs, then make the executable
+                 (when she-bang
+               (unless tangle-mode (setq tangle-mode #o755)))
+                 ;; update counter
+                 (setq block-counter (+ 1 block-counter))
+                 (unless (assoc file-name path-collector)
+               (push (cons file-name tangle-mode) path-collector))))))
+             specs)))
+        (if (equal arg '(4))
+            (org-babel-tangle-single-block 1 t)
+          (vrp-org-babel-tangle-collect-blocks-no-tests
+           lang tangle-file exclude-file)))
+       (message "Tangled %d code block%s from %s" block-counter
+            (if (= block-counter 1) "" "s")
+            (file-name-nondirectory
+             (buffer-file-name
+              (or (buffer-base-buffer) (current-buffer)))))
+       ;; run `org-babel-post-tangle-hook' in all tangled files
+       (when org-babel-post-tangle-hook
+         (mapc
+          (lambda (file)
+            (org-babel-with-temp-filebuffer file
+              (run-hooks 'org-babel-post-tangle-hook)))
+          (mapcar #'car path-collector)))
+       ;; set permissions on tangled files
+       (mapc (lambda (pair)
+           (when (cdr pair) (set-file-modes (car pair) (cdr pair))))
+             path-collector)
+       (mapcar #'car path-collector)))))
+   #+END_SRC
+*** vrp-org-babel-tangle-file-not-tests
+**** description
+     This function tangles all the src blocks in the file except those that should be tangled to the file passed in the optional arg excluded-file.  This arg defaults to "src/vrp-tests.lisp".  Other than that, it is exactly org-babel-tangle-file.
+
+     It is taken from ob-tangle.el from org version 9.2.
+**** code
+   #+BEGIN_SRC emacs-lisp :results none :exports code :tangle ../vrp-emacs-utils.el
+   (defun vrp-org-babel-tangle-file-no-tests
+       (file &optional target-file lang exclude-file)
+     "Extract the bodies of source code blocks in FILE.
+   Source code blocks are extracted with `org-babel-tangle'.
+   Optional argument TARGET-FILE can be used to specify a default
+   export file for all source blocks.  Optional argument LANG can be
+   used to limit the exported source code blocks by language.
+   Return a list whose CAR is the tangled file name."
+     (interactive "fFile to tangle: \nP")
+     (setq exclude-file (or exclude-file "../src/vrp-tests.lisp"))
+  
+     (let ((visited-p (get-file-buffer (expand-file-name file)))
+       to-be-removed)
+       (prog1
+       (save-window-excursion
+         (find-file file)
+         (setq to-be-removed (current-buffer))
+         (mapcar #'expand-file-name
+                 (vrp-org-babel-tangle-no-tests nil
+                                                target-file
+                                                lang
+                                                exclude-file)))
+         (unless visited-p
+           (kill-buffer to-be-removed)))))
+   #+END_SRC
+** Emacs functions to tangle everything
+   This is going to be a simple function to tangle all the required files.
+*** list with all the files to tangle
+**** documentation
+     A list with all the files that should be tangled
+**** code
+    #+BEGIN_SRC emacs-lisp :results none :exports code :tangle ../vrp-emacs-utils.el
+    (defvar vrp-tangle-list
+        `("vrp-suite.org"
+          "vrp-classes.org"
+          "vrp-moments.org"
+          "vrp-data.org"
+          "vrp-neighborhood-exploration-macros.org"
+          "vrp-neighborhood-simulation.org"
+          "vrp-neighborhood-operations.org"
+          "vrp-delta-cost.org"
+          "vrp-search-strategies.org"
+          "vrp-criteria.org"
+          "vrp-algorithms.org"
+          "vrp-initial-routes.org")
+      "A list with all the files that should be tangled.")
+    #+END_SRC
+     
+*** code (newer with py-org-babel-tangle)
+    #+BEGIN_SRC shell :results none :exports code
+    for f in vrp-suite.org vrp-classes.org vrp-moments.org vrp-data.org vrp-neighborhood-exploration-macros.org vrp-neighborhood-simulation.org vrp-neighborhood-operations.org vrp-delta-cost.org vrp-search-strategies.org vrp-algorithms.org;
+    do ./vrp-py-babel-tangle.sh $f;
+    done;
+    #+END_SRC
+   
+*** code (new no tests)
+    #+BEGIN_SRC emacs-lisp :results none :exports code :tangle ../vrp-emacs-utils.el
+    (defun vrp-tangle-all-files ()
+      "Tangles all the required files for the vrp-suite."
+      (interactive)
+      (dolist (file vrp-tangle-list)
+        ;; (log-to-buffer "%s" file)
+        (vrp-org-babel-tangle-file-no-tests file)))
+    #+END_SRC
+   
+*** code (old with tests)
+    #+BEGIN_SRC emacs-lisp :results none :exports code :tangle ../vrp-emacs-utils.el
+    (defun vrp-tangle-all-files-with-tests ()
+      "Tangles all the required files for the vrp-suite."
+      (interactive)
+      (dolist (file vrp-tangle-list)
+        (org-babel-tangle-file file)))
+    #+END_SRC
+   
+** Emacs function to change to the journal
+   The heading should be descriptive enough.
+   #+BEGIN_SRC emacs-lisp :results none :exports code :tangle ../vrp-emacs-utils.el
+   (defun vrp-switch-to-journal-other-frame ()
+     "Pops up the journal on another frame."
+     (interactive)
+     (switch-to-buffer-other-frame "vrp-journal.org"))
+   #+END_SRC
+** Emacs function to change to the repl in other window
+   The heading should be descriptive enough.
+   #+BEGIN_SRC emacs-lisp :results none :exports code :tangle ../vrp-emacs-utils.el
+   (defun vrp-switch-to-repl-other-window ()
+     "Goes to the next window and pops the REPL."
+     (interactive)
+     (switch-to-buffer-other-window "*slime-repl sbcl*"))
+   #+END_SRC
+** Emacs keybindings for vrp
+   #+BEGIN_SRC emacs-lisp :results none :exports code :tangle ../vrp-emacs-utils.el
+   ;; (define-key org-mode-map (kbd "M-m M-v") (make-sparse-keymap))
+   ;; (define-key org-mode-map (kbd "M-m M-v j") 'vrp-switch-to-journal-other-frame)
+   ;; (define-key org-mode-map (kbd "M-m M-v M-j") 'vrp-switch-to-journal-other-frame)
+   ;; ;; keys to change to the repl in the other window
+   ;; (define-key org-mode-map (kbd "M-m M-v r") 'vrp-switch-to-repl-other-window)
+   ;; (define-key org-mode-map (kbd "M-m M-v M-r") 'vrp-switch-to-repl-other-window)
+   ;; (define-key lisp-mode-map (kbd "M-m M-o r") 'vrp-switch-to-repl-other-window)
+   ;; (define-key lisp-mode-map (kbd "M-m M-o M-r") 'vrp-switch-to-repl-other-window)
+   ;; ;; key to insert (load everything.lisp) in the repl
+   ;; (define-key lisp-mode-map (kbd "M-m M-o M-l") (lambda () (interactive) (insert "(load \"src/vrp-load-files.lisp\") (in-package :vrp) (load \"src/neigh-load-files.lisp\")")))
+   #+END_SRC
+   
+* TODO The unit-testing framework
+** documentation
+   In this section we add a unit-testing framework tailored for our needs.
+** code
+*** adding the package
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-unit-testing.lisp 
+     (in-package :vrp)
+     #+END_SRC
+     
+*** defvar *vrp-unit-testing-indent*
+**** documentation
+     A global variable to determine the appropriate indentation when printing the results of the tests
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-unit-testing.lisp 
+     (defparameter *vrp-unit-testing-indent* 3
+       "The indentation that should be used when printing the results of the tests.")
+     #+END_SRC
+     
+*** defvar *vrp-unit-testing-display-results*
+**** documentation
+     A global variable to determine whether or not to print the results of the test.
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-unit-testing.lisp 
+     (defparameter *vrp-unit-testing-display-results* t
+       "Whether or not to print the result of the tests.")
+     #+END_SRC
+*** defvar *vrp-unit-testing-display-output*
+**** documentation
+     A global variable to determine whether or not to print the output information of the tests.
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-unit-testing.lisp 
+     (defparameter *vrp-unit-testing-display-output* t
+       "Whether or not to print the output information of the tests.")
+     #+END_SRC
+*** check-t
+**** documentation
+     A function to test something that should return t.
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-unit-testing.lisp 
+     (defmacro check-t (form)
+       `(let* ((result ,form)
+               (display-form ',form))
+          (progn
+            (if *vrp-unit-testing-display-results*
+                (format t "~vt~:[FAIL~;pass~]"
+                        *vrp-unit-testing-indent*
+                        result))
+            (if *vrp-unit-testing-display-output*
+                (format t " ... Check ~a:  ~30t~a~%"
+                        T display-form))
+            (if (and *vrp-unit-testing-display-results*
+                     (not *vrp-unit-testing-display-output*))
+                (format t "~%"))
+            result)))
+     #+END_SRC
+**** code (original)
+     #+BEGIN_SRC lisp +n -r :results none :exports code 
+     (defmacro check-t (form)
+       `(let* ((result ,form))
+          (progn
+            (if *vrp-unit-testing-display-output*
+                (format t "~vt~:[FAIL~;pass~] ... Check T:   ~30t~a~%"
+                     ,*vrp-unit-testing-indent*
+                     result ',form))
+            result)))
+     #+END_SRC
+**** tests
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (print (check-t (= 2 (+ 1 1))))
+     (print (check-t (= 2 (+ 1 3))))
+
+     (let* ((*vrp-unit-testing-indent* 6))
+       (check-t (= 4 (+ 1 3))))
+     #+END_SRC
+*** check-non-nil
+**** documentation
+     A function to test something that should return non nil
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-unit-testing.lisp 
+     (defmacro check-non-nil (form)
+       `(let* ((result ,form))
+          (progn
+            (if *vrp-unit-testing-display-output*
+                (format t "~vt~:[FAIL~;pass~] ... Check non NIL:   ~30t~a~%"
+                     ,*vrp-unit-testing-indent*
+                     result ',form))
+            result)))
+     #+END_SRC
+**** tests
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (print (check-t (= 2 (+ 1 1))))
+     (print (check-t (= 2 (+ 1 3))))
+
+     (let* ((*vrp-unit-testing-indent* 6))
+       (check-t (= 4 (+ 1 3))))
+     #+END_SRC
+*** check-nil
+**** documentation
+     A function to test something that should return nil
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-unit-testing.lisp 
+     (defmacro check-nil (form)
+       `(let* ((result (not ,form))
+               (display-form ',form))
+          (progn
+            (if *vrp-unit-testing-display-results*
+                (format t "~vt~:[FAIL~;pass~]"
+                        *vrp-unit-testing-indent*
+                        result))
+            (if *vrp-unit-testing-display-output*
+                (format t " ... Check ~a:  ~30t~a~%"
+                        NIL display-form))
+            (if (and *vrp-unit-testing-display-results*
+                     (not *vrp-unit-testing-display-output*))
+                (format t "~%"))
+            result)))
+     #+END_SRC
+**** +code (original)+
+     #+BEGIN_SRC lisp +n -r :results none :exports code 
+     (defmacro check-nil (form)
+       `(let* ((result ,form))
+          (progn
+            (if *vrp-unit-testing-display-output*
+                (format t "~vt~:[pass~;FAIL~] ... Check NIL: ~30t~a~%"
+                     ,*vrp-unit-testing-indent*
+                     result ',form))
+            (not result))))
+     #+END_SRC
+**** tests
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (print (check-nil (= 3 (+ 1 1))))
+     (print (check-nil (= 2 (+ 1 3))))
+     #+END_SRC
+*** defmacro make-test
+**** documentation
+     From here on, all the check macros have the same structure.  I decided to abstract that into a macro called =make-check=.
+     This macro creates a function of the form =check-something=.  It will be used to create the checks in the unit testing.
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-unit-testing.lisp 
+     (defmacro make-check (name operator)
+       (let* ((macro-name (symb 'check- name)))
+         `(defmacro ,macro-name (value form)
+              `(let* ((result (,',operator ,value ,form))
+                      (display-form ',form))
+                (progn
+                  (if *vrp-unit-testing-display-results*
+                      (format t "~vt~:[FAIL~;pass~]"
+                              ,*vrp-unit-testing-indent*
+                              result))
+                  (if *vrp-unit-testing-display-output*
+                      (format t " ... Check ~a:  ~30t~a~%"
+                              ,value display-form))
+                  (if (and *vrp-unit-testing-display-results*
+                           (not *vrp-unit-testing-display-output*))
+                      (format t "~%"))
+                  result)))))
+     #+END_SRC
+**** tests
+***** testing macroexpand
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (pp-expand (make-check str= string=))
+      #+END_SRC
+
+*** check-=
+**** documentation
+     A function to test something that should return a given number
+**** code (without make-test)
+     #+BEGIN_SRC lisp +n -r :results none :exports code 
+     (defmacro check-= (value form)
+       `(let* ((result (= ,value ,form)))
+          (progn
+            (if *vrp-unit-testing-display-output*
+                (format t "~vtCheck ~a: ~20t~:[FAIL~;pass~] ... ~a~%"
+                        ,*vrp-unit-testing-indent*
+                        ,value
+                        result ',form))
+            result)))
+     #+END_SRC
+**** code (with make-test)
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-unit-testing.lisp
+     (make-check = =)
+     #+END_SRC
+**** tests
+***** test with all the output
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (check-= 2 (+ 1 1))
+      (check-= 4 (+ 1 3))
+      (check-= 6 (+ 1 3))
+      #+END_SRC
+
+***** test without the output
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (let* ((*vrp-unit-testing-display-output* nil))
+        (check-= 2 (+ 1 1))
+        (check-= 4 (+ 1 3))
+        (check-= 6 (+ 1 3)))
+      #+END_SRC
+
+***** test without any output
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (let* ((*vrp-unit-testing-display-results* nil)
+             (*vrp-unit-testing-display-output* nil))
+        (check-= 2 (+ 1 1))
+        (check-= 4 (+ 1 3))
+        (check-= 6 (+ 1 3)))
+      #+END_SRC
+*** check-eq
+**** documentation
+     A function to test something that should return a given number
+**** code (without make-test)
+     #+BEGIN_SRC lisp +n -r :results none :exports code 
+     (defmacro check-eq (value form)
+       `(let* ((result (eq ,value ,form)))
+          (progn
+            (if *vrp-unit-testing-display-output*
+                (format t "~vtCheck ~a: ~20t~:[FAIL~;pass~] ... ~a~%"
+                        ,*vrp-unit-testing-indent*
+                        ,value
+                        result ',form))
+            result)))
+     #+END_SRC
+**** code (with make-test)
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-unit-testing.lisp
+     (make-check eq eq)
+     #+END_SRC
+**** tests
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (check-eq 'd 'd)
+     (check-eq 'hello "hello")
+     #+END_SRC
+     
+*** check-str=
+**** documentation
+     A function to test something that should return a given string.
+**** code (without make-test)
+     #+BEGIN_SRC lisp +n -r :results none :exports code 
+     (defmacro check-str= (value form)
+       `(let* ((result (string= ,value ,form)))
+          (progn
+            (if *vrp-unit-testing-display-output*
+                (format t "~vtCheck ~a: ~20t~:[FAIL~;pass~] ... ~a~%"
+                        ,*vrp-unit-testing-indent*
+                        ,value
+                        result ',form))
+            result)))
+     #+END_SRC
+**** code (with make-test)
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-unit-testing.lisp
+     (make-check str= string=)
+     #+END_SRC
+**** tests
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (check-str= "d" "d")
+     (check-str= "hello" (format nil "he~a" "llo"))
+     #+END_SRC
+     
+*** check-list=
+**** documentation
+     A function to test something that should return a list.
+**** code (with make-test)
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-unit-testing.lisp
+     (make-check list= obj=)
+     #+END_SRC
+**** tests
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (check-list= '(1 2 3) '(1 2 3))
+     (check-list= '(1 2 3) (append '(1 2) (list 3)))
+     (check-list= '(1 2 3) (append '(1) (list 2)))
+     #+END_SRC
+     
+*** check-obj=
+**** documentation
+     A function to test something with obj=.
+**** code (with make-test)
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-unit-testing.lisp
+     (make-check obj= obj=)
+     #+END_SRC
+**** tests
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (check-obj= '(1 2 3) '(1 2 3))
+     (check-obj= 5 5)
+     (check-obj= 'hello 'hello)
+     #+END_SRC
+     
+*** deftests
+**** documentation
+     Runs several checks and returns true if all passed.  The failed cases will be stored in a global list.
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-unit-testing.lisp 
+     (defmacro deftests (name &body tests)
+       (let* ((test-code (loop for test in tests
+                               collect `(setf result (and ,test result)))))
+         `(let* ((result t))
+            (if *vrp-unit-testing-display-output*
+                (format t "~%~a:~%" ,name))
+            (progn
+              ,@test-code)
+            result)))
+     #+END_SRC
+* Generic functions
+  In this section we present the generic functions that we are going to use in the suite.
+** declare the package in vrp-generic-functions.lisp
+   #+BEGIN_SRC lisp +n -r :results none :exports none :tangle ../src/vrp-generic-functions.lisp 
+   (in-package :vrp)
+   #+END_SRC
+** clone
+
+A clone method for the classes.
+
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-generic-functions.lisp 
+
+;;;{{{ clone
+(defgeneric clone (x)
+  (:documentation "Returns a clone of the given instance."))
+
+(defmethod clone ((x (eql nil)))
+  "The clone of nil is nil."
+  nil)
+
+(defmethod clone ((x number))
+  "The clone of a number is the number itself."
+  x)
+
+(defmethod clone ((x string))
+  "The clone of a string is a new string."
+  (copy-seq x))
+
+(defmethod clone ((x symbol))
+  "The clone of a string is a new string."
+  (copy-symbol x t))
+
+(defmethod clone ((l list))
+  "The clone of a list is a new list with each element cloned."
+  (loop for e in l
+        collecting (clone e)))
+
+(defmethod clone ((f function))
+  "The clone of a function is the same function.  THIS IS NOT A CLONE."
+   f)
+
+(defun clone-1d-array (x)
+  "This function returns a clone of a 1d array."
+  (let* ((xsize (array-dimensions x))
+         (n1 (first xsize))
+         (adjustable (adjustable-array-p x))
+         (fpointer (if (array-has-fill-pointer-p x)
+                       (fill-pointer x)))
+         (result (if adjustable
+                     (then
+                       (make-array (list n1) :adjustable t
+                                   :fill-pointer fpointer))
+                     (else
+                       (make-array (list n1))))))
+    (loop for i from 0 below n1
+          doing (setf (aref result i)
+                      (clone (aref x i))))
+    ;; return result
+    result))
+
+(defun clone-2d-array (x)
+  (let* ((xsize (array-dimensions x))
+         (n1 (first xsize))
+         (n2 (second xsize))
+         (result (make-array (list n1 n2))))
+    (loop for i from 0 below n1
+          doing (loop for j from 0 below n2
+                      doing (setf (aref result i j)
+                                  (clone (aref x i j)))))
+    ;; return result
+    result))
+
+(defmethod clone ((x array))
+  (let* ((xsize (array-dimensions x))
+         (n2 (second xsize)))
+    (if n2 ;; it is a 2d array
+        (then (clone-2d-array x))
+        (else (clone-1d-array x)))))
+
+(defmethod clone ((x hash-table))
+  (let* ((result (make-hash-table)))
+    (loop for key being the hash-key of x
+           using (hash-value value)
+          doing (setf (gethash (clone key) result)
+                      (clone value)))
+    ;; let's return result
+    result))
+;;;}}}
+
+#+END_SRC
+** obj=
+
+This is the main comparison function in vrp-suite.  Each class must define how to compare two instances of itself.
+
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-generic-functions.lisp 
+;;;{{{ obj=
+(defgeneric obj= (x y)
+  (:documentation "Returns t if two instances are equal."))
+
+(defmethod obj= ((x t) (y t))
+  "Unless explicitly stated, instances of two different classes are not obj="
+  nil)
+
+(defmethod obj= ((x symbol) (y symbol))
+  "Two symbols are obj= if they are eq."
+  (eq x y))
+
+(defmethod obj= ((x number) (y number))
+  "Two numbers are obj= if they are =."
+  (= x y))
+
+(defparameter *zero-tol* 1d-12)
+(defmethod obj= ((x real) (y real))
+  "Two numbers are obj= if they are =."
+  (< (abs (- x y)) *zero-tol*))
+
+(defmethod obj= ((x real) (y number))
+  "Two numbers are obj= if they are =."
+  (< (abs (- x y)) *zero-tol*))
+
+(defmethod obj= ((x number) (y real))
+  "Two numbers are obj= if they are =."
+  (< (abs (- x y)) *zero-tol*))
+
+(defmethod obj= ((x string) (y string))
+  "Two strings are obj= if they are string=."
+  (string= x y))
+
+(defmethod obj= ((x list) (y list))
+  "Two lists are obj= if every element are obj="
+  (let* ((lists-are-equal nil))
+    (setf lists-are-equal (= (length x) (length y)))
+    (loop for e1 in x
+          for e2 in y
+          while lists-are-equal
+          doing (unless (obj= e1 e2) (setf lists-are-equal nil)))
+    ;; return lists-are-equal
+    lists-are-equal))
+
+
+;; help functions for the obj= for arrays
+
+(defun obj=1-d-array (x y)
+  "Checks if 2 1d array are obj=."
+  (let* ((xsize (length x))
+         (ysize (length y))
+         (arrays-are-equal (= xsize ysize)))
+    (loop for elt-x across x
+          for elt-y across y
+          while arrays-are-equal
+          doing (unless (obj= elt-x elt-y)
+                  (setf arrays-are-equal nil)))
+    ;; return arrays-are-equal
+    arrays-are-equal))
+
+(defun obj=2d-array (x y)
+  "Returns t if x and y are 2d array of the same size and all its elements are obj=."
+  (let* ((xsize (array-dimensions x))
+         (ysize (array-dimensions y))
+         (n1 (first xsize))
+         (n2 (second xsize))
+         (arrays-are-equal
+          (and (obj= (first ysize) n1)
+               (obj= (second ysize) n2))))
+    (loop for i from 0 below n1
+          while arrays-are-equal
+          doing (loop for j from 0 below n2
+                      while arrays-are-equal
+                      doing (setf arrays-are-equal
+                                  (obj= (aref x i j)
+                                        (aref y i j)))))
+    ;; return arrays-are-equal
+    arrays-are-equal))
+
+(defmethod obj= ((x array) (y array))
+  "Returns t if two arrays are equal. The arrays should be 1d or 2d."
+  (let* ((xsize (array-dimensions x))
+         (ysize (array-dimensions y))
+         (arrays-may-be-equal (obj= xsize ysize)))
+    (if arrays-may-be-equal
+        (cond
+          ((= (length xsize) 1) (obj=1-d-array x y))
+          ((= (length xsize) 2) (obj=2d-array x y))))))
+
+(defmethod obj= ((x hash-table) (y hash-table))
+  (let* ((keysx nil)
+         (keysy nil)
+         (valsx nil)
+         (valsy nil))
+    (loop for key-x being the hash-key of x
+          do (push key-x keysx)
+          do (push (gethash key-x x) valsx))
+
+    (loop for key-y being the hash-key of y
+          do (push key-y keysy)
+          do (push (gethash key-y y) valsy))
+
+    (and (obj= keysx keysy)
+         (obj= valsx valsy))))
+;;;}}}
+#+END_SRC
+* Macro =def-vrp-class= (a macro for the classes definition)
+** documentation
+   After the utilities has been created, we can define some basic classes, such as basic client, basic route, basic solution, and basic problem.
+
+   For each class we must define the class, the print-object method, a clone, and an obj= method.
+
+   Most of these things can be abstracted in a macro that receives a class-name, a list of parents, a string-format for the print-object method, and the slots it should use, and, of course, the slots.
+
+** utilities for the macro
+   For the creation of the macro we define some help functions.  They are created in this section, and will be tangled to vrp-class-definition-macro.lisp
+*** Add the package to the file vrp-class-definition-macro.lisp
+
+    #+BEGIN_SRC lisp +n -r :results none :exports none :tangle ../src/vrp-class-definition-macro.lisp 
+    (in-package :vrp)
+    #+END_SRC
+*** make-obj=-comparison
+
+This function receives a list of slots that should be used to compare to instances of the class, and returns the code of the =obj== method.
+
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-class-definition-macro.lisp
+(defun make-obj=-code (class-name slots)
+  "Returns a list with the obj= methods.
+class-name is the name of the class. slots is a list with the slots that should be used for comparison."
+
+  `(
+    (defmethod obj= ((x ,class-name) (y t))
+      ,(format nil "An instance of ~a and something that is not a ~a are not obj=."
+               class-name class-name)
+      nil)
+  
+    (defmethod obj= ((y t) (x ,class-name))
+      ,(format nil "Something that is not a ~a and an instance of ~a are not obj=."
+               class-name class-name)
+      nil)
+
+    (defmethod obj= ((x ,class-name) (y ,class-name))
+      (and 
+       ,@(loop for s in slots
+               collecting `(obj= (,s x) (,s y)))))))
+#+END_SRC    
+
+**** Test make-obj=-code
+ Let's check that this works the way it is suppossed to work.
+
+ #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+ (print (make-obj=-code 'cvrp-client '(id demand)))
+ #+END_SRC
+*** make-clone
+**** documentation
+     This should be very similar to the =obj== method: it receives the name of the slots it should clone, and... done.  Well, it wasn't that simple.  
+
+      Maybe changing the make-clone-code function this can be fixed, by passing as the first argument to make-instance instead of the class-name that is being defined at that moment, the class-name computed in run time.  I'll give it a try. 
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-class-definition-macro.lisp 
+     (defun make-clone-code (class-name slots)
+       "Returns a list with the clone method.
+     class-name is the name of the class. slots is a list with the slots that should be cloned."
+
+       `(defmethod clone ((obj ,class-name))
+            ,(format nil "Returns a clone of an instance of ~a."
+                     class-name)
+            (make-instance (class-name (class-of obj)) 
+            ,@(loop for x in slots
+                    collecting (make-keyword x) 
+                    collecting `(clone (,x obj))))))
+     #+END_SRC
+
+ Let's check how it works.
+
+ #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+ (print (make-clone-code 'cvrp-client '(id demand delivery)))
+ #+END_SRC
+
+
+ Apparently, it worked.  At least the tangled code was loaded into the REPL. 
+*** make-print-obj-code
+**** documentation
+     The idea is to receive the class name, a format string and list of slots, and then create a print-object method like
+
+     #+BEGIN_EXAMPLE
+     (make-print-obj-code 'basic-client "<client ~a>" '(id))    
+     #+END_EXAMPLE
+
+     And it should expand into
+
+      #+BEGIN_EXAMPLE
+      (defmethod print-object ((obj basic-client) stream)
+        (format stream "<client: ~a>" (id obj)))
+      #+END_EXAMPLE
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-class-definition-macro.lisp
+     (defun make-print-obj-code (class-name format-string slots)
+       `(defmethod print-object ((obj ,class-name) stream)
+          (format stream ,format-string
+                  ,@(mapcar (lambda (x) `(,x obj)) slots))))
+     #+END_SRC
+
+**** Test make-print-obj-code
+
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (print (make-print-obj-code 'cvrp-client "<client ~a, ~a ~a>" 
+       '(id delivery demand)))
+     #+END_SRC     
+
+*** make-constructor-code
+**** documentation
+     This function returns the code for the constructor function.  It receives a class, a constructor name, and a lambda list with the slots that should be initialized.  For example:
+
+      #+BEGIN_EXAMPLE
+      (make-constructor-code cvrp-client new-cvrp-client (id &key (demand 0) (delivery 0)))    
+      #+END_EXAMPLE
+
+      Should return
+
+      #+BEGIN_EXAMPLE
+      (defun new-cvrp-client (id &key (demand 0) (delivery 0))
+        (make-instance 'cvrp-client :id id :demand demand :delivery delivery))
+      #+END_EXAMPLE
+
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-class-definition-macro.lisp 
+     (defun make-constructor-code (class-name constructor-name lambda-list)
+       `(defun ,constructor-name ,lambda-list
+          (make-instance ',class-name 
+            ,@(flatten 
+               (loop for slot in lambda-list
+                     if (and (atom slot)
+                             (not (string= "&" (subseq (symbol-name slot) 0 1))))
+                     collect `(,(make-keyword slot) ,slot)
+                     if (listp slot)
+                     collect `(,(make-keyword (car slot)) ,(car slot)))))))
+     #+END_SRC
+
+**** Test make-constructor-code
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (print
+      (make-constructor-code 'cvrp-client 'new-cvrp-client '(id &key (demand 0) (delivery 0))))
+    #+END_SRC
+*** is-a-class-name
+**** documentation
+     This is function that test if an object is an instance is of given class.  If it is, return it, otherwise return nil.  For example:
+
+      #+BEGIN_EXAMPLE
+      (make-is-a-class-name cvrp-client) 
+       #+END_EXAMPLE
+
+      Should return:
+      #+BEGIN_EXAMPLE
+ (defgeneric is-a-crvrp-client (obj)
+   (:documentation "Returns obj if it is an instance of CVRP-CLIENT, nil otherwise."))
+
+ (defmethod is-a-cvrp-client ((obj t))
+   "By default, things are not instances of BASIC-CLIENT."
+    nil)
+
+ (defmethod is-a-crvrp-client ((obj cvrp-client))
+   "If it is an basic client return it."
+    obj)
+      #+END_EXAMPLE
+ 
+      This is the helper function to create the code for this function.
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-class-definition-macro.lisp 
+      (defun make-is-a-class-name (class-name)
+        (let* ((function-name (symb "is-a-" class-name)))
+          `((defgeneric ,function-name (obj)
+              (:documentation 
+                ,(format nil "Returns obj if it is an instance of ~a."
+                         class-name)))
+            (defmethod ,function-name ((obj t))
+                ,(format nil "By default, things are not instances of ~a." 
+                         class-name)
+                nil)
+            (defmethod ,function-name ((obj ,class-name))
+              ,(format nil "If obj is an instance of ~a, return it."
+                       class-name)
+                obj))))
+      #+END_SRC   
+**** test make-is-a-class-name
+
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (print 
+       (make-is-a-class-name 'cvrp-client))
+     #+END_SRC     
+
+     With these help functions, we can create a macro to automate the creation of new classes in vrp-suite.
+*** make-slot-definition
+**** description
+     This function receives a list with a slot data and returns a slot definition.  For example:
+
+     #+BEGIN_SRC lisp +n -r :results none :exports code
+     (make-slot-definition 'id)
+     #+END_SRC
+
+     Returns:
+
+     #+BEGIN_EXAMPLE
+     `(id :accessor id :initarg :id)
+     #+END_EXAMPLE
+
+     However, if there are =:accessor=, =:initarg= or =:initform= keywords, they are kept.
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-class-definition-macro.lisp 
+     (defun make-slot-definition (slot-data)
+       (let* ((slot-name (first slot-data))
+              (data-with-accessor
+               (if (not (member :accessor slot-data))
+                   (append  `(,slot-name)
+                             `(:accessor ,slot-name)
+                             (rest slot-data))
+                   (else
+                     slot-data)))
+              (data-with-initarg
+               (if (not (member :initarg data-with-accessor))
+                   (append  data-with-accessor
+                            `(:initarg ,(make-keyword slot-name)))
+                   (else
+                     data-with-accessor))))
+         ;; return the final data
+         data-with-initarg))
+     #+END_SRC
+**** tests
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (print (make-slot-definition '(id)))
+     (print (make-slot-definition '(id :accessor ide)))
+     (print (make-slot-definition '(id :initform :pepe)))
+     (print (make-slot-definition '(id :accessor ide :initform 6)))
+     #+END_SRC
+
+     It seems to work the way it was planned, so we'll add it to the macro.
+    
+** code for the macro def-vrp-class
+*** documentation
+    The idea is to have a macro similar to defclass, that it also generates the =obj== method, the =clone= method, a constructor, and an =is-a-class-name= function.  And in this second version, we'll be able to define only the name of each slot.  For instance, we could say:
+
+    #+BEGIN_EXAMPLE
+    (def-vrp-class cvrp-client ()
+ 
+      ((id) (demand) (delivery))
+
+      :documentation "A class to represent a capacitated client."
+      :constructor (new-cvrp-client (id &key (demand 0) (delivery 0)))
+      :print-object-string ("<cvrp-client ~a, ~a, ~a>" id demand delivery)
+      :slots-for-obj= (id demand delivery)
+      :slots-for-clone (id demand delivery))
+     #+END_EXAMPLE
+
+     and get the following code
+
+     #+BEGIN_EXAMPLE
+     (defclass cvrp-client ()
+ 
+       ((id :accessor id :initarg :id)
+        (demand :accessor demand :initarg :demand)
+        (delivery :accessor delivery :initarg :delivery))
+    
+        :documentation "A class to represent a capacitated client.")
+
+     (DEFUN NEW-CVRP-CLIENT (ID &KEY (DEMAND 0) (DELIVERY 0))
+        (MAKE-INSTANCE 'CVRP-CLIENT :ID ID :DEMAND DEMAND :DELIVERY DELIVERY))
+
+     (defmethod print-object ((obj basic-client) stream)
+       (format stream "<client: ~a ~a ~a>" (id obj) (demand obj) (demand obj)))
+
+     (DEFMETHOD OBJ= ((X CVRP-CLIENT) T)
+       "An instance of CVRP-CLIENT and something that is not a CVRP-CLIENT are not obj=."
+       NIL)
+
+     (DEFMETHOD OBJ= (T (X CVRP-CLIENT))
+       "Something that is not a CVRP-CLIENT and an instance of CVRP-CLIENT are not obj=."
+       NIL)
+
+     (DEFMETHOD OBJ= ((X CVRP-CLIENT) (Y CVRP-CLIENT))
+       (AND
+        (IF (NEXT-METHOD-P)
+            (CALL-NEXT-METHOD)
+            T)
+        (OBJ= (ID X) (ID Y)) 
+        (OBJ= (DEMAND X) (DEMAND Y))
+        (OBJ= (DELIVERY X) (DELIVERY Y))))
+
+     (DEFMETHOD CLONE ((X CVRP-CLIENT))
+       "Returns a clone of an instance of CVRP-CLIENT."
+       (MAKE-INSTANCE 'CVRP-CLIENT :ID (ID X) :DEMAND (DEMAND X) :DELIVERY (DELIVERY X)))
+ 
+     #+END_EXAMPLE
+
+     We should get the slots with the accessors and initargs.  If the user still wants to define it's own =accessor= or =initarg= she can add them as well.  It would be something like this:
+ 
+     #+BEGIN_EXAMPLE
+     (def-vrp-class cvrp-client ()
+ 
+       ((id)
+        (demand :accessor client-demand)
+        (delivery :initarg :dvr))
+
+       :documentation "A class to represent a capacitated client."
+       :constructor (new-cvrp-client (id &key (demand 0) (delivery 0)))
+       :print-object-string ("<cvrp-client ~a, ~a, ~a>" id demand delivery)
+       :slots-for-obj= (id demand delivery)
+       :slots-for-clone (id demand delivery))
+     #+END_EXAMPLE
+  
+     #+BEGIN_EXAMPLE
+     (defclass cvrp-client ()
+ 
+       ((id :accessor id :initarg :id)
+        (demand :accessor client-demand :initarg :demand)
+        (delivery :accessor delivery :initarg :dvr))
+    
+        :documentation "A class to represent a capacitated client.")
+
+      ...  THE REST IS THE SAME AS IN THE PREVIOUS EXAMPLE ...
+ 
+     #+END_EXAMPLE
+
+     With the help functions we have, it should be simple to do it.
+*** code
+     In this new approach, the functions will be optional.  If the corresponding parameter is non nil, then the function is added, otherwise it isn't.
+
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-class-definition-macro.lisp  
+    (defmacro def-vrp-class (class-name parents slots
+                              &key documentation 
+                                constructor 
+                                print-object-string
+                                slots-for-obj=
+                                slots-for-clone)
+
+      (let* (;; first we add the class definition
+             (class-definition
+              `(defclass ,class-name ,parents
+                   ;; the next line was added to create the slot data
+                      ,(mapcar (lambda (x) (make-slot-definition x)) slots)
+                       (:documentation ,documentation)))
+             ;; the code for the constructor
+             (constructor-code
+              (if constructor
+                  (make-constructor-code class-name
+                                          (car constructor)
+                                          (cadr constructor))))
+             ;; the code for the print-object
+             (print-object-code
+              (if print-object-string
+                  (make-print-obj-code
+                   class-name
+                   (car print-object-string) 
+                   (rest
+                    print-object-string))))         
+             ;; the code for obj=
+             (obj=-code
+              (if slots-for-obj=
+                  (make-obj=-code class-name slots-for-obj=)))
+             ;; the code for the clone method
+             (clone-code
+              (if slots-for-clone
+                  (make-clone-code class-name slots-for-clone)))
+             ;; the code for is a class-name
+             (is-a-class-name-code
+              (make-is-a-class-name class-name))
+             ;; the code with everything
+             ;; initially it only has the class defintion and the
+             ;; is-a-class-name function
+             ;; the reverse is necessary because if it is not there
+             ;; the methods are defined before the generic-function
+             ;; and this creates warnings in sbcl.
+             (code `(,@(reverse is-a-class-name-code) ,class-definition)))
+
+        ;; here we add the code for everything
+        ;; first the constructor
+        (if constructor-code
+            (push constructor-code code))
+        ;; now we add the print-object-code, if it not nil
+        (if print-object-code
+            (push print-object-code code))
+        ;; now we add the clone-code, if it not nil
+        (if clone-code
+            (push clone-code code))
+        ;; here we reverse code that has the wrong order
+        ;; because of the pushs
+        (setf code (reverse code))
+        ;; the obj=-code
+        (if obj=-code
+            (setf code (append code obj=-code)))
+        `(progn 
+           ,@code)))
+    #+END_SRC
+*** tests
+**** with everything
+     First, let's test it with everything.
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (pp-expand
+      (def-vrp-class cvrp-client ()
+        ((id) (demand) (delivery))
+        :documentation "A class to represent a client with capacity."
+        :constructor (new-cvrp-client (id &key (demand 0) (delivery 0)))
+        :print-object-string ("<cvrp-client ~a, ~a, ~a>" id demand delivery)
+        :slots-for-obj= (id demand delivery)
+        :slots-for-clone (id demand delivery)))
+     #+END_SRC
+
+**** now only with the class definition
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (pp-expand
+       (def-vrp-class cvrp-client ()
+         ((id) (demand) (delivery))
+         :documentation "A class to represent a client with capacity."))
+      #+END_SRC
+
+
+OK.  Seems to be working right.
+**** now with some parameters missing
+     Now, let's test it with some parameters missing.
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (pp-expand
+      (def-vrp-class cvrp-client ()
+        ((id) (demand) (delivery))
+        :documentation "A class to represent a client with capacity."
+        :slots-for-obj= (id demand delivery)
+        :slots-for-clone (id demand delivery)))
+     #+END_SRC
+
+* Classes to solve a VRP using this suite
+  In this section we add all the classes needed for the solution of an VRP using this suite.  This is done in the file vrp-classes.org.

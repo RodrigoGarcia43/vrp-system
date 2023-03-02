@@ -1,0 +1,43 @@
+#+TITLE: Neighborhood Macros
+#+AUTHOR: Hector F. Masson
+#+EMAIL: h.masson1911@gmail.com
+
+
+
+* Description
+  In this file, I'm going to introduce some macros that are used as a shortcut working with CLOS. The src blocks
+  will be tangled to ../src/neigh-class-macros.lisp.
+
+
+* Add the package to the tangled file
+  #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-class-macros.lisp 
+  (in-package :vrp)
+  #+END_SRC
+
+
+* Make-constructor
+  This macro works as a constructor of a given class name.
+  
+  #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-class-macros.lisp 
+    (defmacro make-constructor (constructor-name class-name)
+      `(defun ,constructor-name ()
+	 (make-instance ',class-name)))
+  #+END_SRC
+
+
+* New-class
+  This macro works as a template for definition of new classes. This macro also create a constructor for the class 
+  by using =make-constructor=.
+
+  #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-class-macros.lisp 
+    (defmacro new-class (class-name
+			 (&rest parents)
+			    (&rest slots)
+			       (&key documentation)
+				  (constructor-name))
+      `(prog1
+	   (defclass ,class-name (,@parents)
+	     (,@slots)
+	     (:documentation ,documentation))
+	 (make-constructor ,constructor-name ,class-name)))
+  #+END_SRC

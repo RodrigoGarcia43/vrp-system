@@ -1,0 +1,3084 @@
+#+TITLE: VRP solver environment
+#+AUTHOR: Fernando Rodriguez Flores
+#+AUTHOR: Rodrigo Garcia Gomez
+#+AUTHOR: Heidy Abreu Fumero
+
+* Add the package to the file
+  #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+  (in-package :vrp)
+  #+END_SRC
+
+
+* Generic-functions for the blueprint-updates
+** description
+   In this section we'll add the generic functions that will be used to generate the code for a specific neighborhood criterion.
+
+   All these functions will receive the following arguments:
+
+   - neighborhood-description
+     This is a list with the pseudo-natural description of the neighborhood.
+   - search-strategy
+     This is an instance of a class that represents a search strategy.  Some examples can be exhausitve, random, smart-search, optimal-search, etc.
+   - other-strategies
+     These other strategies include
+     - how to select the best-neighbor
+       - best-improvement,
+       - random-improvement,
+       - first-improvement, etc.
+     - what to return
+       - better or nil,
+       - the best, even if it is worse.
+       - a list with candidates, etc
+   - blueprint
+     An instance of neighborhood-strategy-blueprint.  If we use an instance of a class to store the partial results, then we can use auxiliary methods in the generation of the neighborhood.
+
+** generate-loop-conditional
+*** description
+Here we define what is the conditional inside the main loop. neigh-generator, the condition is =current-solution= different from nil.    
+*** generic-function
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+  (defgeneric generate-loop-conditional (neighborhood-description
+			     search-strategy
+			     other-strategies
+			     where-to-store-it)
+    (:documentation "this funtions generates loop conditional."))
+#+END_SRC
+*** method (list t t t)
+**** method generate-loop-conditional (t t t basic-blueprint) (primary)
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+	(defmethod generate-loop-conditional
+	    (description
+	     strategy
+	     other-strategies
+	     (where-to-store-it basic-neighborhood-strategy-blueprint))
+	  ())
+      #+END_SRC
+
+*** method (list use-neigh-tree t t)
+**** description
+     When using neigh-tree, the loop condition is current-solution different from nil
+**** method generate-loop-conditional (t t use-neigh-tree basic-blueprint)
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+	(defmethod generate-loop-conditional
+	    (description
+	     strategy
+	     (other-strategies use-neigh-tree)
+	     (where-to-store-it basic-neighborhood-strategy-blueprint))
+
+	  (push `current-solution
+		(loop-conditional where-to-store-it)))
+      #+END_SRC
+
+** generate-inside-let-initializations
+*** description
+    In this generic function we create the initializations that should go inside the let in the neighborhood search function.
+
+    In a very basic neighborhood exploration, we need to initialize the variable =ops-list= to nil.  This a variable that is used to store all the simpler-operations needed to create the current neighbor.
+
+    So, the very basic method will just add the =ops-list= initialization.
+
+*** generic-function
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+    (defgeneric generate-inside-let-initializations
+        (neighborhood-description
+         search-strategy
+         other-strategies
+         where-to-store-it)
+      (:documentation "This function receives a description of a neighborhood (in a human readable form) updates the argument where-to-store-it with the initializations that should be made inside the let."))
+    #+END_SRC
+*** method (t t t t) 
+**** description
+     In this case, we'll only add the =ops-list= initialization to nil and *vrp-stop-neighborhood-search* to nil. 
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+      (defmethod generate-inside-let-initializations
+          (description
+           strategy
+           other-strategies
+           (where-to-store-it basic-neighborhood-strategy-blueprint))
+
+        (push `(*vrp-stop-neighborhood-search* nil)
+              (initializations-inside-the-let where-to-store-it))
+        (push `(ops-list nil)
+              (initializations-inside-the-let where-to-store-it)))
+      #+END_SRC
+**** test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            )
+
+
+       (bformat t "Testing generate-inside-let-initializations...")
+
+       ;;generate the code
+       (generate-inside-let-initializations t t t bp1)
+       ;; check
+       (format t "Added ops-list and stop-neighborhood-search? ")
+       (check-obj= `((ops-list nil)
+                     (*vrp-stop-neighborhood-search* nil))
+                   (initializations-inside-the-let bp1))
+       )
+     #+END_SRC
+
+
+*** method :after(t exhaustive-neighborhood-search-strategy t t)
+**** description
+     Here we define the generator type (exhaustive in this case)
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+	(defmethod generate-inside-let-initializations :after
+	    (description
+	     (strategy exhaustive-neighborhood-search-strategy)
+	     other-strategies
+	     (where-to-store-it basic-neighborhood-strategy-blueprint))
+
+	  (push `(expl-type 'exhaustive-exploration)
+		(initializations-inside-the-let where-to-store-it)))
+      #+END_SRC
+
+*** method :after(t random-neighborhood-search-strategy t t)
+**** description
+     Here we define the generator type (exhaustive in this case)
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+	(defmethod generate-inside-let-initializations :after
+	    (description
+	     (strategy random-neighborhood-search-strategy)
+	     other-strategies
+	     (where-to-store-it basic-neighborhood-strategy-blueprint))
+
+	  (push `(expl-type 'random-exploration)
+		(initializations-inside-the-let where-to-store-it)))
+      #+END_SRC
+
+*** method :after(t t use-eval-graph t)
+**** description
+     In this :after method, we'll initialize the current-cost.
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+      (defmethod generate-inside-let-initializations :after
+          (description
+           strategy
+           (other-strategies use-eval-graph)
+           (where-to-store-it basic-neighborhood-strategy-blueprint))
+
+        (push `(current-cost 0)
+              (initializations-inside-the-let where-to-store-it)))
+      #+END_SRC
+**** test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            (dcost-class (make-instance
+                          'search-with-delta-cost-computation))
+            )
+
+
+       (bformat t "Testing generate-inside-let-initializations...")
+
+       ;;generate the code
+       (generate-inside-let-initializations
+        t t dcost-class bp1)
+
+       (format t "let-initializations: ~a~%"
+               (initializations-inside-the-let bp1))
+       ;; check
+       (format t "Added ops-list and stop-neighborhood-search? ")
+       (check-obj= `((current-delta-cost 0)
+                     (ops-list nil)
+                     (*vrp-stop-neighborhood-search* nil))
+                   (initializations-inside-the-let bp1))
+       )
+     #+END_SRC
+
+*** method :after(t t use-neigh-tree t)
+**** description
+     In this :after method, we'll build the neigh-tree, initialize the solution generator and generate the first (current) solution.
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+	(defmethod generate-inside-let-initializations :after
+	    (description
+	     strategy
+	     (other-strategies use-neigh-tree)
+	     (where-to-store-it basic-neighborhood-strategy-blueprint))
+
+	  (push `(neigh-tree (build-neighborhood-tree strategy solution))
+		(initializations-inside-the-let where-to-store-it))
+	  (push `(sol-generator (funcall expl-type neigh-tree))
+		(initializations-inside-the-let where-to-store-it))
+	  (push `(current-solution (funcall sol-generator))
+		(initializations-inside-the-let where-to-store-it)))
+      #+END_SRC
+**** test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            (dcost-class (make-instance
+                          'search-with-delta-cost-computation))
+            )
+
+
+       (bformat t "Testing generate-inside-let-initializations...")
+
+       ;;generate the code
+       (generate-inside-let-initializations
+        t t dcost-class bp1)
+
+       (format t "let-initializations: ~a~%"
+               (initializations-inside-the-let bp1))
+       ;; check
+       (format t "Added ops-list and stop-neighborhood-search? ")
+       (check-obj= `((current-delta-cost 0)
+                     (ops-list nil)
+                     (*vrp-stop-neighborhood-search* nil))
+                   (initializations-inside-the-let bp1))
+       )
+     #+END_SRC
+
+
+
+
+*** method :after(t t there-is-a-best-solution t)
+**** description
+     In this :after method, we'll initialize the variable best-neighbor.
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+      (defmethod generate-inside-let-initializations :after
+          (description
+           strategy
+           (other-strategies there-is-a-best-solution)
+           (where-to-store-it basic-neighborhood-strategy-blueprint))
+
+        (push `(best-neighbor nil)
+              (initializations-inside-the-let where-to-store-it))
+        (push `(best-cost initial-best-cost)
+              (initializations-inside-the-let where-to-store-it)))
+      #+END_SRC
+**** test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            (dcost-class (make-instance
+                          'there-is-a-best-solution))
+            )
+
+
+       (bformat t "Testing generate-inside-let-initializations...")
+
+       ;;generate the code
+       (generate-inside-let-initializations
+        t t dcost-class bp1)
+
+       (format t "let-initializations: ~a~%"
+               (initializations-inside-the-let bp1))
+       ;; check
+       (format t "Added (best-neighbor nil)? ")
+       (check-obj= `((best-cost 0)
+                     (best-neighbor nil)
+                     (ops-list nil)
+                     (*vrp-stop-neighborhood-search* nil))
+                   (initializations-inside-the-let bp1)))
+     #+END_SRC
+*** method :after(t t return-best-solution t)
+**** description
+     In this :after method, we'll initialize the variable best-neighbor.
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+      (defmethod generate-inside-let-initializations :after
+          (description
+           strategy
+           (other-strategies return-best-solution)
+           (where-to-store-it basic-neighborhood-strategy-blueprint))
+
+        (push `(best-neighbor-as-solution nil)
+              (initializations-inside-the-let where-to-store-it)))
+      #+END_SRC
+**** test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            (dcost-class (make-instance
+                          'return-best-solution))
+            )
+
+
+       (bformat t "Testing generate-inside-let-initializations...")
+
+       ;;generate the code
+       (generate-inside-let-initializations
+        t t dcost-class bp1)
+
+       (format t "let-initializations: ~a~%"
+               (initializations-inside-the-let bp1))
+       ;; check
+       (format t "Added (best-neighbor nil)? ")
+       (check-obj= `((best-neighbor-as-solution nil)
+                     (best-cost 0)
+                     (best-neighbor nil)
+                     (ops-list nil)
+                     (*vrp-stop-neighborhood-search* nil))
+                   (initializations-inside-the-let bp1)))
+     #+END_SRC
+*** method :after(t t has-candidates-for-best-neighbor t)
+**** description
+     In this :after method, we'll initialize the variable candidates-for-best-neighbor
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+      (defmethod generate-inside-let-initializations :after
+          (description
+           strategy
+           (other-strategies has-candidates-for-best-neighbor)
+           (where-to-store-it basic-neighborhood-strategy-blueprint))
+
+        (push `(candidates-for-best-neighbor nil)
+              (initializations-inside-the-let where-to-store-it)))
+      #+END_SRC
+**** test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            (dcost-class (make-instance
+                          'has-candidates-for-best-neighbor))
+            )
+
+
+       (bformat t "Testing generate-inside-let-initializations...")
+
+       ;;generate the code
+       (generate-inside-let-initializations
+        t t dcost-class bp1)
+
+       (format t "let-initializations: ~a~%"
+               (initializations-inside-the-let bp1))
+       ;; check
+       (format t "Added (best-neighbor nil)? ")
+       (check-obj= `((candidates-for-best-neighbor nil)
+                     (ops-list nil)
+                     (*vrp-stop-neighborhood-search* nil))
+                   (initializations-inside-the-let bp1)))
+     #+END_SRC
+*** method :after(t jump-around-search-strategy t t)
+**** description
+     In this :after method, we'll initialize the variable cumulative-cost.
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+      (defmethod generate-inside-let-initializations :after
+          (description
+           (strategy jump-around-search-strategy)
+           other-strategies
+           (where-to-store-it basic-neighborhood-strategy-blueprint))
+
+        (push `(cumulative-cost 0)
+              (initializations-inside-the-let where-to-store-it))
+
+        (push `(best-jump-cost 0)
+              (initializations-inside-the-let where-to-store-it))
+
+        (push `(best-jump-cost-to-return 0)
+              (initializations-inside-the-let where-to-store-it))
+
+        (push `(best-jump-solution nil)
+              (initializations-inside-the-let where-to-store-it)))
+      #+END_SRC
+**** test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            (dcost-class (make-instance
+                          'has-a-cumulative-delta-cost))
+            )
+
+
+       (bformat t "Testing generate-inside-let-initializations...")
+
+       ;;generate the code
+       (generate-inside-let-initializations
+        t dcost-class t bp1)
+
+       (format t "let-initializations: ~a~%"
+               (initializations-inside-the-let bp1))
+       ;; check
+       (format t "Added (cumulative-delta-cost 0)? ")
+       (check-obj= `((cumulative-delta-cost 0)
+                     (ops-list nil)
+                     (*vrp-stop-neighborhood-search* nil))
+                   (initializations-inside-the-let bp1))
+       )
+     #+END_SRC
+*** method :around (t jump-around-search-strategy return-last t)
+**** description
+     In this :around method, we'll initialize the variable cumulative-delta-cost for the jump-around and we won't call any auxiliary methods.  This is probably an ugly hack and should be improved.
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+      (defmethod generate-inside-let-initializations :around
+          (description
+           (strategy jump-around-search-strategy)
+           (other-strategies jump-around-return-last-neighbor)
+           (where-to-store-it basic-neighborhood-strategy-blueprint))
+
+        (push `(*vrp-stop-neighborhood-search* nil)
+              (initializations-inside-the-let where-to-store-it))
+        (push `(ops-list nil)
+              (initializations-inside-the-let where-to-store-it))
+        (push `(wc (basic-working-copy (clone solution)))
+              (initializations-inside-the-let where-to-store-it))
+        (push `(current-cost 0)
+              (initializations-inside-the-let where-to-store-it))
+
+        (push `(cumulative-cost 0)
+              (initializations-inside-the-let where-to-store-it))
+
+        (push `(best-jump-cost 0)
+              (initializations-inside-the-let where-to-store-it))
+
+        (push `(best-jump-cost-to-return 0)
+              (initializations-inside-the-let where-to-store-it))
+
+        (push `(best-jump-solution nil)
+              (initializations-inside-the-let where-to-store-it)))
+      #+END_SRC
+**** test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            (dcost-class (make-instance
+                          'has-a-cumulative-delta-cost))
+            )
+
+
+       (bformat t "Testing generate-inside-let-initializations...")
+
+       ;;generate the code
+       (generate-inside-let-initializations
+        t dcost-class t bp1)
+
+       (format t "let-initializations: ~a~%"
+               (initializations-inside-the-let bp1))
+       ;; check
+       (format t "Added (cumulative-delta-cost 0)? ")
+       (check-obj= `((cumulative-delta-cost 0)
+                     (ops-list nil)
+                     (*vrp-stop-neighborhood-search* nil))
+                   (initializations-inside-the-let bp1))
+       )
+     #+END_SRC
+** generate-outside-let-initializations
+*** description
+    In this generic function we create the initializations that should go outside the let in the neighborhood search function.
+
+*** generic-function
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+    (defgeneric generate-outside-let-initializations
+        (neighborhood-description
+         search-strategy
+         other-strategies
+         where-to-store-it)
+      (:documentation "This function receives a description of a neighborhood (in a human readable form) updates the argument where-to-store-it with the initializations that should be made outside the let."))
+    #+END_SRC
+*** method (t t t t) (primary)
+**** description
+     Nothing to do.
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+	(defmethod generate-outside-let-initializations
+	    (description
+	     strategy
+	     other-strategies
+	     (where-to-store-it basic-neighborhood-strategy-blueprint))
+	  ())
+      #+END_SRC
+**** test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            )
+
+
+       (bformat t "Testing generate-inside-let-initializations...")
+
+       ;;generate the code
+       (generate-outside-let-initializations t t t bp1)
+       ;; check
+       (format t "Added prepare wc for exploration? ")
+       (check-obj= `((prepare-solution-for-neighborhood-exploration wc))
+                   (initializations-outside-the-let bp1))
+       )
+     #+END_SRC
+*** method (t jump-around-search-strategy t t) 
+**** description
+     In this base case, we don't add the prepare-solution-for-neighborhood-exploration instruction because we do it inside the loop.
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+      (defmethod generate-outside-let-initializations
+          (description
+           (strategy jump-around-search-strategy)
+           other-strategies
+           (where-to-store-it basic-neighborhood-strategy-blueprint))
+        "Don't do anything.  Wait for the auxiliary methods"
+        nil)
+      #+END_SRC
+**** test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            )
+
+
+       (bformat t "Testing generate-inside-let-initializations...")
+
+       ;;generate the code
+       (generate-outside-let-initializations
+        t +jump-around-strategy+ t bp1)
+
+       (format t "(initializations-outside-the-let bp1): ~a~%"
+               (initializations-outside-the-let bp1))
+       ;; check
+       (format t "Added prepare wc for exploration? ")
+       (check-nil (initializations-outside-the-let bp1))
+       )
+     #+END_SRC
+** generate-code-inside-loop
+*** description
+    In this generic function we create the code that we should run inside the main loop.  According to the selection-strategy we are using, here we should do several things.
+
+*** generic-function
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+     (defgeneric generate-code-inside-loop
+         (neighborhood-description
+          search-strategy
+          other-strategies
+          where-to-store-it)
+       (:documentation "This function receives a description of a neighborhood (in a human readable form) updates the argument where-to-store-it with the code that we should run inside the loop."))
+     #+END_SRC
+*** method (t t t t)
+**** description
+     Here, we won't do anything, just wait for the auxiliary methods.
+**** code (don't do anything)
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+      (defmethod generate-code-inside-loop
+          (description
+           strategy
+           other-strategies
+           where-to-store-it)
+        "Don't do anything, just wait for the auxiliary methods."
+        nil)
+      #+END_SRC
+**** test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            (search-with-cost (make-instance
+                               'search-with-delta-cost-computation))
+            )
+
+
+       (bformat t "Testing generate-inside-let-initializations...")
+
+       ;;generate the code
+       (generate-code-inside-loop t t search-with-cost bp1)
+       ;; check
+       (format t "Added prepare wc for exploration? ")
+       (check-obj= `((setf current-delta-cost
+                           (delta-cost (reverse ops-list) wc problem action)))
+                   (code-inside-the-loop bp1))
+       )
+     #+END_SRC
+*** method :after (t t use-eval-graph t)
+**** description
+     In this case, we get the ops-list from the current-solution, apply the operations over the eval-graph, store the solution cost, undo the operations and generate the new current-solution.
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+	(defmethod generate-code-inside-loop :after
+	    (description
+	     strategy
+	     (other-strategies use-eval-graph)
+	     (where-to-store-it basic-neighborhood-strategy-blueprint))
+
+
+
+	  (push `(setf ops-list (from-coordinates-to-operations current-solution))
+		(code-inside-the-loop where-to-store-it))
+	  (push `(do-suite-operations graph ops-list) 
+		(code-inside-the-loop where-to-store-it))
+	  (push `(setf current-cost (output-value (output graph)))
+		(code-inside-the-loop where-to-store-it))
+	  (push `(undo-suite-operations graph ops-list)
+		(code-inside-the-loop where-to-store-it))
+	  (push `(setf current-solution (funcall sol-generator))
+		(code-inside-the-loop where-to-store-it)))
+      #+END_SRC
+**** test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            (search-with-cost (make-instance
+                               'compute-delta-cost-inefficiently))
+            )
+
+
+       (bformat t "Testing generate-code-inside-loop")
+
+       ;;generate the code
+       (generate-code-inside-loop t t search-with-cost bp1)
+       ;; check
+       (format t "Added prepare wc for exploration? ")
+       (check-obj= `((setf current-delta-cost
+                           (delta-cost (reverse ops-list) wc problem action)))
+                   (code-inside-the-loop bp1))
+       )
+     #+END_SRC
+
+*** method :after (t t best-improvement t)
+**** description
+     In this case, we need to update the values of the best-neighbor.
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+      (defmethod generate-code-inside-loop :after
+          (description
+           strategy
+           (other-strategies best-improvement-search-strategy)
+           (where-to-store-it basic-neighborhood-strategy-blueprint))
+
+        (push `(if (< current-cost best-cost)
+                   ;; if it is
+                   (then
+                     ;; let's save the ops that make it
+                     (setf best-neighbor (clone ops-list))
+                     ;; let's update the best-cost
+                     (setf best-cost current-cost)))
+              (code-inside-the-loop where-to-store-it)))
+      #+END_SRC
+**** test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            (search-with-cost (best-improvement-search-strategy))
+            )
+
+
+       (bformat t "Testing generate-code-inside-loop")
+
+       ;;generate the code
+       (generate-code-inside-loop t t search-with-cost bp1)
+
+       (format t "code-inside-the-loop:~%~a~%"
+               (code-inside-the-loop bp1))
+       ;; check
+       (format t "Added best-neighbor update? ")
+       (check-obj= `((if (< current-delta-cost best-delta-cost)
+                         (then
+                           (setf best-neighbor (clone ops-list))
+                           (setf best-delta-cost current-delta-cost)))
+                     (setf current-delta-cost
+                           (delta-cost (reverse ops-list) wc problem action)))
+                   (code-inside-the-loop bp1))
+       )
+     #+END_SRC
+*** method :after (t t first-improvement t)
+**** description
+     In this case, we need to update the values of the best-neighbor and stop the iteration if we find a better neighbor.
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+      (defmethod generate-code-inside-loop :after
+          (description
+           strategy
+           (other-strategies first-improvement-search-strategy)
+           (where-to-store-it basic-neighborhood-strategy-blueprint))
+
+        (push `(if (< current-cost best-cost)
+                   ;; if it is
+                   (then
+                     ;; let's save the ops that make it
+                     (setf best-neighbor (clone ops-list))
+                     ;; let's update the best-cost
+                     (setf best-cost current-cost)
+                     ;; stop the search
+                     (stop-neighborhood-search)))
+              (code-inside-the-loop where-to-store-it)))
+      #+END_SRC
+**** test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            (search-with-cost (first-improvement-search-strategy))
+            )
+
+
+       (bformat t "Testing generate-code-inside-loop")
+
+       ;;generate the code
+       (generate-code-inside-loop t t search-with-cost bp1)
+
+       (format t "code-inside-the-loop:~%~a~%"
+               (code-inside-the-loop bp1))
+       ;; check
+       ;; (format t "Added best-neighbor update? ")
+       ;; (check-obj= `((if (< current-cost best-cost)
+       ;;                   (then
+       ;;                     (setf best-neighbor (clone ops-list))
+       ;;                     (setf best-cost current-cost)))
+       ;;               (setf current-cost
+       ;;                     (delta-cost (reverse ops-list) wc problem action)))
+       ;;             (code-inside-the-loop bp1))
+       )
+     #+END_SRC
+*** method :after (t t has-candidates-for-best-neighbor t)
+**** description
+     In this case, when we find a neighbor better than the current one, we push it into the =candidates-for-best-neighbor= list.
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+      (defmethod generate-code-inside-loop :after
+          (description
+           strategy
+           (other-strategies has-candidates-for-best-neighbor)
+           (where-to-store-it basic-neighborhood-strategy-blueprint))
+
+        (push `(if (< current-cost best-cost)
+                   ;; if it is
+                   (then
+                     ;; let's push the neighbor into the
+                     ;; list of candidates
+                     (push (list (clone ops-list) current-cost)
+                           candidates-for-best-neighbor)))
+              (code-inside-the-loop where-to-store-it)))
+      #+END_SRC
+**** test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            (search-with-cost (make-instance
+                               'has-candidates-for-best-neighbor))
+            )
+
+
+       (bformat t "Testing generate-code-inside-loop")
+
+       ;;generate the code
+       (generate-code-inside-loop t t search-with-cost bp1)
+
+       (format t "code-inside-the-loop:~%~a~%"
+               (code-inside-the-loop bp1))
+       ;; check
+       ;; (format t "Added best-neighbor update? ")
+       ;; (check-obj= `((if (< current-cost best-cost)
+       ;;                   (then
+       ;;                     (setf best-neighbor (clone ops-list))
+       ;;                     (setf best-cost current-cost)))
+       ;;               (setf current-cost
+       ;;                     (delta-cost (reverse ops-list) wc problem action)))
+       ;;             (code-inside-the-loop bp1))
+       )
+     #+END_SRC
+*** method :after (t t random-improvement (without candidates) t)
+**** description
+     In this case, when we find a neighbor better than the current one, we make a probability check and if if successes, we return it.  If it fails and best-solution is not bound yet, we bind it to this solution.  (In case all checks fail, we still return the best-solution found).
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+      (defmethod generate-code-inside-loop :after
+          (description
+           strategy
+           (other-strategies random-improvement-selection-strategy)
+           (where-to-store-it basic-neighborhood-strategy-blueprint))
+
+        (push `(if (< current-cost best-cost)
+                   ;; if it is
+                   (then
+                     ;; let's make a random check:
+                     (let* ((r (random 1.0)))
+                       (if (<= r ,(acceptance-ratio other-strategies))
+                           ;; let's set the best-neighbor
+                           ;; and stop the search
+                           (then
+                             (setf best-neighbor (clone ops-list))
+                             (setf best-cost current-cost)
+                             (stop-neighborhood-search))
+                           (else ;; let's check if
+                             ;; best-neighbor is bound
+                             ;; if it isn't bind it to
+                             ;; this neighbor
+                             ;; [this would be a first-improvement]
+                             (unless best-neighbor
+                               (setf best-neighbor (clone ops-list))
+                               (setf best-cost current-cost)))))))
+              (code-inside-the-loop where-to-store-it)))
+      #+END_SRC
+**** test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            (search-with-cost (make-instance
+                               'random-improvement-selection-strategy))
+            )
+
+
+       (bformat t "Testing generate-code-inside-loop")
+
+       ;;generate the code
+       (generate-code-inside-loop t t search-with-cost bp1)
+
+       (format t "code-inside-the-loop:~%~a~%"
+               (code-inside-the-loop bp1))
+       ;; check
+       ;; (format t "Added best-neighbor update? ")
+       ;; (check-obj= `((if (< current-cost best-cost)
+       ;;                   (then
+       ;;                     (setf best-neighbor (clone ops-list))
+       ;;                     (setf best-cost current-cost)))
+       ;;               (setf current-cost
+       ;;                     (delta-cost (reverse ops-list) wc problem action)))
+       ;;             (code-inside-the-loop bp1))
+       )
+     #+END_SRC
+*** method :after (t jump-around-search-strategy t t)
+**** description
+     Here we apply the operations and set the new cost of the working-copy.
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+      (defmethod generate-code-inside-loop :after
+          (description
+           (strategy jump-around-search-strategy)
+           other-strategies
+           (where-to-store-it basic-neighborhood-strategy-blueprint))
+
+        (push `(progn
+                 ;; as we have a cumulative-delta-cost
+                 ;; we need to update-it
+                 (incf cumulative-cost current-cost)
+
+                 ;; let's apply the operations
+                 (apply-set-of-operations
+                  (reverse ops-list) wc)
+
+                 ;; let's update the solution cost
+                 (setf (cost wc) 
+                       (+ (cost wc)
+                          (+ (delta-distance action)
+                             (total-penalty action)))))
+              (code-inside-the-loop where-to-store-it))
+
+        (push
+         ;; let's check for the best better solution
+         `(if (< current-cost best-jump-cost)
+              (then ;; we found a best-better-solution
+
+                (setf best-jump-solution
+                      (clone (solution wc)))
+                ;; we don't need to update the cost
+                ;; of the best solution
+                ;; because it was already done before.
+
+
+                ;; the best-cost is now 0
+                ;; because the current-neighbor
+                ;; is also updated.
+                (setf best-jump-cost 0)
+
+                ;; here we set the best-jump-cost-to-return
+                ;; to the current-cost
+                ;; because that's the actual difference
+                ;; from the initial solution
+                (setf best-jump-cost-to-return
+                      cumulative-cost)
+                )
+              (else ;; if the current-cost is not better,
+                ;; we need to update the best-cost
+                (incf best-jump-cost (- current-cost))))
+
+              (code-inside-the-loop where-to-store-it)))
+      #+END_SRC
+**** test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            (search-with-cost (jump-around-search-strategy))
+
+            )
+
+
+       (bformat t "Testing generate-code-inside-loop")
+
+
+       ;; (format t "applicable-methods: ~a~%"
+       ;;         (compute-applicable-methods
+       ;;          #'generate-code-inside-loop
+       ;;          (list t +jump-around-strategy+ t bp1)))
+  
+       ;;generate the code
+       (generate-code-inside-loop
+        t
+        +jump-around-strategy+
+        (make-instance 'search-with-cost-computation)
+        bp1)
+  
+
+       (format t "code-inside-the-loop:~%~a~%"
+               (code-inside-the-loop bp1))
+
+
+       ;; check
+       ;; (format t "Added best-neighbor update? ")
+       ;; (check-obj= `((if (< current-cost best-cost)
+       ;;                   (then
+       ;;                     (setf best-neighbor (clone ops-list))
+       ;;                     (setf best-cost current-cost)))
+       ;;               (setf current-cost
+       ;;                     (delta-cost (reverse ops-list) wc problem action)))
+       ;;             (code-inside-the-loop bp1))
+       )
+     #+END_SRC
+*** method :after (t t return-last-neighbor t)
+**** description
+     In this case, we unconditionally set the value of the best-neighbor and the best-cost.  This way, the strategy =return-best-solution= always returns the last-neighbor.
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+      (defmethod generate-code-inside-loop :after
+          (description
+           strategy
+           (other-strategies return-last-neighbor-selection-strategy)
+           (where-to-store-it basic-neighborhood-strategy-blueprint))
+
+        (push `(progn
+                 ;; let's set the best-neighbor
+                 (setf best-neighbor (clone ops-list))
+                 ;; let's update the best-cost
+                 (setf best-cost current-cost))
+              (code-inside-the-loop where-to-store-it)))
+      #+END_SRC
+**** test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            (search-with-cost (make-instance
+                               'return-last-neighbor-selection-strategy))
+            )
+
+
+       (bformat t "Testing generate-code-inside-loop")
+
+       ;;generate the code
+       (generate-code-inside-loop t t search-with-cost bp1)
+
+       (format t "code-inside-the-loop:~%~a~%"
+               (code-inside-the-loop bp1))
+       ;; check
+       (format t "Added best-neighbor update? ")
+       (check-obj= `((progn
+                       (setf best-neighbor (clone ops-list))
+                       (setf best-cost current-cost))
+                     (setf current-cost
+                           (delta-cost (reverse ops-list) wc problem action)))
+                   (code-inside-the-loop bp1))
+       )
+     #+END_SRC
+** generate-code-outside-loop
+*** description
+    In this generic function we generate the code that we should run after the neighborhood was explored. This is the place to create the best-neighbor-as-solution if we have to.
+*** generic-function
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+     (defgeneric generate-code-outside-loop
+         (neighborhood-description
+          search-strategy
+          other-strategies
+          where-to-store-it)
+       (:documentation "This function receives a description of a neighborhood (in a human readable form) and updates the argument where-to-store-it with the code that we should run after the loop finished the exploration of the neighborhood."))
+     #+END_SRC
+*** method (t t t t)
+**** description
+     In this case, we don't do anything.  We just wait for the auxiliary methods.
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+      (defmethod generate-code-outside-loop
+          (description
+           strategy
+           other-strategies
+           where-to-store-it)
+       "Don't do anything.  Wait for the auxiliary methods."
+        nil)
+      #+END_SRC
+*** method :after (t t return-best-solution t)
+**** description
+     In this case, we need to check whether or not there is a best-neighbor and if so, create the best-neighbor-as-solution.
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+      (defmethod generate-code-outside-loop :after
+          (description
+           strategy
+           (other-strategies return-best-solution )
+           (where-to-store-it basic-neighborhood-strategy-blueprint))
+
+        (push `(if best-neighbor
+                   (then
+                     (do-suite-operations graph best-neighbor)
+                     (setf best-neighbor-as-solution
+                           (solution-track graph))
+                     (setf (cost best-neighbor-as-solution)
+                           best-cost)))
+              (code-outside-the-loop where-to-store-it)))
+      #+END_SRC
+**** test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            (search-with-cost (make-instance 'return-best-solution))
+            )
+
+
+       (bformat t "Testing generate-code-outside-loop")
+
+       ;;generate the code
+       (generate-code-outside-loop t t search-with-cost bp1)
+
+       (format t "code-outside-the-loop:~%~a~%"
+               (code-outside-the-loop bp1))
+       ;; check
+       ;; (format t "Added best-neighbor update? ")
+       ;; (check-obj= `((if (< current-cost best-cost)
+       ;;                   (then
+       ;;                     (setf best-neighbor (clone ops-list))
+       ;;                     (setf best-cost current-cost)))
+       ;;               (setf current-cost
+       ;;                     (delta-cost (reverse ops-list) wc problem action)))
+       ;;             (code-inside-the-loop bp1))
+       )
+     #+END_SRC
+*** method *primary* (t jump-around return-last-solution t)
+**** description
+     In this case, we need to check whether or not there is a best-neighbor and if so, create the best-neighbor-as-solution.
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+      (defmethod generate-code-outside-loop
+          (description
+           (strategy jump-around-search-strategy)
+           (other-strategies return-last-neighbor-selection-strategy )
+           (where-to-store-it basic-neighborhood-strategy-blueprint))
+
+        (push `(setf best-neighbor-as-solution
+                 (clone (solution-track graph)))
+              (code-outside-the-loop where-to-store-it)))
+      #+END_SRC
+**** test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            (search-with-cost
+             (make-instance 'return-last-neighbor-selection-strategy))
+            )
+
+
+       (bformat t "Testing generate-code-outside-loop")
+
+       ;;generate the code
+       (generate-code-outside-loop t t search-with-cost bp1)
+
+       (format t "code-outside-the-loop:~%~a~%"
+               (code-outside-the-loop bp1))
+       ;; check
+       ;; (format t "Added best-neighbor update? ")
+       ;; (check-obj= `((if (< current-cost best-cost)
+       ;;                   (then
+       ;;                     (setf best-neighbor (clone ops-list))
+       ;;                     (setf best-cost current-cost)))
+       ;;               (setf current-cost
+       ;;                     (delta-cost (reverse ops-list) wc problem action)))
+       ;;             (code-inside-the-loop bp1))
+       )
+     #+END_SRC
+*** method :after (t t has-candidates-for-best-neighbor t)
+**** description
+     In this case, we set the best-neighbor as a random neighbor selected from the list of candidates.  We have to execute this before the code that return-best-solution inserts, because here is where we set the value of best-neighbor, so we have to be careful in the order of the parents when we define the class.
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+      (defmethod generate-code-outside-loop :after
+          (description
+           strategy
+           (other-strategies has-candidates-for-best-neighbor )
+           (where-to-store-it basic-neighborhood-strategy-blueprint))
+
+        (push `(if candidates-for-best-neighbor
+                   (then
+                     (let* ((selected-position
+                             (random (length candidates-for-best-neighbor)))
+                            (selected-info
+                             (nth selected-position
+                                  candidates-for-best-neighbor)))
+                       (setf best-neighbor
+                             (first selected-info)
+                             best-cost
+                             (second selected-info)))))
+              (code-outside-the-loop where-to-store-it)))
+      #+END_SRC
+**** test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            (search-with-cost
+             (make-instance 'has-candidates-for-best-neighbor))
+            )
+
+
+       (bformat t "Testing generate-code-outside-loop")
+
+       ;;generate the code
+       (generate-code-outside-loop t t search-with-cost bp1)
+
+       (format t "code-outside-the-loop:~%~a~%"
+               (code-outside-the-loop bp1))
+
+       ;; ;; ;; check
+       (format t "Added best-neighbor update? ")
+       (check-obj= 
+        `((if candidates-for-best-neighbor
+          (then
+            (let* ((selected-position
+                    (random (length candidates-for-best-neighbor)))
+                   (selected-info
+                    (nth selected-position candidates-for-best-neighbor)))
+              (setf best-neighbor (first selected-info)
+                    best-cost (second selected-info))))))
+                   (code-outside-the-loop bp1)))
+     #+END_SRC
+** generate-return-code
+*** description
+    In this generic function we generate the code with what to return from the neighborhood-search.
+*** generic-function
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+     (defgeneric generate-return-code
+         (neighborhood-description
+          search-strategy
+          other-strategies
+          where-to-store-it)
+       (:documentation "This function receives a description of a neighborhood (in a human readable form) and updates the argument where-to-store-it with the code that we should run to return the result of the neighborhood exploration."))
+     #+END_SRC
+
+*** method (t t t t)
+**** description
+     In this case, we don't do anything.  We just wait for the auxiliary methods.
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+      (defmethod generate-return-code
+          (description
+           strategy
+           other-strategies
+           where-to-store-it)
+       "Don't do anything.  Wait for the auxiliary methods."
+        nil)
+      #+END_SRC
+     
+*** method :after (t t return-best-solution t)
+**** description
+     In this case, we return the best-neighbor.
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+      (defmethod generate-return-code :after
+          (description
+           strategy
+           (other-strategies return-best-solution)
+           (where-to-store-it basic-neighborhood-strategy-blueprint))
+
+          (push 'best-neighbor-as-solution
+           (return-code where-to-store-it)))
+      #+END_SRC
+**** test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            (search-with-cost (best-improvement-search-strategy))
+            )
+
+
+       (bformat t "Testing generate-return-code")
+
+       ;;generate the code
+       (generate-code-outside-loop t t search-with-cost bp1)
+
+       (format t "return-code:~%~a~%"
+               (return-code bp1))
+       ;; check
+       (format t "Added best-neighbor update? ")
+       (check-obj= `(best-neighbor-as-solution)
+                   (return-code bp1)))
+     #+END_SRC
+*** method :after (t t return-best-cost t)
+**** description
+     In this case, we return the best-neighbor.
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+      (defmethod generate-return-code :after
+          (description
+           strategy
+           (other-strategies return-best-cost)
+           (where-to-store-it basic-neighborhood-strategy-blueprint))
+
+        (push 'best-cost
+              (return-code where-to-store-it)))
+      #+END_SRC
+**** test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            (search-with-cost
+             (make-instance 'return-best-cost))
+            )
+
+
+       (bformat t "Testing generate-return-code")
+
+       ;;generate the code
+       (generate-return-code t t search-with-cost bp1)
+
+       (format t "return-code:~%~a~%"
+               (return-code bp1))
+       ;; check
+       (format t "Added best-neighbor update? ")
+       (check-obj= `(best-cost)
+                   (return-code bp1)))
+     #+END_SRC
+*** tests for return-last-solution
+**** description
+     Here we just test the return-code for return-last-solution
+**** test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            (search-with-cost
+             (make-instance 'return-last-neighbor-selection-strategy))
+            )
+
+
+       (bformat t "Testing generate-return-code")
+
+       ;;generate the code
+       (generate-return-code t t search-with-cost bp1)
+
+       (format t "return-code:~%~a~%"
+               (return-code bp1))
+       ;; check
+       (format t "Added best-neighbor update? ")
+       (check-obj= `(best-cost best-neighbor-as-solution)
+                   (return-code bp1)))
+     #+END_SRC
+*** method :after (t jump-around-search-strategy t t)
+**** description
+     In this case we return the last cumulative-neighbor, and the cumulative-cost.
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+      (defmethod generate-return-code :after
+          (description
+           (strategy jump-around-search-strategy)
+           other-strategies
+           (where-to-store-it basic-neighborhood-strategy-blueprint))
+
+        (push '(clone (solution-track graph))
+              (return-code where-to-store-it))
+        (push 'cumulative-cost
+              (return-code where-to-store-it))
+        (push 'best-jump-solution
+              (return-code where-to-store-it))
+        (push 'best-jump-cost-to-return
+              (return-code where-to-store-it)))
+      #+END_SRC
+**** test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            (search-with-cost (make-instance
+                               'jump-around-search-strategy)))
+
+
+       (bformat t "Testing generate-return-code")
+
+       ;;generate the code
+       (generate-return-code t search-with-cost +best-improvement+ bp1)
+
+       (format t "return-code:~%~a~%"
+               (return-code bp1))
+       ;; check
+       ;; (format t "Added best-neighbor update? ")
+       ;; (check-obj= `(best-neighbor-as-solution)
+       ;;             (return-code bp1))
+       )
+     #+END_SRC
+
+
+
+** prepare-blueprint-for-code-generation
+*** description
+    This function receives a list with the description of the neighborhood criterion, the wanted behavior (as instances of classes) and a blueprint and setups the blueprint with all the info required to write the actual code.
+*** generic-function
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+     (defgeneric prepare-blueprint-for-code-generation
+         (neighborhood-description
+          search-strategy
+          other-strategies
+          where-to-store-it)
+       (:documentation "This function receives a list with the description of the neighborhood criterion, the wanted behavior (as instances of classes) and a blueprint and setups the blueprint with all the info required to write the actual code."))
+     #+END_SRC
+*** method (list t t basic-blueprint)
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+      (defmethod prepare-blueprint-for-code-generation
+          ((description list)
+           strategy
+           other-strategies
+           (where-to-store-it basic-neighborhood-strategy-blueprint))
+
+        ;; first we generate the loop
+        (generate-loop-conditional
+         description strategy other-strategies where-to-store-it)
+        ;; then the inside-let
+        (generate-inside-let-initializations
+         description strategy other-strategies where-to-store-it)
+        ;; next, the outside-let.
+        (generate-outside-let-initializations
+         description strategy other-strategies where-to-store-it)
+        ;; Now what's inside the loop
+        (generate-code-inside-loop
+         description strategy other-strategies where-to-store-it)
+        ;; and then what's outside them
+        (generate-code-outside-loop
+         description strategy other-strategies where-to-store-it)
+        ;; finally, we set the return code
+        (generate-return-code
+         description strategy other-strategies where-to-store-it))
+      #+END_SRC
+
+    
+* Generic-functions for the creation of the functions
+** description
+   In this section we create the functions that will create the code for the actual neighborhood search functions from the blueprints.
+** write-neighborhood-exploration-code
+*** description
+    This function receives a blueprint and returns a list with the code of a neighborhood exploration function.  We should take into acount that all the code-snippets in the blueprint were pushed, so we need to reverse them.
+
+    This function can receive as named parameters extra code that can be inserted at several places in the function.  For instance, it can be inserted at the end of the let, at the end of the initializations outside the let, etc.
+*** generic-function
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+    (defgeneric write-neighborhood-exploration-code
+        (blueprint
+         &key
+           inside-let
+           outside-let
+           inside-loop
+           outside-loop)
+  
+      (:documentation "A function to generate the actual code from a blueprint."))
+    #+END_SRC
+    
+*** method (basic-neighborhood-strategy-blueprint)
+**** description
+     In this method we just add the header of the function, and insert the slots of the blueprints appropriately.
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+	(defmethod write-neighborhood-exploration-code 
+	    ((blueprint basic-neighborhood-strategy-blueprint)
+	     &key
+	       inside-let
+	       outside-let
+	       inside-loop
+	       outside-loop)
+
+	  (declare (ignorable inside-let
+			      outside-let
+			      inside-loop
+			      outside-loop))
+
+	  (let* (;; first, let's compose the body
+		 ;; inside the loop
+		 ;; let's get the code-inside-the-loop
+		 (inner-code (reverse
+			      (append
+			       inside-loop
+			       (code-inside-the-loop blueprint))))
+		 ;;(headings (macro-headings blueprint))
+		 (conditional (loop-conditional blueprint))
+		 (macro-code nil)
+		 (let-code
+		   `(let* ,(reverse
+			    (initializations-inside-the-let blueprint))))
+		 (result)
+		 )
+
+	    ;; let's create the code inside the first
+	    ;; of the macros
+	    ;;		  (setf macro-code `(,@(first headings) ,@inner-code))
+	    ;; let's create the code inside the rest of the macros
+	    ;;		  (loop for macro in (rest (macro-headings blueprint))
+	    ;;			doing (setf macro-code
+	    ;;				    `(,@macro ,macro-code)))
+
+	    ;; Let's create the main loop with conditional and inner-code
+	    (setf macro-code `(loop while ,@conditional do ,@inner-code))
+
+	    ;; next we should write the code outside the macros
+	    (setf result `(,macro-code
+			   ;; this is the code outside the macros
+			   ,@(reverse (code-outside-the-loop blueprint))
+			   ;; and this is the return code
+			   (values ,@ (reverse (return-code blueprint)))))
+
+	    ;; now let's add the let and
+	    ;; the initializations outside the let
+	    (setf result (append
+			  let-code
+			  (reverse (initializations-outside-the-let blueprint))
+			  result))
+
+	    ;; finally, the function heading:
+	    (setf result
+		  `(lambda (solution problem action
+			    &optional (initial-best-cost 0))
+		     (declare (ignorable initial-best-cost
+					 solution problem action))
+
+		     ,result))
+	    ;; and now, let's return result
+	    result))
+      #+END_SRC
+**** test
+***** basic-test
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+      (let* ((*vrp-unit-testing-display-output* nil)
+             (*vrp-unit-testing-display-results* t)
+             (bp1 (basic-strategy-blueprint))
+             (code `((select-route r1)
+                     (select-client c1 from r1)
+                     (insert-client c1 into r1)))
+             )
+
+
+        (bformat t "Testing write-search-code")
+
+        ;; let's populate the blueprint
+        (prepare-blueprint-for-code-generation
+         code +exhaustive-search-strategy+ +best-improvement+ bp1)
+
+        (format t "the generated code:~%~a~%"
+                (write-neighborhood-exploration-code bp1)))
+      #+END_SRC
+
+***** testing :inside-loop
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+      (let* ((*vrp-unit-testing-display-output* nil)
+             (*vrp-unit-testing-display-results* t)
+             (bp1 (basic-strategy-blueprint))
+             (code `((select-route r1)
+                     (select-client c1 from r1)
+                     (insert-client c1 into r1)))
+             )
+
+
+        (bformat t "Testing write-search-code")
+
+        ;; let's populate the blueprint
+        (prepare-blueprint-for-code-generation
+         code +exhaustive-search-strategy+ +best-improvement+ bp1)
+
+        (format t "the generated code:~%~a~%"
+                (write-neighborhood-exploration-code
+                 bp1 :inside-loop `((progn
+                                       (pp-solution wc t) (terpri))))))
+      #+END_SRC
+
+***** testing :inside-loop with empty strategy
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+      (let* ((*vrp-unit-testing-display-output* nil)
+             (*vrp-unit-testing-display-results* t)
+             (bp1 (basic-strategy-blueprint))
+             (code `((select-route r1)
+                     (select-client c1 from r1)
+                     (insert-client c1 into r1)))
+             )
+
+
+        (bformat t "Testing write-search-code")
+
+        ;; let's populate the blueprint
+        (prepare-blueprint-for-code-generation
+         code +exhaustive-search-strategy+ t bp1)
+
+        (format t "the generated code:~%~a~%"
+                (write-neighborhood-exploration-code
+                 bp1 :inside-loop `((progn
+                                       (pp-solution wc t) (terpri))))))
+      #+END_SRC
+
+***** testing :inside-loop first-improvement
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+      (let* ((*vrp-unit-testing-display-output* nil)
+             (*vrp-unit-testing-display-results* t)
+             (bp1 (basic-strategy-blueprint))
+             (code `((select-route r1)
+                     (select-client c1 from r1)
+                     (insert-client c1 into r1)))
+             )
+
+
+        (bformat t "Testing write-search-code")
+
+        ;; let's populate the blueprint
+        (prepare-blueprint-for-code-generation
+         code +exhaustive-search-strategy+ +best-improvement+ bp1)
+
+        ;; (format t "what-happens: ~a~%"
+        ;;         (compute-applicable-methods
+        ;;          'generate-code-outside-loop
+        ;;          (list code
+        ;;                +exhaustive-search-strategy+
+        ;;                +first-improvement+
+        ;;                bp1)))
+
+        (format t "code-outside loop: ~a~%"
+                (code-outside-the-loop bp1))
+
+        (format t "the generated code:~%~a~%"
+                (write-neighborhood-exploration-code
+                 bp1 ;; :inside-loop `((progn
+                     ;;                   (pp-solution wc t) (terpri)))
+                 )))
+      #+END_SRC
+
+***** testing :inside-loop random-improvement
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+      (let* ((*vrp-unit-testing-display-output* nil)
+             (*vrp-unit-testing-display-results* t)
+             (bp1 (basic-strategy-blueprint))
+             (code `((select-route r1)
+                     (select-client c1 from r1)
+                     (insert-client c1 into r1)))
+             )
+
+
+        (bformat t "Testing write-search-code")
+
+        ;; let's populate the blueprint
+        (prepare-blueprint-for-code-generation
+         code
+         +exhaustive-search-strategy+
+         +random-improvement+
+         bp1)
+
+        ;; (format t "what-happens: ~a~%"
+        ;;         (compute-applicable-methods
+        ;;          'generate-code-outside-loop
+        ;;          (list code
+        ;;                +exhaustive-search-strategy+
+        ;;                +first-improvement+
+        ;;                bp1)))
+
+        (format t "code-outside loop: ~a~%"
+                (code-outside-the-loop bp1))
+
+        (format t "the generated code:~%~a~%"
+                (write-neighborhood-exploration-code
+                 bp1 ;; :inside-loop `((progn
+                     ;;                   (pp-solution wc t) (terpri)))
+                 )))
+      #+END_SRC
+
+*** testing random-search
+**** basic-test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            ;; (code1 `((select-route r1)
+            ;;         (select-client c1 from r1)
+            ;;         (insert-client c1 into r1)))
+            (code2 `((select-route r1)
+                    (select-subroute z1 from r1)
+                    (insert-subroute z1 into r1)))
+            )
+
+
+       (bformat t "Testing write-search-code")
+
+       ;; let's populate the blueprint
+       (prepare-blueprint-for-code-generation
+        code2
+        ;; (random-neighborhood-search-strategy 100)
+        +exhaustive-search-strategy+
+        +best-improvement+ bp1)
+
+       (format t "the generated code:~%~a~%"
+               (write-neighborhood-exploration-code bp1)))
+     #+END_SRC
+
+*** testing jump-around-search-strategy
+**** basic-test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            ;; (code1 `((select-route r1)
+            ;;         (select-client c1 from r1)
+            ;;         (insert-client c1 into r1)))
+            (code2 `((select-route r1)
+                    (select-subroute z1 from r1)
+                    (insert-subroute z1 into r1)))
+            )
+
+
+       (bformat t "Testing write-search-code")
+
+       ;; let's populate the blueprint
+       (prepare-blueprint-for-code-generation
+        code2
+        +jump-around-strategy+
+        +jump-around-last-neighbor+
+        bp1)
+
+       (format t "the generated code:~%~a~%"
+               (write-neighborhood-exploration-code bp1)))
+     #+END_SRC
+
+*** testing jump-around-with-best-search-strategy
+**** basic-test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            ;; (code1 `((select-route r1)
+            ;;         (select-client c1 from r1)
+            ;;         (insert-client c1 into r1)))
+            (code2 `((select-route r1)
+                    (select-subroute z1 from r1)
+                    (insert-subroute z1 into r1)))
+            )
+
+
+       (bformat t "Testing write-search-code")
+
+       ;; let's populate the blueprint
+       (prepare-blueprint-for-code-generation
+        code2
+        +jump-around-strategy+
+        +jump-around-best-neighbor+
+        bp1)
+
+       (format t "the generated code:~%~a~%"
+               (write-neighborhood-exploration-code bp1)))
+     #+END_SRC
+
+*** testing return-last-neighbor-selection-strategy
+**** basic-test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            ;; (code1 `((select-route r1)
+            ;;         (select-client c1 from r1)
+            ;;         (insert-client c1 into r1)))
+            (code2 `((select-route r1)
+                    (select-subroute z1 from r1)
+                    (insert-subroute z1 into r1)))
+            )
+
+
+       (bformat t "Testing write-search-code")
+
+       ;; (format t "applicable-methods:~%~a~%"
+       ;;         (compute-applicable-methods
+       ;;          #'generate-code-outside-loop
+       ;;          (list code2 +random-search-strategy+
+       ;;                +random-improvement+ bp1)))
+
+       ;; let's populate the blueprint
+       (prepare-blueprint-for-code-generation
+        code2
+        (jump-around-search-strategy 10)
+        ;; +random-search-strategy+
+        ;; +return-last-neighbor+
+        (make-instance 'jump-around-return-last-neighbor)
+        ;; +best-improvement+
+        ;; +random-improvement+
+
+        bp1)
+
+
+
+       (format t "the generated code:~%~a~%"
+               (write-neighborhood-exploration-code bp1))
+
+       ;; (format t "code-outside-the-loop:~%~a~%"
+       ;;         (code-outside-the-loop bp1))
+       )
+     #+END_SRC
+
+*** testing macros* strategy
+**** basic-test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            ;; (code1 `((select-route r1)
+            ;;         (select-client c1 from r1)
+            ;;         (insert-client c1 into r1)))
+            (code2 `((select-route r1)
+                     (select-client c1 from r1)
+                     (insert-client c1 into r1)))
+            )
+
+
+       (bformat t "Testing write-search-code")
+
+       ;; (format t "applicable-methods:~%~a~%"
+       ;;         (compute-applicable-methods
+       ;;          #'generate-code-outside-loop
+       ;;          (list code2 +exhaustive-search-strategy+
+       ;;                +best-improvement+ bp1)))
+
+       ;; let's populate the blueprint
+       (prepare-blueprint-for-code-generation
+        code2
+        ,*exhaustive-search-strategy*
+        ;; +random-search-strategy+
+        ;; +return-last-neighbor+
+        ,*random-improvement*
+        ;; +best-improvement+
+        ;; +random-improvement+
+
+        bp1)
+
+
+
+       (format t "the generated code:~%~a~%"
+               (write-neighborhood-exploration-code bp1))
+
+       ;; (format t "code-outside-the-loop:~%~a~%"
+       ;;         (code-outside-the-loop bp1))
+       )
+     #+END_SRC
+
+*** testing random-search with candidates
+**** basic-test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            ;; (code1 `((select-route r1)
+            ;;         (select-client c1 from r1)
+            ;;         (insert-client c1 into r1)))
+            (code2 `((select-route r1)
+                    (select-subroute z1 from r1)
+                    (insert-subroute z1 into r1)))
+            )
+
+
+       (bformat t "Testing write-search-code")
+
+       ;; let's populate the blueprint
+       (prepare-blueprint-for-code-generation
+        code2
+        ;; (random-neighborhood-search-strategy 100)
+        +exhaustive-search-strategy+
+        +random-improvement-with-candidates+
+        bp1)
+
+       (format t "the generated code:~%~a~%"
+               (write-neighborhood-exploration-code bp1)))
+     #+END_SRC
+
+*** testing random-search without candidates
+**** basic-test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            ;; (code1 `((select-route r1)
+            ;;         (select-client c1 from r1)
+            ;;         (insert-client c1 into r1)))
+            (code2 `((select-route r1)
+                    (select-subroute z1 from r1)
+                    (insert-subroute z1 into r1)))
+            )
+
+
+       (bformat t "Testing write-search-code")
+
+       ;; let's populate the blueprint
+       (prepare-blueprint-for-code-generation
+        code2
+        ;; (random-neighborhood-search-strategy 100)
+        ,*exhaustive-search-strategy*
+        ,*best-improvement*
+        bp1)
+
+       (format t "the generated code:~%~a~%"
+               (write-neighborhood-exploration-code bp1)))
+     #+END_SRC
+
+*** testing search for repeated elements
+**** basic-test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* nil)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            (code1 `((select-route r1)
+                    (select-client c1 from r1)
+                    (insert-client c1 into r1)))
+            )
+
+
+       (bformat t "Testing write-search-code")
+
+       ;; let's populate the blueprint
+       (prepare-blueprint-for-code-generation
+        code1
+        ;; (random-neighborhood-search-strategy 100)
+        ,*exhaustive-search-strategy*
+        ,*best-improvement*
+        bp1)
+
+       (format t "the generated code:~%~a~%"
+               (write-neighborhood-exploration-code bp1)))
+     #+END_SRC
+
+** make-neighborhood-exploration-function
+*** description
+    This function receives a blueprint and returns a lambda that explores the neighborhood according to the strategies in the blueprint
+*** generic-function
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+    (defgeneric make-neighborhood-exploration-function
+        (blueprint
+         &key
+           inside-let
+           outside-let
+           inside-loop
+           outside-loop)
+
+      (:documentation "A function to create the functions that actually explore the neighborhood."))
+    #+END_SRC
+    
+*** method (basic-neighborhood-strategy-blueprint)
+**** description
+     In this method we just call eval (:-o) on the code returned by =write-neighborhood-exploration-code=.  There must be better ways to do this, but I haven't found them :-(.
+
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+      (defmethod make-neighborhood-exploration-function 
+          ((blueprint basic-neighborhood-strategy-blueprint)
+           &key
+           inside-let
+           outside-let
+           inside-loop
+           outside-loop)
+
+
+        (eval (write-neighborhood-exploration-code
+               blueprint
+               :inside-let inside-let
+               :outside-let outside-let
+               :inside-loop inside-loop
+               :outside-loop outside-loop)))
+      #+END_SRC
+**** test
+***** testing the function
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+      (let* ((*vrp-unit-testing-display-output* nil)
+             (*vrp-unit-testing-display-results* t)
+             (bp1 (basic-strategy-blueprint))
+             (code `((select-route r1)
+                     (select-client c1 from r1)
+                     (insert-client c1 into r1)))
+             )
+
+
+        (bformat t "Testing make-neighborhood-exploration-function")
+
+        ;; let's populate the blueprint
+        (prepare-blueprint-for-code-generation
+         code +exhaustive-search-strategy+ +best-improvement+ bp1)
+
+        (format t "the generated code:~%~a~%"
+                (make-neighborhood-exploration-function bp1)))
+      #+END_SRC
+***** testing the keywords
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+            (let* ((*vrp-unit-testing-display-output* nil)
+                   (*vrp-unit-testing-display-results* t)
+                   (bp1 (basic-strategy-blueprint))
+                   (code `((select-route r1)
+                           (select-client c1 from r1)
+                           (insert-client c1 into r1))))
+
+
+              (bformat t "Testing make-neighborhood-exploration-function")
+
+              ;; let's populate the blueprint
+              (prepare-blueprint-for-code-generation
+               code +exhaustive-search-strategy+ +best-improvement+ bp1)
+
+              (format t "the generated code:~%~a~%"
+                      (make-neighborhood-exploration-function
+                       bp1 :inside-loop
+                       `((progn
+                           (format t "debug: with c1 ~a, r1 ~a"
+                                   (client-selected-at-operation c1 wc)
+                                   r1))))))
+      #+END_SRC
+***** testing an exploration
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                            (5 0 6 7 2 4)  ;1
+                                            (1 8 0 3 9 1)  ;2
+                                            (4 5 1 0 5 7)  ;3
+                                            (4 5 1 5 0 6)  ;4
+                                            (1 5 7 6 9 0)) ;5
+                                            ;0 1 2 3 4 5 
+                                :demands '(20 10 15 40 30)
+                                :capacity 40)
+          (with-basic-cvrp-solution (s1 ((1) (3 4) (5) (2)) p1)
+            (let* ((action (delta-cvrp-action))
+                   (cvrp-action (basic-cvrp-action))
+                   (bp (basic-strategy-blueprint))
+                   (bp1 (basic-strategy-blueprint))
+                   rarb rarabb 
+                   best-neighbor)
+
+
+
+
+              (bformat t "Testing delta-cost")
+
+              ;; let's simulate the solution
+              (simulate-solution s1 p1 cvrp-action)
+              (setf (cost s1) (+ (total-distance cvrp-action)
+                                 (total-penalty cvrp-action)))
+
+              (format t "With cost: ~a~%"
+                      (cost s1))
+              (pp-solution s1 t) (terpri)
+
+              ;; (progn ;; for rarb
+
+              ;;   (prepare-blueprint-for-code-generation
+              ;;   `((select-route r1)
+              ;;     (select-client c1 from r1)
+              ;;     (select-route r2)
+              ;;     (insert-client c1 into r2))
+              ;;   +exhaustive-search-strategy+
+              ;;   +best-improvement+ 
+              ;;   bp)
+
+              ;;  (setf rarb (make-neighborhood-exploration-function bp))
+              ;;  ;; let's get the best neighbor
+              ;;  (setf best-neighbor (funcall rarb s1 p1 action))
+
+              ;;  (if best-neighbor
+              ;;      (then
+              ;;        (format t "After rarb we found...~%")
+              ;;        (format t "With cost ~a...~%" (cost best-neighbor))
+              ;;        (pp-solution best-neighbor t))
+              ;;      (else
+              ;;        (format t "No best neighbor found :-[."))))
+
+              ;; (progn ;; for rarabb
+
+              ;;   (prepare-blueprint-for-code-generation
+              ;;   `((select-route r1)
+              ;;     (select-client c1 from r1)
+              ;;     (select-route r2)
+              ;;     (select-client c2 from r2)
+              ;;     (insert-client c1 into r2)
+              ;;     (insert-client c2 into r1))
+              ;;   +exhaustive-search-strategy+
+              ;;   +best-improvement+ 
+              ;;   bp1)
+
+              ;;   (format t "After rarb s1 is~%")
+              ;;   (pp-solution s1 t) (terpri)
+
+              ;;   ;; (format t "code is:~%~a~%"
+              ;;   ;;         (write-neighborhood-exploration-code bp1))
+
+              ;;  (setf rararbrb (make-neighborhood-exploration-function bp1))
+              ;;  ;; ;; let's get the best neighbor
+              ;;  (setf best-neighbor (funcall rararbrb s1 p1 action))
+
+              ;;  (if best-neighbor
+              ;;      (then
+              ;;        (format t "After rararbrb we found...~%")
+              ;;        (format t "With cost ~a...~%" (cost best-neighbor))
+              ;;        (pp-solution best-neighbor t))
+              ;;      (else
+              ;;        (format t "No best neighbor found :-[.")))
+              ;;  )
+
+
+              (progn ;; for rarabb
+
+                (prepare-blueprint-for-code-generation
+                `((select-route r1)
+                  (select-client c1 from r1)
+                  (select-route r2)
+                  (select-client c2 from r2)
+                  (select-route r3)
+                  (insert-client c1 into r3)
+                  (select-route r4)
+                  (insert-client c2 into r4))
+                +exhaustive-search-strategy+
+                +best-improvement+ 
+                bp1)
+
+                ;; (format t "code is:~%~a~%"
+                ;;         (write-neighborhood-exploration-code bp1))
+
+                (setf rararbrb
+                      (make-neighborhood-exploration-function
+                       bp1))
+               ;; ;; let's get the best neighbor
+               (setf best-neighbor (funcall rararbrb s1 p1 action))
+
+               (if best-neighbor
+                   (then
+                     (format t "After rararbrb we found...~%")
+                     (format t "With cost ~a...~%" (cost best-neighbor))
+                     (pp-solution best-neighbor t))
+                   (else
+                     (format t "No best neighbor found :-[.")))
+               )
+
+              (progn
+                (format t "testing Yoel~%")
+                (with-basic-cvrp-solution (s2 ((1 3) (4) () (2 5)) p1 2)
+                  (pp-solution s2 t) (terpri)
+                  (simulate-solution s2 p1 cvrp-action)
+                  (setf (cost s2) (+ (total-distance cvrp-action)
+                                     (total-penalty cvrp-action)))
+                  (format t "Cost: ~a~%" (cost s2))))
+
+              )))
+      #+END_SRC
+*** tests
+**** test for random-search-strategy
+***** testing the function
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+      (let* ((*vrp-unit-testing-display-output* nil)
+             (*vrp-unit-testing-display-results* t)
+             (bp1 (basic-strategy-blueprint))
+             (code `((select-route r1)
+                     (select-client c1 from r1)
+                     (insert-client c1 into r1)))
+             )
+
+
+        (bformat t "Testing make-neighborhood-exploration-function")
+
+        ;; let's populate the blueprint
+        (prepare-blueprint-for-code-generation
+         code +random-search-strategy+ +random-improvement+ bp1)
+
+        (format t "the generated code:~%~a~%"
+                (write-neighborhood-exploration-code bp1))
+  
+        ;; (format t "the generated code:~%~a~%"
+        ;;         (make-neighborhood-exploration-function bp1))
+        )
+      #+END_SRC
+***** testing the keywords
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+            (let* ((*vrp-unit-testing-display-output* nil)
+                   (*vrp-unit-testing-display-results* t)
+                   (bp1 (basic-strategy-blueprint))
+                   (code `((select-route r1)
+                           (select-client c1 from r1)
+                           (insert-client c1 into r1))))
+
+
+              (bformat t "Testing make-neighborhood-exploration-function")
+
+              ;; let's populate the blueprint
+              (prepare-blueprint-for-code-generation
+               code +exhaustive-search-strategy+ +best-improvement+ bp1)
+
+              (format t "the generated code:~%~a~%"
+                      (make-neighborhood-exploration-function
+                       bp1 :inside-loop
+                       `((progn
+                           (format t "debug: with c1 ~a, r1 ~a"
+                                   (client-selected-at-operation c1 wc)
+                                   r1))))))
+      #+END_SRC
+***** testing an exploration
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                            (5 0 6 7 2 4)  ;1
+                                            (1 8 0 3 9 1)  ;2
+                                            (4 5 1 0 5 7)  ;3
+                                            (4 5 1 5 0 6)  ;4
+                                            (1 5 7 6 9 0)) ;5
+                                            ;0 1 2 3 4 5 
+                                :demands '(20 10 15 40 30)
+                                :capacity 40)
+          (with-basic-cvrp-solution (s1 ((1) (3 4) (5) (2)) p1)
+            (let* ((action (delta-cvrp-action))
+                   (cvrp-action (basic-cvrp-action))
+                   (bp (basic-strategy-blueprint))
+                   (bp1 (basic-strategy-blueprint))
+                   rararbrb 
+                   best-neighbor)
+
+
+
+
+              (bformat t "Testing delta-cost")
+
+              ;; let's simulate the solution
+              (simulate-solution s1 p1 cvrp-action)
+              (setf (cost s1) (+ (total-distance cvrp-action)
+                                 (total-penalty cvrp-action)))
+
+              (format t "With cost: ~a~%"
+                      (cost s1))
+              (pp-solution s1 t) (terpri)
+
+
+              (progn ;; for rarabb
+
+                (prepare-blueprint-for-code-generation
+                `((select-route r1)
+                  (select-client c1 from r1)
+                  (select-route r2)
+                  (select-client c2 from r2)
+                  (select-route r3)
+                  (insert-client c1 into r3)
+                  (select-route r4)
+                  (insert-client c2 into r4))
+                +exhaustive-search-strategy+
+                +best-improvement+ 
+                bp1)
+
+                (format t "code is:~%~a~%"
+                        (write-neighborhood-exploration-code bp1))
+
+                (setf rararbrb
+                      (make-neighborhood-exploration-function
+                       bp1))
+               ;; ;; let's get the best neighbor
+               (setf best-neighbor (funcall rararbrb s1 p1 action))
+
+               (if best-neighbor
+                   (then
+                     (format t "After rararbrb we found...~%")
+                     (format t "With cost ~a...~%" (cost best-neighbor))
+                     (pp-solution best-neighbor t))
+                   (else
+                     (format t "No best neighbor found :-[.")))
+               )
+
+              (progn
+                (format t "testing Yoel~%")
+                (with-basic-cvrp-solution (s2 ((1 3) (4) () (2 5)) p1 2)
+                  (pp-solution s2 t) (terpri)
+                  (simulate-solution s2 p1 cvrp-action)
+                  (setf (cost s2) (+ (total-distance cvrp-action)
+                                     (total-penalty cvrp-action)))
+                  (format t "Cost: ~a~%" (cost s2))))
+
+              )))
+      #+END_SRC
+
+      #+RESULTS:
+      #+begin_example
+      ====================
+       Testing delta-cost
+      ====================
+
+      With cost: 15031
+      S1:
+	  R1: (1)
+	  R2: (3, 4)
+	  R3: (5)
+	  R4: (2)
+
+      code is:
+      (LAMBDA (SOLUTION PROBLEM ACTION &OPTIONAL (INITIAL-BEST-DELTA-COST 0))
+	(DECLARE (IGNORABLE INITIAL-BEST-DELTA-COST SOLUTION PROBLEM ACTION))
+	(LET* ((*VRP-STOP-NEIGHBORHOOD-SEARCH* NIL)
+	       (OPS-LIST NIL)
+	       (CURRENT-DELTA-COST 0)
+	       (WC (MAKE-WORKING-COPY (CLONE SOLUTION)))
+	       (BEST-NEIGHBOR NIL)
+	       (BEST-DELTA-COST INITIAL-BEST-DELTA-COST)
+	       (BEST-NEIGHBOR-AS-SOLUTION NIL))
+	  (PREPARE-SOLUTION-FOR-NEIGHBORHOOD-EXPLORATION WC)
+	  (DOSELECT-ROUTE (R1 WC)
+	    (DOSELECT-CLIENT (C1 R1 WC)
+	      (DOSELECT-ROUTE (R2 WC)
+		(DOSELECT-CLIENT (C2 R2 WC)
+		  (DOSELECT-ROUTE (R3 WC)
+		    (DOINSERT-CLIENT (C1 R3 WC)
+		      (DOSELECT-ROUTE (R4 WC)
+			(DOINSERT-CLIENT (C2 R4 WC)
+			  (SETF CURRENT-DELTA-COST
+				  (DELTA-COST (REVERSE OPS-LIST) WC PROBLEM ACTION))
+			  (IF (< CURRENT-DELTA-COST BEST-DELTA-COST)
+			      (THEN
+				(SETF BEST-NEIGHBOR (CLONE OPS-LIST))
+				(SETF BEST-DELTA-COST CURRENT-DELTA-COST)))))))))))
+	  (IF BEST-NEIGHBOR
+	      (THEN
+		(APPLY-SET-OF-OPERATIONS (REVERSE BEST-NEIGHBOR) WC)
+		(SETF BEST-NEIGHBOR-AS-SOLUTION (SOLUTION WC))
+		(SETF (COST BEST-NEIGHBOR-AS-SOLUTION)
+			(+ (COST SOLUTION) BEST-DELTA-COST))))
+	  (VALUES BEST-NEIGHBOR-AS-SOLUTION)))
+      After rararbrb we found...
+      With cost 27...
+      S1:
+	  R1: (1, 3)
+	  R2: (4)
+	  R3: (2, 5)
+      testing Yoel
+      S2:
+	  R1: (1, 3)
+	  R2: (4)
+	  R3: ()
+	  R4: (2, 5)
+
+      Cost: 27
+      #+end_example
+
+**** test for jump-around-strategy
+***** testing the function
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+      (let* ((*vrp-unit-testing-display-output* nil)
+             (*vrp-unit-testing-display-results* t)
+             (bp1 (basic-strategy-blueprint))
+             (code `((select-route r1)
+                     (select-client c1 from r1)
+                     (insert-client c1 into r1)))
+             )
+
+
+        (bformat t "Testing make-neighborhood-exploration-function")
+
+        ;; let's populate the blueprint
+        (prepare-blueprint-for-code-generation
+         code
+         +jump-around-strategy+
+         +jump-around-last-neighbor+
+         bp1)
+
+        (format t "the generated code:~%~a~%"
+                (make-neighborhood-exploration-function bp1)))
+      #+END_SRC
+***** testing the keywords
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+            (let* ((*vrp-unit-testing-display-output* nil)
+                   (*vrp-unit-testing-display-results* t)
+                   (bp1 (basic-strategy-blueprint))
+                   (code `((select-route r1)
+                           (select-client c1 from r1)
+                           (insert-client c1 into r1))))
+
+
+              (bformat t "Testing make-neighborhood-exploration-function")
+
+              ;; let's populate the blueprint
+              (prepare-blueprint-for-code-generation
+               code +exhaustive-search-strategy+ +best-improvement+ bp1)
+
+              (format t "the generated code:~%~a~%"
+                      (make-neighborhood-exploration-function
+                       bp1 :inside-loop
+                       `((progn
+                           (format t "debug: with c1 ~a, r1 ~a"
+                                   (client-selected-at-operation c1 wc)
+                                   r1))))))
+      #+END_SRC
+***** testing an exploration
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                            (5 0 6 7 2 4)  ;1
+                                            (1 8 0 3 9 1)  ;2
+                                            (4 5 1 0 5 7)  ;3
+                                            (4 5 1 5 0 6)  ;4
+                                            (1 5 7 6 9 0)) ;5
+                                            ;0 1 2 3 4 5 
+                                :demands '(20 10 15 40 30)
+                                :capacity 40)
+          (with-basic-cvrp-solution (s1 ((1) (3 4) (5) (2)) p1)
+            (let* ((action (delta-cvrp-action))
+                   (cvrp-action (basic-cvrp-action))
+                   (bp (basic-strategy-blueprint))
+                   (bp1 (basic-strategy-blueprint))
+                   rarb rarabb 
+                   best-neighbor)
+
+
+
+
+              (bformat t "Testing delta-cost")
+
+              ;; let's simulate the solution
+              (simulate-solution s1 p1 cvrp-action)
+              (setf (cost s1) (+ (total-distance cvrp-action)
+                                 (total-penalty cvrp-action)))
+
+              (format t "With cost: ~a~%"
+                      (cost s1))
+              (pp-solution s1 t) (terpri)
+
+              ;; (progn ;; for rarb
+
+              ;;   (prepare-blueprint-for-code-generation
+              ;;   `((select-route r1)
+              ;;     (select-client c1 from r1)
+              ;;     (select-route r2)
+              ;;     (insert-client c1 into r2))
+              ;;   +exhaustive-search-strategy+
+              ;;   +best-improvement+ 
+              ;;   bp)
+
+              ;;  (setf rarb (make-neighborhood-exploration-function bp))
+              ;;  ;; let's get the best neighbor
+              ;;  (setf best-neighbor (funcall rarb s1 p1 action))
+
+              ;;  (if best-neighbor
+              ;;      (then
+              ;;        (format t "After rarb we found...~%")
+              ;;        (format t "With cost ~a...~%" (cost best-neighbor))
+              ;;        (pp-solution best-neighbor t))
+              ;;      (else
+              ;;        (format t "No best neighbor found :-[."))))
+
+              ;; (progn ;; for rarabb
+
+              ;;   (prepare-blueprint-for-code-generation
+              ;;   `((select-route r1)
+              ;;     (select-client c1 from r1)
+              ;;     (select-route r2)
+              ;;     (select-client c2 from r2)
+              ;;     (insert-client c1 into r2)
+              ;;     (insert-client c2 into r1))
+              ;;   +exhaustive-search-strategy+
+              ;;   +best-improvement+ 
+              ;;   bp1)
+
+              ;;   (format t "After rarb s1 is~%")
+              ;;   (pp-solution s1 t) (terpri)
+
+              ;;   ;; (format t "code is:~%~a~%"
+              ;;   ;;         (write-neighborhood-exploration-code bp1))
+
+              ;;  (setf rararbrb (make-neighborhood-exploration-function bp1))
+              ;;  ;; ;; let's get the best neighbor
+              ;;  (setf best-neighbor (funcall rararbrb s1 p1 action))
+
+              ;;  (if best-neighbor
+              ;;      (then
+              ;;        (format t "After rararbrb we found...~%")
+              ;;        (format t "With cost ~a...~%" (cost best-neighbor))
+              ;;        (pp-solution best-neighbor t))
+              ;;      (else
+              ;;        (format t "No best neighbor found :-[.")))
+              ;;  )
+
+
+              (progn ;; for rarabb
+
+                (prepare-blueprint-for-code-generation
+                `((select-route r1)
+                  (select-client c1 from r1)
+                  (select-route r2)
+                  (select-client c2 from r2)
+                  (select-route r3)
+                  (insert-client c1 into r3)
+                  (select-route r4)
+                  (insert-client c2 into r4))
+                ;; +jump-around-strategy+
+                ;; +jump-around-last-neighbor+
+                +exhaustive-search-strategy+
+                +random-improvement+
+                bp1)
+
+                ;; (format t "code is:~%~a~%"
+                ;;         (write-neighborhood-exploration-code bp1))
+
+                (setf rararbrb
+                      (make-neighborhood-exploration-function
+                       bp1))
+               ;; ;; let's get the best neighbor
+               (setf best-neighbor (funcall rararbrb s1 p1 action))
+
+               (if best-neighbor
+                   (then
+                     (format t "After rararbrb we found...~%")
+                     (format t "With cost ~a...~%" (cost best-neighbor))
+                     (pp-solution best-neighbor t))
+                   (else
+                     (format t "No best neighbor found :-[.")))
+               )
+
+              ;; (progn
+              ;;   (format t "testing Yoel~%")
+              ;;   (with-basic-cvrp-solution (s2 ((1 3) (4) () (2 5)) p1 2)
+              ;;     (pp-solution s2 t) (terpri)
+              ;;     (simulate-solution s2 p1 cvrp-action)
+              ;;     (setf (cost s2) (+ (total-distance cvrp-action)
+              ;;                        (total-penalty cvrp-action)))
+              ;;     (format t "Cost: ~a~%" (cost s2))))
+
+              )))
+      #+END_SRC
+**** looking for bug.  Bug found and removed
+***** testing an exploration
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                            (5 0 6 7 2 4)  ;1
+                                            (1 8 0 3 9 1)  ;2
+                                            (4 5 1 0 5 7)  ;3
+                                            (4 5 1 5 0 6)  ;4
+                                            (1 5 7 6 9 0)) ;5
+                                            ;0 1 2 3 4 5 
+                                :demands '(20 10 15 40 30)
+                                :capacity 40)
+          (with-basic-cvrp-solution (s1 ((1) (3 4) () (5) () (2)) p1)
+            (let* ((action (delta-cvrp-action))
+                   (cvrp-action (basic-cvrp-action))
+      ;;             (bp (basic-strategy-blueprint))
+                   (bp1 (basic-strategy-blueprint))
+                   ;; rarb rarabb
+                   rararbrb
+             
+                   best-neighbor)
+
+
+
+
+              (bformat t "Testing delta-cost")
+
+              ;; let's simulate the solution
+              (simulate-solution s1 p1 cvrp-action)
+              (setf (cost s1) (+ (total-distance cvrp-action)
+                                 (total-penalty cvrp-action)))
+
+              (format t "With cost: ~a~%"
+                      (cost s1))
+              (pp-solution s1 t) (terpri)
+
+
+              (progn ;; for rarabb
+
+                (prepare-blueprint-for-code-generation
+                `((select-route r1)
+                  (select-client c1 from r1)
+                  (select-route r2)
+                  (select-client c2 from r2)
+                  (select-route r3)
+                  (insert-client c1 into r3)
+                  (select-route r4)
+                  (insert-client c2 into r4))
+                +jump-around-strategy+
+                +jump-around-last-neighbor+
+                bp1)
+
+                ;; (format t "code is:~%~a~%"
+                ;;         (write-neighborhood-exploration-code
+                ;;          bp1
+                ;;          :inside-loop
+                ;;          `((progn
+                ;;              (format t "Current solution:~%")
+                ;;              (pp-solution wc t) (terpri)
+                ;;              (format t "========================~%")))))
+
+                (setf rararbrb
+                      (make-neighborhood-exploration-function
+                       bp1
+                       ;; :inside-loop
+                       ;; `((progn
+                       ;;     (let* ((wc3 (basic-working-copy (solution wc))))
+                       ;;       (prepare-solution-for-neighborhood-exploration wc3)
+                       ;;       (format t "Current solution:~%")
+                       ;;      (pp-solution wc3 t) (terpri)
+                       ;;      (format t "========================~%"))))
+                       ))
+
+                (format t "Let's jump-around~%")
+               ;; ;; let's get the best neighbor
+               (setf best-neighbor (funcall rararbrb s1 p1 action))
+
+               (if best-neighbor
+                   (then
+                     (format t "After rararbrb we found...~%")
+                     (format t "With cost ~a...~%" (cost best-neighbor))
+                     (pp-solution best-neighbor t))
+                   (else
+                     (format t "No best neighbor found :-[.")))
+               )
+
+              ;; (progn
+              ;;   (format t "testing Yoel~%")
+              ;;   (with-basic-cvrp-solution (s2 ((1 3) (4) () (2 5)) p1 2)
+              ;;     (pp-solution s2 t) (terpri)
+              ;;     (simulate-solution s2 p1 cvrp-action)
+              ;;     (setf (cost s2) (+ (total-distance cvrp-action)
+              ;;                        (total-penalty cvrp-action)))
+              ;;     (format t "Cost: ~a~%" (cost s2))))
+
+              )))
+      #+END_SRC
+**** test for jump-around-strategy
+***** testing an exploration
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                            (5 0 6 7 2 4)  ;1
+                                            (1 8 0 3 9 1)  ;2
+                                            (4 5 1 0 5 7)  ;3
+                                            (4 5 1 5 0 6)  ;4
+                                            (1 5 7 6 9 0)) ;5
+                                            ;0 1 2 3 4 5 
+                                :demands '(20 10 15 40 30)
+                                :capacity 40)
+          (with-basic-cvrp-solution (s1 ((1) (3 4) (5) (2)) p1)
+            (let* ((action (delta-cvrp-action))
+                   (cvrp-action (basic-cvrp-action))
+                   (bp1 (basic-strategy-blueprint))
+                   ;; rarb rarabb
+                   rararbrb 
+                   best-neighbor
+                   last-neighbor
+                   cumulative
+                   best-jump-cost)
+
+
+
+
+              (bformat t "Testing delta-cost")
+
+              ;; let's simulate the solution
+              (simulate-solution s1 p1 cvrp-action)
+              (setf (cost s1) (+ (total-distance cvrp-action)
+                                 (total-penalty cvrp-action)))
+
+              (format t "With cost: ~a~%"
+                      (cost s1))
+              (pp-solution s1 t) (terpri)
+
+
+              (progn ;; for rarabb
+
+                (prepare-blueprint-for-code-generation
+                `((select-route r1)
+                  (select-client c1 from r1)
+                  (select-route r2)
+                  (select-client c2 from r2)
+                  (select-route r3)
+                  (insert-client c1 into r3)
+                  (select-route r4)
+                  (insert-client c2 into r4))
+                +jump-around-strategy+
+                +jump-around-best-neighbor+
+                bp1)
+
+                ;; (format t "code is:~%~a~%"
+                ;;         (write-neighborhood-exploration-code bp1))
+
+                (setf rararbrb
+                      (make-neighborhood-exploration-function
+                       bp1
+                       :inside-loop
+                       `((progn
+                           (format t "current ~a, cumul ~a, best ~a~%"
+                                   current-cost
+                                   cumulative-cost
+                                   best-jump-cost)))))
+
+
+                ;; ;; let's get the best neighbor
+
+                (setf (values last-neighbor
+                              cumulative
+                              best-neighbor
+                              best-jump-cost)
+                      (funcall rararbrb s1 p1 action))
+
+                (format t "===============~%")
+
+                (if last-neighbor
+                    (then
+                      (format t "The last neighbor, with delta ~a, was~%"
+                              cumulative)
+                      (pp-solution last-neighbor t) (terpri)))
+
+                (if best-neighbor
+                   (then
+                     (format t "The best found, ")
+                     (format t "with cost ~a, and delta-cost ~a was~%"
+                             (cost best-neighbor)
+                             best-jump-cost)
+                     (pp-solution best-neighbor t))
+                   (else
+                     (format t "No best neighbor found :-[.~%")))
+               )
+
+              ;; (progn
+              ;;   (format t "testing Yoel~%")
+              ;;   (with-basic-cvrp-solution (s2 ((1 3) (4) () (2 5)) p1 2)
+              ;;     (pp-solution s2 t) (terpri)
+              ;;     (simulate-solution s2 p1 cvrp-action)
+              ;;     (setf (cost s2) (+ (total-distance cvrp-action)
+              ;;                        (total-penalty cvrp-action)))
+              ;;     (format t "Cost: ~a~%" (cost s2))))
+
+              )))
+      #+END_SRC
+***** testing with a-n33-k6-problem
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (let* ((p1 a-n33-k6-problem)
+             (s1 (make-initial-solution-for-cvrp-deterministic p1))
+             (action (delta-cvrp-action))
+             (cvrp-action (basic-cvrp-action))
+             (bp1 (basic-strategy-blueprint))
+             ;; rarb rarabb
+             rararbrb 
+             best-neighbor
+             last-neighbor
+             cumulative
+             best-jump-cost)
+
+
+
+        (format t "|~%|~%|~%|~%|~%")
+        (bformat t "Testing jumping-around-strategy")
+
+        ;; let's simulate the solution
+        (simulate-solution s1 p1 cvrp-action)
+        (setf (cost s1) (+ (total-distance cvrp-action)
+                           (total-penalty cvrp-action)))
+
+        (format t "With cost: ~a~%"
+                (cost s1))
+        (pp-solution s1 t) (terpri)
+
+
+        (progn ;; for rarabb
+
+          (prepare-blueprint-for-code-generation
+           `((select-route r1)
+             (select-client c1 from r1)
+             (select-route r2)
+             (select-client c2 from r2)
+             (select-route r3)
+             (insert-client c1 into r3)
+             (select-route r4)
+             (insert-client c2 into r4))
+           (jump-around-search-strategy 10)
+           +jump-around-last-neighbor+
+           bp1)
+
+          ;; (format t "code is:~%~a~%"
+          ;;         (write-neighborhood-exploration-code bp1))
+
+          (setf rararbrb
+                (make-neighborhood-exploration-function
+                 bp1
+                 :inside-loop
+                 `((progn
+                     (format t "current ~a, cumul ~a, best ~a~%"
+                             current-cost
+                             cumulative-cost
+                             best-jump-cost)))))
+
+
+          ;; ;; let's get the best neighbor
+
+          (setf (values last-neighbor
+                        cumulative
+                        best-neighbor
+                        best-jump-cost)
+                (funcall rararbrb s1 p1 action))
+
+          (format t "===============~%")
+
+          (if last-neighbor
+              (then
+                (format t "The last neighbor, with delta ~a, was~%"
+                        cumulative)
+                (pp-solution last-neighbor t) (terpri)))
+
+          (if best-neighbor
+              (then
+                (format t "The best found, ")
+                (format t "with cost ~a, and delta-cost ~a was~%"
+                        (cost best-neighbor)
+                        best-jump-cost)
+                (pp-solution best-neighbor t))
+              (else
+                (format t "No best neighbor found :-[.~%")))
+          )
+
+        ;; (progn
+        ;;   (format t "testing Yoel~%")
+        ;;   (with-basic-cvrp-solution (s2 ((1 3) (4) () (2 5)) p1 2)
+        ;;     (pp-solution s2 t) (terpri)
+        ;;     (simulate-solution s2 p1 cvrp-action)
+        ;;     (setf (cost s2) (+ (total-distance cvrp-action)
+        ;;                        (total-penalty cvrp-action)))
+        ;;     (format t "Cost: ~a~%" (cost s2))))
+
+        )
+      #+END_SRC
+**** test for return-last-neighbor-selection-strategy
+***** testing an exploration
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                            (5 0 6 7 2 4)  ;1
+                                            (1 8 0 3 9 1)  ;2
+                                            (4 5 1 0 5 7)  ;3
+                                            (4 5 1 5 0 6)  ;4
+                                            (1 5 7 6 9 0)) ;5
+                                            ;0 1 2 3 4 5 
+                                :demands '(20 10 15 40 30)
+                                :capacity 40)
+          (with-basic-cvrp-solution (s1 ((1) (3 4) (5) (2)) p1)
+            (let* ((action (delta-cvrp-action))
+                   (cvrp-action (basic-cvrp-action))
+                   (bp1 (basic-strategy-blueprint))
+                   ;; rarb rarabb
+                   rararbrb 
+                   last
+                   last-neighbor)
+
+
+
+
+              (bformat t "Testing delta-cost")
+
+              ;; let's simulate the solution
+              (simulate-solution s1 p1 cvrp-action)
+              (setf (cost s1) (+ (total-distance cvrp-action)
+                                 (total-penalty cvrp-action)))
+
+              (format t "With cost: ~a~%"
+                      (cost s1))
+              (pp-solution s1 t) (terpri)
+
+
+              (progn ;; for rarabb
+
+                (prepare-blueprint-for-code-generation
+                `((select-route r1)
+                  (select-client c1 from r1)
+                  (select-route r2)
+                  (select-client c2 from r2)
+                  (select-route r3)
+                  (insert-client c1 into r3)
+                  (select-route r4)
+                  (insert-client c2 into r4))
+                (random-neighborhood-search-strategy 10)
+                +return-last-neighbor+
+                bp1)
+
+                ;; (format t "code is:~%~a~%"
+                ;;         (write-neighborhood-exploration-code bp1))
+
+                (setf rararbrb
+                      (make-neighborhood-exploration-function
+                       bp1
+                       :inside-loop
+                       `((progn
+                           (format t "current ~a, best ~a~%"
+                                   current-cost
+                                   best-cost)))))
+
+
+                ;; ;; let's get the best neighbor
+
+                (setf (values last-neighbor
+                              last)
+                      (funcall rararbrb s1 p1 action))
+
+                (format t "===============~%")
+
+                (if last-neighbor
+                    (then
+                      (format t "The last neighbor, with delta ~a, was~%"
+                              last)
+                      (pp-solution last-neighbor t) (terpri))))
+
+              (progn
+                (format t "testing Yoel~%")
+                (simulate-solution last-neighbor p1 cvrp-action)
+                (setf (cost last-neighbor) (+ (total-distance cvrp-action)
+                                              (total-penalty cvrp-action)))
+                (format t "Cost: ~a~%" (cost last-neighbor))
+
+              ))))
+      #+END_SRC
+
+
+***** testing with a-n33-k6-problem
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (let* ((p1 a-n33-k6-problem)
+             (s1 (make-initial-solution-for-cvrp-deterministic p1))
+             (action (delta-cvrp-action))
+             (cvrp-action (basic-cvrp-action))
+             (bp1 (basic-strategy-blueprint))
+             ;; rarb rarabb
+             rararbrb 
+             best-neighbor
+             last-neighbor
+             cumulative
+             best-jump-cost)
+
+
+
+        (format t "|~%|~%|~%|~%|~%")
+        (bformat t "Testing jumping-around-strategy")
+
+        ;; let's simulate the solution
+        (simulate-solution s1 p1 cvrp-action)
+        (setf (cost s1) (+ (total-distance cvrp-action)
+                           (total-penalty cvrp-action)))
+
+        (format t "With cost: ~a~%"
+                (cost s1))
+        (pp-solution s1 t) (terpri)
+
+
+        (progn ;; for rarabb
+
+          (prepare-blueprint-for-code-generation
+           `((select-route r1)
+             (select-client c1 from r1)
+             (select-route r2)
+             (select-client c2 from r2)
+             (select-route r3)
+             (insert-client c1 into r3)
+             (select-route r4)
+             (insert-client c2 into r4))
+           (jump-around-search-strategy 10)
+           +jump-around-last-neighbor+
+           bp1)
+
+          ;; (format t "code is:~%~a~%"
+          ;;         (write-neighborhood-exploration-code bp1))
+
+          (setf rararbrb
+                (make-neighborhood-exploration-function
+                 bp1
+                 :inside-loop
+                 `((progn
+                     (format t "current ~a, cumul ~a, best ~a~%"
+                             current-cost
+                             cumulative-cost
+                             best-jump-cost)))))
+
+
+          ;; ;; let's get the best neighbor
+
+          (setf (values last-neighbor
+                        cumulative
+                        best-neighbor
+                        best-jump-cost)
+                (funcall rararbrb s1 p1 action))
+
+          (format t "===============~%")
+
+          (if last-neighbor
+              (then
+                (format t "The last neighbor, with delta ~a, was~%"
+                        cumulative)
+                (pp-solution last-neighbor t) (terpri)))
+
+          (if best-neighbor
+              (then
+                (format t "The best found, ")
+                (format t "with cost ~a, and delta-cost ~a was~%"
+                        (cost best-neighbor)
+                        best-jump-cost)
+                (pp-solution best-neighbor t))
+              (else
+                (format t "No best neighbor found :-[.~%")))
+          )
+
+        ;; (progn
+        ;;   (format t "testing Yoel~%")
+        ;;   (with-basic-cvrp-solution (s2 ((1 3) (4) () (2 5)) p1 2)
+        ;;     (pp-solution s2 t) (terpri)
+        ;;     (simulate-solution s2 p1 cvrp-action)
+        ;;     (setf (cost s2) (+ (total-distance cvrp-action)
+        ;;                        (total-penalty cvrp-action)))
+        ;;     (format t "Cost: ~a~%" (cost s2))))
+
+        )
+      #+END_SRC
+
+
+* function make-neighborhood-criterion (ordinary)
+** description
+   This function receives a list with the pseudo-natural description of a neighborhood criterion, the strategies, and code to add to the criterion, and returns a function.  This does not require the user to know anything about blueprints or anything like that.
+   
+** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-functions.lisp 
+    (defun make-neighborhood-criterion
+        (description
+         search-strategy
+         select-strategy
+         &key
+           inside-let
+           outside-let
+           inside-loop
+           outside-loop)
+
+      "This function receives a list with the pseudo-natural description of a neighborhood criterion, the strategies, and code to add to the criterion, and returns a function that explores the neighborhood using the given strategies."
+
+      (let* ((blueprint (basic-strategy-blueprint)))
+
+        (prepare-blueprint-for-code-generation
+                         description
+                         search-strategy
+                         select-strategy
+                         blueprint)
+
+        (make-neighborhood-exploration-function
+         blueprint
+         :inside-let inside-let
+         :outside-let outside-let
+         :inside-loop inside-loop
+         :outside-loop outside-loop)))
+    #+END_SRC
+   
+;;** test constraints by exploration (just printing the solution)
+   #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+   (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                       (5 0 6 7 2 4)  ;1
+                                       (1 8 0 3 9 1)  ;2
+                                       (4 5 1 0 5 7)  ;3
+                                       (4 5 1 5 0 6)  ;4
+                                       (1 5 7 6 9 0)) ;5
+                                       ;0 1 2 3 4 5 
+                             :demands '(20 10 15 40 30)
+                             :capacity 40)
+     (with-basic-solution (s1 ((1 2 3) (4 5)))
+       (let* ((action (delta-cvrp-action))
+              (cvrp-action (basic-cvrp-action))
+              (rarb-code `((select-route r1)
+                           (select-client c1 from r1)
+                           (select-route r2 :ge r1)
+                           (select-client c2 from r2
+                                          :ge (list r1 c1.select.position))
+                           (swap-clients c1 c2)))
+              (bp (basic-strategy-blueprint))
+              best-neighbor)
+
+         (declare (ignore cvrp-action best-neighbor))
+
+         (bformat t "Testing make-neighborhood-criterion")
+
+         (progn ;; for rarac
+
+           (prepare-blueprint-for-code-generation 
+            rarbs
+            +exhaustive-search-strategy+ 
+            +search-with-a-basic-wc+
+            bp)
+
+           (format t "code: ~s~%"
+                   (write-neighborhood-exploration-code
+                    bp
+                    :inside-loop `((terpri) (pp-solution wc t))
+                    ))
+
+           (setf rarbf (make-neighborhood-criterion 
+                       rarb-code
+                       +exhaustive-search-strategy+ 
+                       +search-with-a-basic-wc+
+                       :inside-loop `((terpri)
+                                       (pp-solution wc t))))
+
+           (funcall rarbf s1 p1 action)))))
+   #+END_SRC
+
+;;** test onstraints by exploration (just printing the solution)
+   #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+   (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                       (5 0 6 7 2 4)  ;1
+                                       (1 8 0 3 9 1)  ;2
+                                       (4 5 1 0 5 7)  ;3
+                                       (4 5 1 5 0 6)  ;4
+                                       (1 5 7 6 9 0)) ;5
+                                       ;0 1 2 3 4 5 
+                             :demands '(20 10 15 40 30)
+                             :capacity 40)
+     (with-basic-solution (s1 ((1 2 3 4 5)))
+       (let* ((action (delta-cvrp-action))
+              (cvrp-action (basic-cvrp-action))
+              (rarb-code `((select-route r1)
+                           (select-client c1 from r1)
+                           (insert-client c1 into r1
+                                          :dt (list r1 c1.select.position))))
+              (bp (basic-strategy-blueprint))
+              best-neighbor)
+
+         (declare (ignore cvrp-action best-neighbor))
+
+         (bformat t "Testing make-neighborhood-criterion")
+
+         (progn ;; for rarac
+
+           (prepare-blueprint-for-code-generation 
+            rarb-code
+            +exhaustive-search-strategy+ 
+            +search-with-a-basic-wc+
+            bp)
+
+           (format t "code: ~s~%"
+                   (write-neighborhood-exploration-code
+                    bp
+                    :inside-loop `((terpri) (pp-solution wc t))
+                    ))
+
+           (setf rarb (make-neighborhood-criterion 
+                       rarb-code
+                       +exhaustive-search-strategy+ 
+                       +search-with-a-basic-wc+
+                       :inside-loop `((terpri)
+                                       (pp-solution wc t)
+                                       (format t "inserting ~a in ~a (selected from ~a)~%"
+                                               c1.client c1.insert.position c1.select.position))))
+
+           (format t "original solution:~%")
+           (pp-solution s1 t) (terpri)
+
+           (funcall rarb s1 p1 action)
+
+           )
+
+
+
+         )))
+   #+END_SRC
+

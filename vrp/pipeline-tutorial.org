@@ -1,0 +1,990 @@
+#+TITLE: VRP solver tutorial
+#+AUTHOR: Rodrigo Garcia Gomez
+
+* CVRP
+In this section we will solve well known CVRP instances with the system.
+** basic-cvrp-problem
+*** description
+    The basic-cvrp-problem has the following characteristics:
+     - the clients are basic-cvrp-client
+     - the depot is just a basic-depot
+     - the vehicles are cvrp-vehicle
+     - and the problem is a cvrp-problem
+       
+    The function make-basic-cvrp-problem should return an instance of this class.
+    
+*** make-basic-cvrp-problem
+**** description
+     This function receives a distance-matrix, a list with the demands and the capacity of the vehicles, and returns a basic-cvrp-problem.
+**** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-tutorial.lisp
+    (defun make-basic-cvrp-problem (distance demands capacity
+                                    &optional (id 1))
+      "Returns an instance of a basic-cvrp-problem from the distance-matrix, the demands and the capacity of the vehicles."
+      (let* ((clients (loop for i from 1
+                            for demand in demands
+                            collecting (basic-cvrp-client i demand)))
+             (depot (basic-depot)))
+        ;; return an instance of the class
+        (cvrp-problem :id id :clients clients :depot depot
+                      :distance-matrix distance :capacity capacity)))
+    #+END_SRC
+
+*** get-client
+**** description
+     Function that recives a problem and an id. Returns the client with that id.
+**** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-tutorial.lisp
+      (defun get-client (problem index)
+	(nth (- index 1) (clients problem)))
+    #+END_SRC
+
+*** make-simulation-cvrp-solution
+**** description
+     This function receives a list of lists and a cvrp problem. Each list contains the indexes of the route that it represents
+**** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-tutorial.lisp
+      (defun make-simulation-cvrp-solution (indexes p)
+	"Returns an instance of a basic-cvrp-problem from the distance-matrix, the demands and the capacity of the vehicles."
+	(let* ((routes nil)
+	       (v (cvrp-vehicle 1 (capacity p))))
+	  (loop for r in (reverse indexes)
+		for i from 1
+		do
+		   (let ((clients nil))
+		     (loop for c in (reverse r) do
+		       (push (get-client p c) clients))
+		     (push (clone (depot p)) (cdr (last clients)))
+		     (push  (route-for-simulation :id i :vehicle v :depot  (depot p)
+						  :clients clients
+						  :previous-client (clone (depot p))) 
+			    routes)))
+	  (basic-solution :id 1 :routes routes)))
+    #+END_SRC
+
+
+*** A-n33-k5 (661)
+Lets create the distance matrix
+#+BEGIN_SRC lisp +n -r :results none
+  (defparameter A-n33-k5-coords
+    '((42 68) (77 97) (28 64) (77 39) (32 33) (32 8) 
+      (42 92) (8 3) (7 14) (82 17) (48 13) (53 82) 
+      (39 27) (7 24) (67 98) (54 52) (72 43) (73 3) 
+      (59 77) (58 97) (23 43) (68 98) (47 62) (52 72) 
+      (32 88) (39 7) (17 8) (38 7) (58 74) (82 67) 
+      (42 7) (68 82) (7 48)))
+
+  (defparameter A-n33-k5-distance-matrix
+    (make-distance-matrix A-n33-k5-coords))
+
+
+#+END_SRC
+
+Now we define the demands.
+#+BEGIN_SRC lisp +n -r :results none
+     (defparameter A-n33-k5-demands
+      '(5 23 14 13 8 18 19 10 18 20 5 9 23 9 18 
+        10 24 13 14 8 10 19 14 13 14 2 23 15 8 20 
+        24 3))
+#+END_SRC
+
+Let's define the problem.
+#+BEGIN_SRC lisp +n -r :results none
+  (defparameter A-n33-k5-problem
+    (make-basic-cvrp-problem A-n33-k5-distance-matrix
+			     A-n33-k5-demands
+			     100
+			     1))
+#+END_SRC
+
+We make the initial solution and init the graph.
+#+BEGIN_SRC lisp +n -r :results output
+  (let ((p A-n33-k5-problem))
+    (defparameter s1 (make-simulation-cvrp-solution (list (list 1 2 3 4 5 6)
+						    (list 7 8 9 10 11 12 13 14)
+						    (list 15 16 17 18 19 20)
+						    (list 21 22 23 24)
+						    (list 25 26 27 28 29 30 31 32))
+						   p))
+;(format t "~a" s1)
+(defparameter graph (init-graph s1))
+
+    ;; let's evaluate the solution
+
+    (progn
+      (def-var total-distance 0 graph)
+      (loop for r in (routes s1) do 
+	   (progn
+	     (def-var route-distance 0 graph)
+	     (def-var route-demand (capacity (vehicle r)) graph) 
+	     (loop for c in (clients r) do 
+		  (progn
+		    (increment-distance (previous-client r) c route-distance A-n33-k5-distance-matrix graph)
+		    (decrement-demand c route-demand graph) 
+		    (setf (previous-client r) c)))
+	     (increment-value total-distance route-distance graph)
+	     (apply-penalty route-demand total-distance 10 graph)) 
+	   (return-value total-distance graph)))
+
+(setf (cost (solution-track graph)) (output-value (output graph)))
+    (format t "initial cost: ~a~%" (output-value (output graph)))
+    (format t "initial solution: ~a~%" (solution-track graph))
+)
+)
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+initial cost: 1914
+initial solution: S1: (1914)
+routes:
+  <r5: <cv:1. 0/100> (<d:0>: (<c1: 5> <c2: 23> <c3: 14> <c4: 13> <c5: 8>
+                              <c6: 18> <d:0>))>
+  <r4: <cv:1. 0/100> (<d:0>: (<c7: 19> <c8: 10> <c9: 18> <c10: 20> <c11: 5>
+                              <c12: 9> <c13: 23> <c14: 9> <d:0>))>
+  <r3: <cv:1. 0/100> (<d:0>: (<c15: 18> <c16: 10> <c17: 24> <c18: 13> <c19: 14>
+                              <c20: 8> <d:0>))>
+  <r2: <cv:1. 0/100> (<d:0>: (<c21: 10> <c22: 19> <c23: 14> <c24: 13> <d:0>))>
+  <r1: <cv:1. 0/100> (<d:0>: (<c25: 14> <c26: 2> <c27: 23> <c28: 15> <c29: 8>
+                              <c30: 20> <c31: 24> <c32: 3> <d:0>))>
+
+#+end_example
+
+Now, we make the criterion and execute the metaheuristic.
+#+BEGIN_SRC lisp +n -r :results output
+
+  (progn
+    (setf rab (make-neighborhood-criterion 
+	       `((select-route r1)
+		 (select-client c1 from r1)
+		 (insert-client c1 to r1))
+	       +exhaustive-search-strategy+ 
+	       +best-improvement+))
+
+    (setf rarb (make-neighborhood-criterion 
+		`((select-route r1)
+		  (select-client c1 from r1)
+		  (select-route r2)
+		  (insert-client c1 to r2))
+		+exhaustive-search-strategy+ 
+		+best-improvement+))
+
+    (setf rarac (make-neighborhood-criterion 
+		 `((select-route r1)
+		   (select-client c1 from r1)
+		   (select-route r2)
+		   (select-client c2 from r2)
+		   (swap-clients c1 c2))
+		 +exhaustive-search-strategy+ 
+		 +best-improvement+))
+
+
+    (setf rereg (make-neighborhood-criterion 
+		 `((select-route r1)
+		   (select-subroute c1 from r1)
+		   (select-route r2)
+		   (select-subroute c2 from r2)
+		   (swap-subroutes c1 c2))
+	  +exhaustive-search-strategy+ 
+	  +best-improvement+))
+
+  (setf rerf (make-neighborhood-criterion 
+	      `((select-route r1)
+		(select-subroute c1 from r1)
+		(select-route r2)
+		(insert-subroute c1 into r2))
+	      +exhaustive-search-strategy+ 
+	      +best-improvement+))
+
+
+
+  (setf ref (make-neighborhood-criterion 
+	     `((select-route r1)
+	       (select-subroute z1 from r1)
+	       (insert-subroute z1 into r1))
+	     +exhaustive-search-strategy+ 
+	     +best-improvement+))
+
+
+  (setf criteria (list rab rarb rarac ref rerf rereg))
+
+  (format t "~a" (vns-vrp-system A-n33-k5-problem criteria graph :max-iter 10000000000)))
+
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+Debug inside VNS.  Iteration 1, criterion 0, cost: 1787
+Debug inside VNS.  Iteration 2, criterion 0, cost: 1678
+Debug inside VNS.  Iteration 3, criterion 0, cost: 1624
+Debug inside VNS.  Iteration 4, criterion 0, cost: 1577
+Debug inside VNS.  Iteration 5, criterion 0, cost: 1532
+Debug inside VNS.  Iteration 6, criterion 0, cost: 1500
+Debug inside VNS.  Iteration 7, criterion 0, cost: 1470
+Debug inside VNS.  Iteration 8, criterion 0, cost: 1444
+Debug inside VNS.  Iteration 9, criterion 0, cost: 1421
+Debug inside VNS.  Iteration 10, criterion 0, cost: 1400
+Debug inside VNS.  Iteration 11, criterion 0, cost: 1385
+Debug inside VNS.  Iteration 12, criterion 0, cost: 1374
+Debug inside VNS.  Iteration 13, criterion 0, cost: 1364
+Debug inside VNS.  Iteration 14, criterion 0, cost: 1352
+Debug inside VNS.  Iteration 15, criterion 0, cost: 1342
+Debug inside VNS.  Iteration 16, criterion 0, cost: 1338
+Debug inside VNS.  Iteration 17, criterion 0, cost: 1336
+Debug inside VNS.  Iteration 18, criterion 0Best solution found.
+Debug inside VNS.  Iteration 19, criterion 1, cost: 1196
+Debug inside VNS.  Iteration 20, criterion 0, cost: 1187
+Debug inside VNS.  Iteration 21, criterion 0Best solution found.
+Debug inside VNS.  Iteration 22, criterion 1, cost: 1092
+Debug inside VNS.  Iteration 23, criterion 0Best solution found.
+Debug inside VNS.  Iteration 24, criterion 1, cost: 1052
+Debug inside VNS.  Iteration 25, criterion 0Best solution found.
+Debug inside VNS.  Iteration 26, criterion 1, cost: 1013
+Debug inside VNS.  Iteration 27, criterion 0, cost: 1007
+Debug inside VNS.  Iteration 28, criterion 0Best solution found.
+Debug inside VNS.  Iteration 29, criterion 1, cost: 974
+Debug inside VNS.  Iteration 30, criterion 0Best solution found.
+Debug inside VNS.  Iteration 31, criterion 1, cost: 950
+Debug inside VNS.  Iteration 32, criterion 0Best solution found.
+Debug inside VNS.  Iteration 33, criterion 1, cost: 922
+Debug inside VNS.  Iteration 34, criterion 0Best solution found.
+Debug inside VNS.  Iteration 35, criterion 1, cost: 898
+Debug inside VNS.  Iteration 36, criterion 0Best solution found.
+Debug inside VNS.  Iteration 37, criterion 1, cost: 867
+Debug inside VNS.  Iteration 38, criterion 0Best solution found.
+Debug inside VNS.  Iteration 39, criterion 1, cost: 858
+Debug inside VNS.  Iteration 40, criterion 0Best solution found.
+Debug inside VNS.  Iteration 41, criterion 1, cost: 848
+Debug inside VNS.  Iteration 42, criterion 0Best solution found.
+Debug inside VNS.  Iteration 43, criterion 1, cost: 823
+Debug inside VNS.  Iteration 44, criterion 0Best solution found.
+Debug inside VNS.  Iteration 45, criterion 1, cost: 815
+Debug inside VNS.  Iteration 46, criterion 0Best solution found.
+Debug inside VNS.  Iteration 47, criterion 1, cost: 800
+Debug inside VNS.  Iteration 48, criterion 0, cost: 795
+Debug inside VNS.  Iteration 49, criterion 0Best solution found.
+Debug inside VNS.  Iteration 50, criterion 1, cost: 782
+Debug inside VNS.  Iteration 51, criterion 0Best solution found.
+Debug inside VNS.  Iteration 52, criterion 1, cost: 772
+Debug inside VNS.  Iteration 53, criterion 0Best solution found.
+Debug inside VNS.  Iteration 54, criterion 1, cost: 757
+Debug inside VNS.  Iteration 55, criterion 0Best solution found.
+Debug inside VNS.  Iteration 56, criterion 1, cost: 756
+Debug inside VNS.  Iteration 57, criterion 0Best solution found.
+Debug inside VNS.  Iteration 58, criterion 1, cost: 754
+Debug inside VNS.  Iteration 59, criterion 0Best solution found.
+Debug inside VNS.  Iteration 60, criterion 1, cost: 747
+Debug inside VNS.  Iteration 61, criterion 0Best solution found.
+Debug inside VNS.  Iteration 62, criterion 1, cost: 744
+Debug inside VNS.  Iteration 63, criterion 0Best solution found.
+Debug inside VNS.  Iteration 64, criterion 1, cost: 739
+Debug inside VNS.  Iteration 65, criterion 0Best solution found.
+Debug inside VNS.  Iteration 66, criterion 1Best solution found.
+Debug inside VNS.  Iteration 67, criterion 2, cost: 734
+Debug inside VNS.  Iteration 68, criterion 0Best solution found.
+Debug inside VNS.  Iteration 69, criterion 1Best solution found.
+Debug inside VNS.  Iteration 70, criterion 2Best solution found.
+Debug inside VNS.  Iteration 71, criterion 3Best solution found.
+Debug inside VNS.  Iteration 72, criterion 4Best solution found.
+Debug inside VNS.  Iteration 73, criterion 5, cost: 716
+Debug inside VNS.  Iteration 74, criterion 0Best solution found.
+Debug inside VNS.  Iteration 75, criterion 1, cost: 707
+Debug inside VNS.  Iteration 76, criterion 0Best solution found.
+Debug inside VNS.  Iteration 77, criterion 1Best solution found.
+Debug inside VNS.  Iteration 78, criterion 2, cost: 700
+Debug inside VNS.  Iteration 79, criterion 0, cost: 697
+Debug inside VNS.  Iteration 80, criterion 0Best solution found.
+Debug inside VNS.  Iteration 81, criterion 1, cost: 690
+Debug inside VNS.  Iteration 82, criterion 0Best solution found.
+Debug inside VNS.  Iteration 83, criterion 1Best solution found.
+Debug inside VNS.  Iteration 84, criterion 2Best solution found.
+Debug inside VNS.  Iteration 85, criterion 3Best solution found.
+Debug inside VNS.  Iteration 86, criterion 4Best solution found.
+Debug inside VNS.  Iteration 87, criterion 5, cost: 683
+Debug inside VNS.  Iteration 88, criterion 0, cost: 677
+Debug inside VNS.  Iteration 89, criterion 0Best solution found.
+Debug inside VNS.  Iteration 90, criterion 1Best solution found.
+Debug inside VNS.  Iteration 91, criterion 2Best solution found.
+Debug inside VNS.  Iteration 92, criterion 3Best solution found.
+Debug inside VNS.  Iteration 93, criterion 4Best solution found.
+Debug inside VNS.  Iteration 94, criterion 5Best solution found.
+(S1: (677)
+routes:
+  <r5: <cv:1. 0/100> (<d:0>: (<c15: 18> <c16: 10> <c3: 14> <c9: 18> <c17: 24>))>
+  <r4: <cv:1. 0/100> (<d:0>: (<c20: 8> <c4: 13> <c27: 23> <c25: 14> <c30: 20>
+                              <c10: 20>))>
+  <r3: <cv:1. 0/100> (<d:0>: (<c23: 14> <c28: 15> <c18: 13> <c11: 5> <c6: 18>
+                              <c24: 13>))>
+  <r2: <cv:1. 0/100> (<d:0>: (<c22: 19> <c29: 8> <c31: 24> <c1: 5> <c21: 10>
+                              <c14: 9> <c19: 14>))>
+  <r1: <cv:1. 0/100> (<d:0>: (<c2: 23> <c32: 3> <c13: 23> <c8: 10> <c7: 19>
+                              <c26: 2> <c5: 8> <c12: 9>))>
+
+ 95 T)
+#+end_example
+
+Now, let's restrict the problem. The new problem will penalize solutions with routes that cost 185 or more (185 is the cost of the larger route of the solution found int the previous code).
+
+
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-classes.lisp
+
+  (defmethod evaluate-low-level-node ((ll-node increment-accumulator-node))
+    (progn
+      (setf (output-copy (partial-accumulator ll-node))
+	    (output-value (partial-accumulator ll-node)))
+      (incf (output-value (output-action ll-node)) 
+	    (output-value (partial-accumulator ll-node)))
+;;      (if (>= (output-value (partial-accumulator ll-node)) 185)
+;;	  (incf (output-value (output-action ll-node)) 10000))
+      nil))
+
+
+  (defmethod undo-low-level-node :after ((ll-node increment-accumulator-node))
+    (progn 
+      (incf (output-value (output-action ll-node))
+	    (- (output-value (partial-accumulator ll-node))
+	       (output-copy (partial-accumulator ll-node))))
+;      (if (and (< (output-value (partial-accumulator ll-node)) 185)
+;	       (>= (output-copy (partial-accumulator ll-node)) 185))
+;	  (incf (output-value (output-action ll-node)) -10000))
+      (setf (output-copy (partial-accumulator ll-node)) 
+	    (output-value (partial-accumulator ll-node)))
+      (if (updater (output-action ll-node))
+	  (undo-low-level-node (updater (output-action ll-node))))))
+#+END_SRC
+
+#+BEGIN_SRC lisp +n -r :results none
+  (defparameter A-n33-k5-coords
+    '((42 68) (77 97) (28 64) (77 39) (32 33) (32 8) 
+      (42 92) (8 3) (7 14) (82 17) (48 13) (53 82) 
+      (39 27) (7 24) (67 98) (54 52) (72 43) (73 3) 
+      (59 77) (58 97) (23 43) (68 98) (47 62) (52 72) 
+      (32 88) (39 7) (17 8) (38 7) (58 74) (82 67) 
+      (42 7) (68 82) (7 48)))
+
+  (defparameter A-n33-k5-distance-matrix
+    (make-distance-matrix A-n33-k5-coords))
+
+
+  (defparameter A-n33-k5-demands
+    '(5 23 14 13 8 18 19 10 18 20 5 9 23 9 18 
+      10 24 13 14 8 10 19 14 13 14 2 23 15 8 20 
+      24 3))
+
+  (defparameter A-n33-k5-problem
+    (make-basic-cvrp-problem A-n33-k5-distance-matrix
+			     A-n33-k5-demands
+			     100
+			     1))
+#+END_SRC
+
+
+We make the initial solution and init the graph.
+#+BEGIN_SRC lisp +n -r :results output
+  (let ((p A-n33-k5-problem))
+    (defparameter s1 (make-simulation-cvrp-solution (list (list 1 2 3 4 5 6)
+						    (list 7 8 9 10 11 12 13 14)
+						    (list 15 16 17 18 19 20)
+						    (list 21 22 23 24)
+						    (list 25 26 27 28 29 30 31 32))
+						   p))
+;(format t "~a" s1)
+(defparameter graph (init-graph s1))
+
+    ;; let's evaluate the solution
+
+    (progn
+      (def-var total-distance 0 graph)
+      (loop for r in (routes s1) do 
+	   (progn
+	     (def-var route-distance 0 graph)
+	     (def-var route-demand (capacity (vehicle r)) graph) 
+	     (loop for c in (clients r) do 
+		  (progn
+		    (increment-distance (previous-client r) c route-distance A-n33-k5-distance-matrix graph)
+		    (decrement-demand c route-demand graph) 
+		    (setf (previous-client r) c)))
+	     (increment-value total-distance route-distance graph)
+	     (apply-penalty route-demand total-distance 10 graph)) 
+	   (return-value total-distance graph)))
+
+(setf (cost (solution-track graph)) (output-value (output graph)))
+    (format t "initial cost: ~a~%" (output-value (output graph)))
+    (format t "initial solution: ~a~%" (solution-track graph))
+)
+)
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+initial cost: 3608
+initial solution: S1: (3608)
+routes:
+  <r5: <cv:1. 0/100> (<d:0>: (<c1: 5> <c2: 23> <c3: 14> <c4: 13> <c5: 8>
+                              <c6: 18> <d:0>))>
+  <r4: <cv:1. 0/100> (<d:0>: (<c7: 19> <c8: 10> <c9: 18> <c10: 20> <c11: 5>
+                              <c12: 9> <c13: 23> <c14: 9> <d:0>))>
+  <r3: <cv:1. 0/100> (<d:0>: (<c15: 18> <c16: 10> <c17: 24> <c18: 13> <c19: 14>
+                              <c20: 8> <d:0>))>
+  <r2: <cv:1. 0/100> (<d:0>: (<c21: 10> <c22: 19> <c23: 14> <c24: 13> <d:0>))>
+  <r1: <cv:1. 0/100> (<d:0>: (<c25: 14> <c26: 2> <c27: 23> <c28: 15> <c29: 8>
+                              <c30: 20> <c31: 24> <c32: 3> <d:0>))>
+
+#+end_example
+
+Now, we make the criterion and execute the metaheuristic.
+#+BEGIN_SRC lisp +n -r :results output
+
+  (progn
+    (setf rab (make-neighborhood-criterion 
+	       `((select-route r1)
+		 (select-client c1 from r1)
+		 (insert-client c1 to r1))
+	       +exhaustive-search-strategy+ 
+	       +random-improvement+))
+
+    (setf rarb (make-neighborhood-criterion 
+		`((select-route r1)
+		  (select-client c1 from r1)
+		  (select-route r2)
+		  (insert-client c1 to r2))
+		+exhaustive-search-strategy+ 
+		+random-improvement+))
+
+    (setf rarac (make-neighborhood-criterion 
+		 `((select-route r1)
+		   (select-client c1 from r1)
+		   (select-route r2)
+		   (select-client c2 from r2)
+		   (swap-clients c1 c2))
+		 +exhaustive-search-strategy+ 
+		 +random-improvement+))
+
+
+    (setf rereg (make-neighborhood-criterion 
+		 `((select-route r1)
+		   (select-subroute c1 from r1)
+		   (select-route r2)
+		   (select-subroute c2 from r2)
+		   (swap-subroutes c1 c2))
+	  +exhaustive-search-strategy+ 
+	  +random-improvement+))
+
+  (setf rerf (make-neighborhood-criterion 
+	      `((select-route r1)
+		(select-subroute c1 from r1)
+		(select-route r2)
+		(insert-subroute c1 into r2))
+	      +exhaustive-search-strategy+ 
+	      +random-improvement+))
+
+
+
+  (setf ref (make-neighborhood-criterion 
+	     `((select-route r1)
+	       (select-subroute z1 from r1)
+	       (insert-subroute z1 into r1))
+	     +exhaustive-search-strategy+ 
+	     +random-improvement+))
+
+
+  (setf criteria (list rab rarb rarac rereg rerf ref))
+
+  (format t "~a" (vns-vrp-system A-n33-k5-problem criteria graph :max-iter 10000000000)))
+
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+Debug inside VNS.  Iteration 1, criterion 0Best solution found.
+Debug inside VNS.  Iteration 2, criterion 1Best solution found.
+Debug inside VNS.  Iteration 3, criterion 2, cost: 687
+Debug inside VNS.  Iteration 4, criterion 0Best solution found.
+Debug inside VNS.  Iteration 5, criterion 1Best solution found.
+Debug inside VNS.  Iteration 6, criterion 2, cost: 686
+Debug inside VNS.  Iteration 7, criterion 0Best solution found.
+Debug inside VNS.  Iteration 8, criterion 1Best solution found.
+Debug inside VNS.  Iteration 9, criterion 2Best solution found.
+Debug inside VNS.  Iteration 10, criterion 3, cost: 682
+Debug inside VNS.  Iteration 11, criterion 0Best solution found.
+Debug inside VNS.  Iteration 12, criterion 1Best solution found.
+Debug inside VNS.  Iteration 13, criterion 2, cost: 675
+Debug inside VNS.  Iteration 14, criterion 0Best solution found.
+Debug inside VNS.  Iteration 15, criterion 1Best solution found.
+Debug inside VNS.  Iteration 16, criterion 2Best solution found.
+Debug inside VNS.  Iteration 17, criterion 3Best solution found.
+Debug inside VNS.  Iteration 18, criterion 4Best solution found.
+Debug inside VNS.  Iteration 19, criterion 5Best solution found.
+(S1: (675)
+routes:
+  <r5: <cv:1. 0/100> (<d:0>: (<c15: 18> <c17: 24> <c9: 18> <c3: 14> <c16: 10>
+                              <c29: 8>))>
+  <r4: <cv:1. 0/100> (<d:0>: (<c20: 8> <c32: 3> <c13: 23> <c8: 10> <c7: 19>
+                              <c26: 2> <c4: 13> <c22: 19>))>
+  <r3: <cv:1. 0/100> (<d:0>: (<c2: 23> <c24: 13> <c6: 18> <c23: 14>))>
+  <r2: <cv:1. 0/100> (<d:0>: (<c28: 15> <c18: 13> <c31: 24> <c1: 5> <c21: 10>
+                              <c14: 9> <c19: 14> <c11: 5>))>
+  <r1: <cv:1. 0/100> (<d:0>: (<c12: 9> <c5: 8> <c27: 23> <c25: 14> <c30: 20>
+                              <c10: 20>))>
+
+ 20 T)
+#+end_example
+
+
+
+*** A-n65-k9 (1179)
+Lets create the distance matrix
+#+BEGIN_SRC lisp +n -r :results none
+     (defparameter a-n65-k9-coords
+       '((25 51) (35  7) (93 75) (53 95) (51 81) (51 55) ( 1 67)
+         ( 9 23) (75  7) (15 97) (79  5) ( 9 19) (39  1) (47  1)
+         (33 97) (27 83) (83 79) (17 59) (47 19) (57  9) (87 41)
+         (55 25) (21 91) (21 13) (67  1) (59 21) ( 1 75) (33 85)
+         (25 21) (45 29) (63 77) ( 1 77) (77 41) (35 11) ( 9 77)
+         (61 87) (59 91) (63 79) (97 67) ( 9 45) (93 21) (83 71)
+         (95 57) (31 69) (77 17) (63 57) ( 3 63) (11 69) ( 7  9)
+         (37 65) (75 83) (15 53) (69  5) (69 27) ( 5 19) (49 31)
+         (77 17) (15  7) (91 39) (79 17) (67 75) (93 51) (25 33)
+         ( 9 19) ( 3 65)))
+
+     (defparameter a-n65-k9-distance-matrix
+      (make-distance-matrix a-n65-k9-coords))
+
+
+#+END_SRC
+
+Now we define the demands.
+#+BEGIN_SRC lisp +n -r :results none
+     (defparameter a-n65-k9-demands
+       '(12 24 16  7  9 20 10 18 26 17  2 11  9
+         12 11 12 23  7  1 26 10  9 22 21 17  2
+         15 16 14 23 24  2 12 18  5 19 15  8  6
+         14 13  5 24 25  2  8 14  2 13 10  6  6
+         24 21 20 24  4 19 14 23  2 16 23 14))
+#+END_SRC
+
+Let's define the problem.
+#+BEGIN_SRC lisp +n -r :results none
+     (defparameter a-n65-k9-problem
+       (make-basic-cvrp-problem a-n65-k9-distance-matrix
+                                a-n65-k9-demands
+                                100
+                                1))
+#+END_SRC
+
+We make the initial solution and init the graph.
+#+BEGIN_SRC lisp +n -r :results output
+  (let ((p a-n65-k9-problem))
+    (defparameter s1 (make-simulation-cvrp-solution (list (list 1 2 3 4 5 6)
+							  (list 7 8 9 10 11 12 13 14)
+							  (list 15 16 17 18 19 20)
+							  (list 21 22 23 24)
+							  (list 25 26 27 28 29 30 31 32)
+							  (list 33 34 35 36 37 38 39 40)
+							  (list 41 42 43 44 45 46 47 48)
+							  (list 49 50 51 52 53 54 55 56)
+							  (list 57 58 59 60 61 62 63 64))
+						    p))
+					  ;(format t "~a" s1)
+    (defparameter graph (init-graph s1))
+
+    ;; let's evaluate the solution
+
+    (progn
+      (def-var total-distance 0 graph)
+      (loop for r in (routes s1) do 
+	(progn
+	  (def-var route-distance 0 graph)
+	  (def-var route-demand (capacity (vehicle r)) graph) 
+	  (loop for c in (clients r) do 
+	    (progn
+	      (increment-distance (previous-client r) c route-distance a-n65-k9-distance-matrix graph)
+	      (decrement-demand c route-demand graph) 
+	      (setf (previous-client r) c)))
+	  (increment-value total-distance route-distance graph)
+	  (apply-penalty route-demand total-distance 10 graph)) 
+	(return-value total-distance graph)))
+
+    (setf (cost (solution-track graph)) (output-value (output graph)))
+    (format t "initial cost: ~a~%" (output-value (output graph)))
+    (format t "initial solution: ~a~%" (solution-track graph))
+    )
+  )
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+initial cost: 4308
+initial solution: S1: (4308)
+routes:
+  <r9: <cv:1. 0/100> (<d:0>: (<c1: 12> <c2: 24> <c3: 16> <c4: 7> <c5: 9>
+                              <c6: 20> <d:0>))>
+  <r8: <cv:1. 0/100> (<d:0>: (<c7: 10> <c8: 18> <c9: 26> <c10: 17> <c11: 2>
+                              <c12: 11> <c13: 9> <c14: 12> <d:0>))>
+  <r7: <cv:1. 0/100> (<d:0>: (<c15: 11> <c16: 12> <c17: 23> <c18: 7> <c19: 1>
+                              <c20: 26> <d:0>))>
+  <r6: <cv:1. 0/100> (<d:0>: (<c21: 10> <c22: 9> <c23: 22> <c24: 21> <d:0>))>
+  <r5: <cv:1. 0/100> (<d:0>: (<c25: 17> <c26: 2> <c27: 15> <c28: 16> <c29: 14>
+                              <c30: 23> <c31: 24> <c32: 2> <d:0>))>
+  <r4: <cv:1. 0/100> (<d:0>: (<c33: 12> <c34: 18> <c35: 5> <c36: 19> <c37: 15>
+                              <c38: 8> <c39: 6> <c40: 14> <d:0>))>
+  <r3: <cv:1. 0/100> (<d:0>: (<c41: 13> <c42: 5> <c43: 24> <c44: 25> <c45: 2>
+                              <c46: 8> <c47: 14> <c48: 2> <d:0>))>
+  <r2: <cv:1. 0/100> (<d:0>: (<c49: 13> <c50: 10> <c51: 6> <c52: 6> <c53: 24>
+                              <c54: 21> <c55: 20> <c56: 24> <d:0>))>
+  <r1: <cv:1. 0/100> (<d:0>: (<c57: 4> <c58: 19> <c59: 14> <c60: 23> <c61: 2>
+                              <c62: 16> <c63: 23> <c64: 14> <d:0>))>
+
+#+end_example
+
+Now, we make the criterion and execute the metaheuristic.
+#+BEGIN_SRC lisp +n -r :results output
+
+  (progn
+    (setf rab (make-neighborhood-criterion 
+	       `((select-route r1)
+		 (select-client c1 from r1)
+		 (insert-client c1 to r1))
+	       +exhaustive-search-strategy+ 
+	       +random-improvement+))
+
+    (setf rarb (make-neighborhood-criterion 
+		`((select-route r1)
+		  (select-client c1 from r1)
+		  (select-route r2)
+		  (insert-client c1 to r2))
+		+exhaustive-search-strategy+ 
+		+best-improvement+))
+
+    (setf rarac (make-neighborhood-criterion 
+		 `((select-route r1)
+		   (select-client c1 from r1)
+		   (select-route r2)
+		   (select-client c2 from r2)
+		   (swap-clients c1 c2))
+		 +exhaustive-search-strategy+ 
+		 +best-improvement+))
+
+
+    (setf rereg (make-neighborhood-criterion 
+		 `((select-route r1)
+		   (select-subroute c1 from r1)
+		   (select-route r2)
+		   (select-subroute c2 from r2)
+		   (swap-subroutes c1 c2))
+	  +exhaustive-search-strategy+ 
+	  +best-improvement+))
+
+  (setf rerf (make-neighborhood-criterion 
+	      `((select-route r1)
+		(select-subroute c1 from r1)
+		(select-route r2)
+		(insert-subroute c1 into r2))
+	      +exhaustive-search-strategy+ 
+	      +best-improvement+))
+
+
+
+  (setf ref (make-neighborhood-criterion 
+	     `((select-route r1)
+	       (select-subroute z1 from r1)
+	       (insert-subroute z1 into r1))
+	     +exhaustive-search-strategy+ 
+	     +best-improvement+))
+
+
+  (setf criteria (list rab rarb rarac ref rerf rereg))
+
+  (format t "~a" (vns-vrp-system problem criteria graph :max-iter 10000000000)))
+
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+Debug inside VNS.  Iteration 1, criterion 0, cost: 4110
+Debug inside VNS.  Iteration 2, criterion 0, cost: 3982
+Debug inside VNS.  Iteration 3, criterion 0, cost: 3879
+Debug inside VNS.  Iteration 4, criterion 0, cost: 3792
+Debug inside VNS.  Iteration 5, criterion 0, cost: 3720
+Debug inside VNS.  Iteration 6, criterion 0, cost: 3648
+Debug inside VNS.  Iteration 7, criterion 0, cost: 3585
+Debug inside VNS.  Iteration 8, criterion 0, cost: 3524
+Debug inside VNS.  Iteration 9, criterion 0, cost: 3464
+Debug inside VNS.  Iteration 10, criterion 0, cost: 3407
+Debug inside VNS.  Iteration 11, criterion 0, cost: 3366
+Debug inside VNS.  Iteration 12, criterion 0, cost: 3326
+Debug inside VNS.  Iteration 13, criterion 0, cost: 3293
+Debug inside VNS.  Iteration 14, criterion 0, cost: 3246
+Debug inside VNS.  Iteration 15, criterion 0, cost: 3223
+Debug inside VNS.  Iteration 16, criterion 0, cost: 3202
+Debug inside VNS.  Iteration 17, criterion 0, cost: 3182
+Debug inside VNS.  Iteration 18, criterion 0, cost: 3140
+Debug inside VNS.  Iteration 19, criterion 0, cost: 3123
+Debug inside VNS.  Iteration 20, criterion 0, cost: 3107
+Debug inside VNS.  Iteration 21, criterion 0, cost: 3092
+Debug inside VNS.  Iteration 22, criterion 0, cost: 3080
+Debug inside VNS.  Iteration 23, criterion 0, cost: 3055
+Debug inside VNS.  Iteration 24, criterion 0, cost: 3049
+Debug inside VNS.  Iteration 25, criterion 0, cost: 3043
+Debug inside VNS.  Iteration 26, criterion 0, cost: 3037
+Debug inside VNS.  Iteration 27, criterion 0, cost: 3028
+Debug inside VNS.  Iteration 28, criterion 0, cost: 3018
+Debug inside VNS.  Iteration 29, criterion 0, cost: 3010
+Debug inside VNS.  Iteration 30, criterion 0, cost: 3005
+Debug inside VNS.  Iteration 31, criterion 0, cost: 3001
+Debug inside VNS.  Iteration 32, criterion 0, cost: 2999
+Debug inside VNS.  Iteration 33, criterion 0, cost: 2998
+Debug inside VNS.  Iteration 34, criterion 0, cost: 2997
+Debug inside VNS.  Iteration 35, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 36, criterion 1, cost: 2767
+Debug inside VNS.  Iteration 37, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 38, criterion 1, cost: 2602
+Debug inside VNS.  Iteration 39, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 40, criterion 1, cost: 2463
+Debug inside VNS.  Iteration 41, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 42, criterion 1, cost: 2380
+Debug inside VNS.  Iteration 43, criterion 0, cost: 2370
+Debug inside VNS.  Iteration 44, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 45, criterion 1, cost: 2320
+Debug inside VNS.  Iteration 46, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 47, criterion 1, cost: 2277
+Debug inside VNS.  Iteration 48, criterion 0, cost: 2272
+Debug inside VNS.  Iteration 49, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 50, criterion 1, cost: 2235
+Debug inside VNS.  Iteration 51, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 52, criterion 1, cost: 2204
+Debug inside VNS.  Iteration 53, criterion 0, cost: 2200
+Debug inside VNS.  Iteration 54, criterion 0, cost: 2193
+Debug inside VNS.  Iteration 55, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 56, criterion 1, cost: 2179
+Debug inside VNS.  Iteration 57, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 58, criterion 1, cost: 2167
+Debug inside VNS.  Iteration 59, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 60, criterion 1, cost: 2155
+Debug inside VNS.  Iteration 61, criterion 0, cost: 2146
+Debug inside VNS.  Iteration 62, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 63, criterion 1, cost: 2128
+Debug inside VNS.  Iteration 64, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 65, criterion 1, cost: 2118
+Debug inside VNS.  Iteration 66, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 67, criterion 1, cost: 2090
+Debug inside VNS.  Iteration 68, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 69, criterion 1, cost: 2081
+Debug inside VNS.  Iteration 70, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 71, criterion 1, cost: 2075
+Debug inside VNS.  Iteration 72, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 73, criterion 1, cost: 2069
+Debug inside VNS.  Iteration 74, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 75, criterion 1, cost: 2067
+Debug inside VNS.  Iteration 76, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 77, criterion 1, cost: 2066
+Debug inside VNS.  Iteration 78, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 79, criterion 1, cost: 2065
+Debug inside VNS.  Iteration 80, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 81, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 82, criterion 2, cost: 1990
+Debug inside VNS.  Iteration 83, criterion 0, cost: 1974
+Debug inside VNS.  Iteration 84, criterion 0, cost: 1972
+Debug inside VNS.  Iteration 85, criterion 0, cost: 1968
+Debug inside VNS.  Iteration 86, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 87, criterion 1, cost: 1966
+Debug inside VNS.  Iteration 88, criterion 0, cost: 1965
+Debug inside VNS.  Iteration 89, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 90, criterion 1, cost: 1950
+Debug inside VNS.  Iteration 91, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 92, criterion 1, cost: 1947
+Debug inside VNS.  Iteration 93, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 94, criterion 1, cost: 1942
+Debug inside VNS.  Iteration 95, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 96, criterion 1, cost: 1937
+Debug inside VNS.  Iteration 97, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 98, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 99, criterion 2, cost: 1883
+Debug inside VNS.  Iteration 100, criterion 0, cost: 1870
+Debug inside VNS.  Iteration 101, criterion 0, cost: 1864
+Debug inside VNS.  Iteration 102, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 103, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 104, criterion 2, cost: 1838
+Debug inside VNS.  Iteration 105, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 106, criterion 1, cost: 1835
+Debug inside VNS.  Iteration 107, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 108, criterion 1, cost: 1817
+Debug inside VNS.  Iteration 109, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 110, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 111, criterion 2, cost: 1792
+Debug inside VNS.  Iteration 112, criterion 0, cost: 1790
+Debug inside VNS.  Iteration 113, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 114, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 115, criterion 2, cost: 1767
+Debug inside VNS.  Iteration 116, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 117, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 118, criterion 2, cost: 1745
+Debug inside VNS.  Iteration 119, criterion 0, cost: 1737
+Debug inside VNS.  Iteration 120, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 121, criterion 1, cost: 1735
+Debug inside VNS.  Iteration 122, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 123, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 124, criterion 2, cost: 1716
+Debug inside VNS.  Iteration 125, criterion 0, cost: 1689
+Debug inside VNS.  Iteration 126, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 127, criterion 1, cost: 1681
+Debug inside VNS.  Iteration 128, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 129, criterion 1, cost: 1643
+Debug inside VNS.  Iteration 130, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 131, criterion 1, cost: 1641
+Debug inside VNS.  Iteration 132, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 133, criterion 1, cost: 1630
+Debug inside VNS.  Iteration 134, criterion 0, cost: 1628
+Debug inside VNS.  Iteration 135, criterion 0, cost: 1626
+Debug inside VNS.  Iteration 136, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 137, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 138, criterion 2, cost: 1614
+Debug inside VNS.  Iteration 139, criterion 0, cost: 1609
+Debug inside VNS.  Iteration 140, criterion 0, cost: 1608
+Debug inside VNS.  Iteration 141, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 142, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 143, criterion 2, cost: 1599
+Debug inside VNS.  Iteration 144, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 145, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 146, criterion 2, cost: 1592
+Debug inside VNS.  Iteration 147, criterion 0, cost: 1587
+Debug inside VNS.  Iteration 148, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 149, criterion 1, cost: 1577
+Debug inside VNS.  Iteration 150, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 151, criterion 1, cost: 1576
+Debug inside VNS.  Iteration 152, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 153, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 154, criterion 2, cost: 1569
+Debug inside VNS.  Iteration 155, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 156, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 157, criterion 2, cost: 1562
+Debug inside VNS.  Iteration 158, criterion 0, cost: 1560
+Debug inside VNS.  Iteration 159, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 160, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 161, criterion 2, cost: 1556
+Debug inside VNS.  Iteration 162, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 163, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 164, criterion 2, cost: 1555
+Debug inside VNS.  Iteration 165, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 166, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 167, criterion 2, cost: 1542
+Debug inside VNS.  Iteration 168, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 169, criterion 1, cost: 1539
+Debug inside VNS.  Iteration 170, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 171, criterion 1, cost: 1536
+Debug inside VNS.  Iteration 172, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 173, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 174, criterion 2, cost: 1518
+Debug inside VNS.  Iteration 175, criterion 0, cost: 1495
+Debug inside VNS.  Iteration 176, criterion 0, cost: 1485
+Debug inside VNS.  Iteration 177, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 178, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 179, criterion 2, cost: 1483
+Debug inside VNS.  Iteration 180, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 181, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 182, criterion 2, cost: 1482
+Debug inside VNS.  Iteration 183, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 184, criterion 1, cost: 1481
+Debug inside VNS.  Iteration 185, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 186, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 187, criterion 2, cost: 1478
+Debug inside VNS.  Iteration 188, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 189, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 190, criterion 2.   Best solution found.
+Debug inside VNS.  Iteration 191, criterion 3.   Best solution found.
+Debug inside VNS.  Iteration 192, criterion 4.   Best solution found.
+Debug inside VNS.  Iteration 193, criterion 5, cost: 1455
+Debug inside VNS.  Iteration 194, criterion 0, cost: 1433
+Debug inside VNS.  Iteration 195, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 196, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 197, criterion 2.   Best solution found.
+Debug inside VNS.  Iteration 198, criterion 3.   Best solution found.
+Debug inside VNS.  Iteration 199, criterion 4.   Best solution found.
+Debug inside VNS.  Iteration 200, criterion 5, cost: 1414
+Debug inside VNS.  Iteration 201, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 202, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 203, criterion 2.   Best solution found.
+Debug inside VNS.  Iteration 204, criterion 3.   Best solution found.
+Debug inside VNS.  Iteration 205, criterion 4.   Best solution found.
+Debug inside VNS.  Iteration 206, criterion 5, cost: 1400
+Debug inside VNS.  Iteration 207, criterion 0, cost: 1392
+Debug inside VNS.  Iteration 208, criterion 0, cost: 1387
+Debug inside VNS.  Iteration 209, criterion 0, cost: 1386
+Debug inside VNS.  Iteration 210, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 211, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 212, criterion 2.   Best solution found.
+Debug inside VNS.  Iteration 213, criterion 3.   Best solution found.
+Debug inside VNS.  Iteration 214, criterion 4.   Best solution found.
+Debug inside VNS.  Iteration 215, criterion 5, cost: 1378
+Debug inside VNS.  Iteration 216, criterion 0, cost: 1369
+Debug inside VNS.  Iteration 217, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 218, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 219, criterion 2, cost: 1358
+Debug inside VNS.  Iteration 220, criterion 0, cost: 1356
+Debug inside VNS.  Iteration 221, criterion 0, cost: 1349
+Debug inside VNS.  Iteration 222, criterion 0, cost: 1347
+Debug inside VNS.  Iteration 223, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 224, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 225, criterion 2, cost: 1345
+Debug inside VNS.  Iteration 226, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 227, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 228, criterion 2.   Best solution found.
+Debug inside VNS.  Iteration 229, criterion 3.   Best solution found.
+Debug inside VNS.  Iteration 230, criterion 4.   Best solution found.
+Debug inside VNS.  Iteration 231, criterion 5, cost: 1335
+Debug inside VNS.  Iteration 232, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 233, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 234, criterion 2.   Best solution found.
+Debug inside VNS.  Iteration 235, criterion 3.   Best solution found.
+Debug inside VNS.  Iteration 236, criterion 4.   Best solution found.
+Debug inside VNS.  Iteration 237, criterion 5, cost: 1324
+Debug inside VNS.  Iteration 238, criterion 0, cost: 1312
+Debug inside VNS.  Iteration 239, criterion 0, cost: 1310
+Debug inside VNS.  Iteration 240, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 241, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 242, criterion 2.   Best solution found.
+Debug inside VNS.  Iteration 243, criterion 3.   Best solution found.
+Debug inside VNS.  Iteration 244, criterion 4.   Best solution found.
+Debug inside VNS.  Iteration 245, criterion 5, cost: 1309
+Debug inside VNS.  Iteration 246, criterion 0, cost: 1291
+Debug inside VNS.  Iteration 247, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 248, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 249, criterion 2.   Best solution found.
+Debug inside VNS.  Iteration 250, criterion 3.   Best solution found.
+Debug inside VNS.  Iteration 251, criterion 4.   Best solution found.
+Debug inside VNS.  Iteration 252, criterion 5, cost: 1288
+Debug inside VNS.  Iteration 253, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 254, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 255, criterion 2.   Best solution found.
+Debug inside VNS.  Iteration 256, criterion 3.   Best solution found.
+Debug inside VNS.  Iteration 257, criterion 4.   Best solution found.
+Debug inside VNS.  Iteration 258, criterion 5, cost: 1272
+Debug inside VNS.  Iteration 259, criterion 0, cost: 1266
+Debug inside VNS.  Iteration 260, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 261, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 262, criterion 2.   Best solution found.
+Debug inside VNS.  Iteration 263, criterion 3.   Best solution found.
+Debug inside VNS.  Iteration 264, criterion 4.   Best solution found.
+Debug inside VNS.  Iteration 265, criterion 5.   Best solution found.
+(S1: (1266)
+routes:
+  <r9: <cv:1. 0/100> (<d:0>: (<c43: 24> <c22: 9> <c9: 26> <c34: 18> <c47: 14>))>
+  <r8: <cv:1. 0/100> (<d:0>: (<c5: 9> <c45: 2> <c38: 8> <c42: 5> <c61: 2>
+                              <c20: 26> <c58: 19> <c40: 14> <c59: 14>))>
+  <r7: <cv:1. 0/100> (<d:0>: (<c27: 15> <c36: 19> <c35: 5> <c50: 10> <c16: 12>
+                              <c2: 24> <c41: 13>))>
+  <r6: <cv:1. 0/100> (<d:0>: (<c39: 6> <c7: 10> <c63: 23> <c11: 2> <c54: 21>
+                              <c48: 2> <c57: 4> <c28: 16> <c62: 16>))>
+  <r5: <cv:1. 0/100> (<d:0>: (<c51: 6> <c46: 8> <c64: 14> <c6: 20> <c26: 2>
+                              <c31: 24> <c17: 23>))>
+  <r4: <cv:1. 0/100> (<d:0>: (<c60: 23> <c32: 2> <c44: 25> <c56: 24>
+                              <c53: 24>))>
+  <r3: <cv:1. 0/100> (<d:0>: (<c49: 13> <c4: 7> <c30: 23> <c37: 15> <c3: 16>
+                              <c14: 12> <c15: 11>))>
+  <r2: <cv:1. 0/100> (<d:0>: (<c18: 7> <c19: 1> <c24: 21> <c52: 6> <c10: 17>
+                              <c8: 18> <c21: 10> <c55: 20>))>
+  <r1: <cv:1. 0/100> (<d:0>: (<c23: 22> <c33: 12> <c1: 12> <c12: 11> <c13: 9>
+                              <c25: 17> <c29: 14>))>
+
+ 266 T)
+#+end_example

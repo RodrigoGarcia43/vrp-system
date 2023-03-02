@@ -1,0 +1,474 @@
+#+TITLE: Eval Methods
+#+AUTHOR: Rodrigo Garía Gómez
+#+EMAIL: rodrigo.garcia21111@gmail.com
+
+* Description
+In this file we'll have those methods that modify the evaluation graph. First we define the exploretion methods (extract, insert) for the high-level-nodes. Then, we define the evaluation and undo methods for the low-level-nodes. The src code blocks will be tangled to ../src/eval-methods.lisp
+
+* Add the package to the tangled file
+  #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp 
+    (in-package :vrp)
+  #+END_SRC
+
+
+* Evaluation and undo methods
+** Generic evaluate
+** Generic undo
+**** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+(defgeneric undo-low-level-node (ll-node)
+   (:documentation "The generic action to undo the low level graph node evaluation"))
+#+END_SRC
+**** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+(defgeneric evaluate-low-level-node (ll-node)
+   (:documentation "The generic action to do in the low level graph node"))
+#+END_SRC
+
+** Evaluation methods
+*** documentation
+Actions that perform every low level node
+
+*** Primary
+**** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+(defmethod evaluate-low-level-node ((ll-node low-level-node))
+   ())
+#+END_SRC
+*** Specialized
+**** documentation
+Let's define the specialization methods of the actions
+**** Increment distance low level node
+***** documentation
+Incremets the target distance
+***** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+(defmethod evaluate-low-level-node ((ll-node increment-distance-node))
+   (progn
+       (incf (output-value (output-action ll-node))
+         (aref (distance-matrix ll-node) 
+               (id (content (from-client ll-node))) 
+               (id (content (to-client ll-node)))))
+       (if (updater (output-action ll-node))
+           (undo-low-level-node (updater (output-action ll-node)))
+            nil)))
+#+END_SRC
+**** Decrement capacity low level node
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+  (defmethod evaluate-low-level-node ((ll-node decrement-capacity-node))
+    (progn
+      (if (not (typep (content (input-with-demand ll-node)) 'basic-depot))
+	  (decf (output-value (output-action ll-node)) 
+		(demand (content (input-with-demand ll-node)))))
+      (if (updater (output-action ll-node))
+	    (undo-low-level-node (updater (output-action ll-node))))))
+#+END_SRC
+**** Update accumulator with increment
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+(defmethod evaluate-low-level-node ((ll-node increment-accumulator-node))
+   (progn
+       (setf (output-copy (partial-accumulator ll-node))
+             (output-value (partial-accumulator ll-node)))
+       (incf (output-value (output-action ll-node)) 
+             (output-value (partial-accumulator ll-node)))
+       nil))
+#+END_SRC
+**** Penalize accumulator
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+(defmethod evaluate-low-level-node :after ((ll-node penalize-accumulator-node))
+   (let ((penal-amount (* (max (- (output-value (partial-accumulator ll-node))) 0) (factor ll-node))))
+        (progn 
+             (setf (output-copy (partial-accumulator ll-node))
+                   (min 0 (output-value (partial-accumulator ll-node))))
+             (incf (output-value (output-action ll-node))
+                    penal-amount)
+             nil)))
+#+END_SRC
+** Undo methods
+*** documentation
+    Methods to revert the effect of the evaluation
+
+*** Primary
+**** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+(defmethod undo-low-level-node ((ll-node low-level-node))
+   ())
+#+END_SRC
+*** Specialized
+**** documentation
+Let's define the specialization methods of the actions
+**** Increment distance low level node
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+(defmethod undo-low-level-node ((ll-node increment-distance-node))
+   (progn
+       (decf (output-value (output-action ll-node)) 
+         (aref (distance-matrix ll-node) 
+               (id (content (from-client ll-node))) 
+               (id (content (to-client ll-node)))))
+       (if (updater (output-action ll-node))
+           (undo-low-level-node (updater (output-action ll-node))))))
+#+END_SRC
+**** Decrement capacity low level node
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+  (defmethod undo-low-level-node ((ll-node decrement-capacity-node))
+    (progn
+      (if (not (typep (content (input-with-demand ll-node)) 'basic-depot))
+	  (incf (output-value (output-action ll-node)) 
+		(demand (content (input-with-demand ll-node)))))
+      (undo-low-level-node (updater (output-action ll-node)))))
+#+END_SRC
+**** Update accumulator with increment
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+(defmethod undo-low-level-node :after ((ll-node increment-accumulator-node))
+    (progn 
+        (incf (output-value (output-action ll-node))
+              (- (output-value (partial-accumulator ll-node))
+                 (output-copy (partial-accumulator ll-node))))
+        (setf (output-copy (partial-accumulator ll-node)) 
+              (output-value (partial-accumulator ll-node)))
+        (if (updater (output-action ll-node))
+            (undo-low-level-node (updater (output-action ll-node))))))
+#+END_SRC
+**** Penalize accumulator
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+(defmethod undo-low-level-node :after ((ll-node penalize-accumulator-node))
+    (let ((former-p (* (- (output-copy (partial-accumulator ll-node)))
+                       (factor ll-node)))
+          (current-p (* (max 0 (- (output-value (partial-accumulator ll-node))))
+                        (factor ll-node))))
+        (progn
+            (decf (output-value (output-action ll-node))
+                   former-p)
+            (incf (output-value (output-action ll-node))
+                   current-p)
+            (setf (output-copy (partial-accumulator ll-node)) 
+                  (min 0 (output-value (partial-accumulator ll-node))))
+            (if (updater (output-action ll-node))
+                (undo-low-level-node (updater (output-action ll-node)))))))
+#+END_SRC
+
+
+
+* Exploring methods
+** documentation
+Now let's implement the methods that perform the exploration of the neighbourhood (i.e extract, insert, etc)
+** Remove methods
+*** documentation
+Methods that performs the extraction of the clients
+*** Generic
+***** documentation
+Generic remove method
+***** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+(defgeneric remove-node (t-node)
+    (:method-combination append))
+#+END_SRC
+*** Primary
+***** documentation
+Primary remove client method
+***** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+(defmethod remove-node append ((t-node input-node))
+    ())
+#+END_SRC
+*** Specializations
+**** documentation
+Let's define the specialization methods to remove clients
+**** Remove Distance Client Node
+****** documentation
+Removes clients and calculates delta distance
+****** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+  (defmethod remove-node append ((t-node input-distance-node))
+
+    (if (not (typep t-node 'input-depot-node)) 
+	(progn
+	  (undo-low-level-node (first-distance-calculator t-node))
+
+	  (undo-low-level-node (second-distance-calculator t-node))
+
+	  (let ((new-inc (new-increment-distance-node
+			  :output-action (output-action (first-distance-calculator t-node))
+			  :from-client (from-client (first-distance-calculator t-node))
+			  :to-client (to-client (second-distance-calculator t-node))
+			  :distance-matrix (distance-matrix (first-distance-calculator t-node)))))
+	    (progn
+	      (setf (second-distance-calculator (from-client new-inc))
+		    new-inc)
+	      (setf (first-distance-calculator (to-client new-inc))
+		    new-inc)
+
+	      (evaluate-low-level-node new-inc))))))
+#+END_SRC
+**** Remove Capacity Client Node
+****** documentation
+Removes clients and calculates delta capacity
+****** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+(defmethod remove-node append ((t-node input-demand-node))
+   (if (not (typep t-node 'input-depot-node))
+     (progn
+      (undo-low-level-node (demand-calculator t-node)))))
+#+END_SRC
+**** Remove depot node
+****** documentation
+To remove depots
+****** code
+#+BEGIN_SRC lisp +n -r :results none :exportts code :tangle ../src/eval-methods.lisp
+(defmethod remove-node append ((t-node input-depot-node))
+      (if (second-distance-calculator t-node)
+        (undo-low-level-node (new-increment-distance-node
+                                    :previous-node (previous-node (second-distance-calculator t-node))
+                                    :next-node (next-node (second-distance-calculator t-node))
+                                     :output-action(output-action (second-distance-calculator t-node))
+                                     :from-client (from-client (second-distance-calculator t-node))
+                                     :to-client (to-client (second-distance-calculator t-node))
+                                     :distance-matrix (distance-matrix (second-distance-calculator t-node))))
+        (undo-low-level-node (new-increment-distance-node
+                                    :previous-node (previous-node (first-distance-calculator t-node))
+                                    :next-node (next-node (first-distance-calculator t-node))
+                                     :output-action(output-action (first-distance-calculator t-node))
+                                     :from-client (from-client (first-distance-calculator t-node))
+                                     :to-client (to-client (first-distance-calculator t-node))
+                                     :distance-matrix (distance-matrix (first-distance-calculator t-node))))))
+#+END_SRC
+** Insert methods
+*** documentation
+Methods that performs the insertion of the clients
+*** Generic
+**** documentation
+Generic insert method
+**** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+(defgeneric insert-node (t-node i-node)
+    (:method-combination append))
+#+END_SRC
+*** Primary
+**** documentation
+Primary insert client method
+**** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+(defmethod insert-node append ((t-node input-node) (i-node input-node))
+    ())
+#+END_SRC
+*** Specializations
+**** documentation
+Let's define the specialization methods to insert clients
+**** Insert Distance Client Node
+****** documentation
+Inserts clients and calculates delta distance
+****** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+  (defmethod insert-node append ((t-node input-distance-node) 
+				 (i-node input-distance-node))
+    (if (not (typep (content i-node) 'basic-depot))  
+	(let* ((target-calc (first-distance-calculator t-node))
+	       (next-client t-node)
+	       (new-calc (new-increment-distance-node
+			  :output-action (output-action target-calc)
+			  :from-client i-node
+			  :to-client next-client
+			  :distance-matrix (distance-matrix target-calc))))
+	  (progn
+	    (undo-low-level-node target-calc)
+	    (setf (to-client target-calc) i-node)
+	    (setf (first-distance-calculator i-node) target-calc)
+	    (setf (second-distance-calculator i-node) new-calc)
+	    (setf (first-distance-calculator t-node) new-calc)
+	    (evaluate-low-level-node target-calc)
+	    (evaluate-low-level-node new-calc)))))
+#+END_SRC
+**** Insert Capacity Client Node
+****** documentation
+Inserts clients and calculates delta capacity
+****** code
+
+;;;; (undo-low-level-node (updater (output-action new-inc))))))
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+  (defmethod insert-node append ((t-node input-demand-node) 
+				 (i-node input-demand-node))
+	(let* ((new-inc (new-decrement-capacity-node 
+			 :output-action (output-action (demand-calculator t-node))
+			 :input-with-demand i-node)))
+	  (progn
+	    (setf (demand-calculator i-node) new-inc)
+	    (evaluate-low-level-node new-inc))))
+
+
+#+END_SRC
+**** Insert depot
+****** documentation
+To insert a depot of the route. If the =second-calculator= slot
+of the =i-node= (node to insert) is =nil=, then it is inserted
+as a destination depot else it is inserted as an origin depot 
+****** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+(defmethod insert-node append ((t-node input-distance-node) 
+                                      (i-node input-depot-node))
+   (let* ((is-origin (if (second-distance-calculator i-node) t nil))
+          (calc (if is-origin 
+                    (first-distance-calculator t-node)
+                    (second-distance-calculator t-node))))
+       (progn
+          (if is-origin
+              (progn 
+                  (setf (second-distance-calculator i-node) calc)
+                  (setf (from-client calc) i-node))
+              (progn
+                  (setf (first-distance-calculator i-node) calc)
+                  (setf (to-client calc) i-node)))
+          (evaluate-low-level-node calc))))
+#+END_SRC
+
+
+* methods to convert to nodes
+** documentation
+In this section, we'll define some methods used to convert instances of vrp problem objects (solution, client, depot, etc) in nodes and add those to an evaluation graph called *graph*. If not value is passed to the optional argument *graph*, then a global dinamic variable with the same name should exist.
+** generic
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+ (defgeneric convert-to-node (target graph))
+#+END_SRC
+
+** primary
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+(defmethod convert-to-node (target graph) ())
+#+END_SRC
+** specialization
+**** basic-solution
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+(defmethod convert-to-node :after ((target basic-solution) graph)
+      (loop for r in (routes target) do
+          (convert-to-node r graph)))
+#+END_SRC
+**** has clients
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+(defmethod convert-to-node :after ((target has-clients) graph)
+     (progn
+         (loop for c in (clients target) do
+         (convert-to-node c graph))))
+#+END_SRC
+
+**** has vehicles
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+(defmethod convert-to-node :after ((target has-vehicles) graph)
+     (progn
+         (loop for v in (vehicles target) do
+         (convert-to-node v graph))))
+#+END_SRC
+
+**** has-multi-depots
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+(defmethod convert-to-node :after ((target has-multi-depots) graph)
+  (loop for d in (depots target) do
+      (if (gethash d (class-to-io graph))
+           nil 
+          (convert-to-node d graph))))
+#+END_SRC
+**** basic-route
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+  (defmethod convert-to-node :after ((target basic-route) graph)
+    (progn
+      (convert-to-node (vehicle target) graph)
+      (let* ((new-r (new-input-node :content target)))
+	(progn
+	  (setf (inputs graph) (append (inputs graph) `(,new-r)))
+	  (setf (gethash target (class-to-io graph)) new-r)))))
+#+END_SRC
+
+**** route-for-simulation
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+(defmethod convert-to-node :before ((target route-for-simulation) graph)
+     (progn
+         (convert-to-node (previous-client target) graph)))
+#+END_SRC
+
+**** basic-client
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+  (defmethod convert-to-node :after ((target basic-client) graph)
+      (let ((new-c (new-input-distance-node :content target)))
+	  (progn
+	      (setf (inputs graph) (append (inputs graph) `(,new-c)))
+	      (setf (gethash target (class-to-io graph)) new-c))))
+#+END_SRC
+**** demand-client
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+  (defmethod convert-to-node :around ((target demand-client) graph)
+       (let ((new-c (new-input-distance-demand-node :content target)))
+	   (progn
+	       (setf (inputs graph) (append (inputs graph) `(,new-c)))
+	       (setf (gethash target (class-to-io graph)) new-c))))
+#+END_SRC
+**** basic-depot
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+(defmethod convert-to-node :after ((target basic-depot) graph)
+     (let ((new-c (new-input-depot-node :content target)))
+         (progn
+             (setf (inputs graph) (append (inputs graph) `(,new-c)))
+             (setf (gethash target (class-to-io graph)) new-c))))
+#+END_SRC
+**** basic-vehicle
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+(defmethod convert-to-node :after ((target basic-vehicle) graph)
+     (let ((new-c (new-input-vehicle-node :content target)))
+         (progn
+             (setf (inputs graph) (append (inputs graph) `(,new-c)))
+             (setf (gethash target (class-to-io graph)) new-c))))
+#+END_SRC
+
+
+* methods to convert operations
+** Description
+Here we'll define some methods to convert from a vrp-suite-operation (=op-select-client=) to an eval-operation (=remove-client-from=)
+
+** generic
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+ (defgeneric convert-op (target graph))
+#+END_SRC
+
+** primary
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+(defmethod convert-op (target graph) ())
+#+END_SRC
+
+** specialization
+*** op-select-client
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+  (defmethod convert-op ((target operation-select-client) graph)
+    `(,#'remove-client-from ,(route target) ,(pos target) ,(operand target) ,graph))
+#+END_SRC
+
+
+*** op-insert-client
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+  (defmethod convert-op ((target operation-insert-client) graph)
+    `(,#'insert-client-to ,(route target) ,(pos target) ,(operand target) ,graph))
+#+END_SRC
+
+
+* methods to revert operations
+** Description
+Here we'll define some methods to convert from a vrp-suite-operation (=op-select-client=) to his inversed eval-operation (=insert-client-to=)
+
+** generic
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+ (defgeneric revert-op (target graph))
+#+END_SRC
+
+** primary
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+(defmethod revert-op (target graph) ())
+#+END_SRC
+
+** specialization
+*** op-select-client
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+  (defmethod revert-op ((target operation-select-client) graph)
+    `(,#'insert-client-to ,(route target) ,(pos target) ,(operand target) ,graph))
+#+END_SRC
+
+
+*** op-insert-client
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-methods.lisp
+  (defmethod revert-op ((target operation-insert-client) graph)
+    `(,#'remove-client-from ,(route target) ,(pos target) ,(operand target) ,graph))
+#+END_SRC

@@ -1,0 +1,487 @@
+#+TITLE: Eval Graph Builder
+#+AUTHOR: Rodrigo Garía Gómez
+#+EMAIL: rodrigo.garcia21111@gmail.com
+
+
+* Description 
+In this file we'll define how to build and work over an evaluation graph, using the classes and methods defined in =eval-classes.org= and =eval-methods.org= files. The src code blocks will be tangled to ../src/eval-graph-builder.lisp
+
+* Add the package to the tangled file
+  #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-graph-builder.lisp 
+    (in-package :vrp)
+  #+END_SRC
+
+* macros
+** documentation
+Here we define some macros to many purposes. Some of them will be used
+to define neighbourhood criteria or to make the required operations, and
+the other ones will be used to "beautify" the evaluation code
+
+** exploration macros 
+*** documentation
+These macros will be used to make the automatic evaluation during exploration
+*** do-operations
+**** documentation
+This is a tricky one. The evaluation of the new solution must be performed after
+the tape had been "physically" modified. Then we make only the required evaluations
+without making them twice when there is no need. The operations are done in a certain
+order. This macro is the one which manages that process.
+
+All the exploration operations must be declared as =(do-operations <list of operations>)=
+
+**** code
+#+BEGIN_SRC lisp +n -r :results none :exports none :tangle ../src/eval-graph-builder.lisp
+(defmacro do-operations (&rest ops)
+    `(let* ((visited-op (make-hash-table))
+            (queue ()))
+       (progn
+         (loop for op in (list ,@ops)
+             do (let* ((evaluations (apply (car op) (cdr op))))
+                   (loop for e in evaluations
+                       do (if (not (gethash e visited-op))
+                              (progn 
+                                  (setf queue (append queue `(,e)))
+                                  (setf (gethash e visited-op) t))))))
+          (loop while queue
+              do (let* ((nxt (car queue))
+                        (to-insert (apply (car nxt) (cdr nxt))))
+                       (progn
+                          (setf queue (cdr queue))
+                          (if (and to-insert (not (gethash to-insert visited-op)))
+                              (progn 
+                                  (setf queue (append queue `(,to-insert)))
+                                  (setf (gethash to-insert visited-op) t)))))))))
+#+END_SRC
+
+** beautify macros
+*** documentation
+This macros will be used to make the evaluation code cleaner
+and to get rid of those quotes and back quotes
+*** def-var
+**** documentation
+To define a variable
+**** code
+#+BEGIN_SRC lisp +n -r :results none :exports none :tangle ../src/eval-graph-builder.lisp
+(defmacro def-var (name init-value *graph*)
+    `(defallocable ',name ,init-value ,*graph*))
+#+END_SRC
+
+*** increment-distance
+**** documentation
+To increment a variable with the distance between two clients
+**** code
+#+BEGIN_SRC lisp +n -r :results none :exports none :tangle ../src/eval-graph-builder.lisp
+(defmacro increment-distance (from-client to-client incremented-var distance-matrix *graph*)
+    `(move-node-from-to ,from-client ,to-client ',incremented-var ,distance-matrix ,*graph*))
+#+END_SRC
+*** increment-value
+**** documentation
+To increment the value of a target variable in a certain amount
+**** code
+#+BEGIN_SRC lisp +n -r :results none :exports none :tangle ../src/eval-graph-builder.lisp
+(defmacro increment-value (target-var value *graph*)
+    `(increment-with ',target-var ',value ,*graph*))
+#+END_SRC
+*** return-value
+**** documentation
+To mark a variable as the one that contains the result of the evaluation.
+This is the equivalent to a return statement in a function code
+**** code
+#+BEGIN_SRC lisp +n -r :results none :exports none :tangle ../src/eval-graph-builder.lisp
+  (defmacro return-value (var *graph*)
+    `(set-output ',var ,*graph*))
+#+END_SRC
+*** decrement-demand
+**** documentation
+To decrement the demand of the route by delivering the cargo to a client
+**** code
+#+BEGIN_SRC lisp +n -r :results none :exports none :tangle ../src/eval-graph-builder.lisp
+(defmacro decrement-demand (target-client demand-var *graph*)
+    `(deliver ,target-client ',demand-var ,*graph*))
+#+END_SRC
+*** apply-penalty
+**** documentation
+To penalize a solution when the variable that holds the route demands goes negative.
+That means the capacity of the vehicle which attends the route is not enough. The
+penalty operations increments the value of the variable that holds the result of the
+evaluation by a given factor of the amount of demand that exceded the vehicle capacity.
+**** code
+#+BEGIN_SRC lisp +n -r :results none :exports none :tangle ../src/eval-graph-builder.lisp
+  (defmacro apply-penalty (demand-var result-var penalty-factor *graph*)
+    `(penalize ',demand-var ',result-var ,penalty-factor ,*graph*))
+#+END_SRC
+
+
+* build graph functions
+** documentation
+Now we define the actions we can perform using =graph-builder=.
+** init-graph
+**** documentation
+This method initializes the =eval-graph= class and convert the given solution in nodes.
+**** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-graph-builder.lisp
+  (defmethod init-graph ((s basic-solution))
+    (progn
+      (defparameter *graph* (new-eval-graph :solution-track s))
+      (convert-to-node s *graph*)
+      *graph*))
+#+END_SRC
+
+**** test
+# #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/eval-graph-builder-test.lisp
+# (let* ((depot (client 0))
+#        (c1 (client 1))
+#        (c2 (client 2))
+#        (r (route 1 `(,depot ,c1 ,c2 ,depot) nil))
+#        (sol (solution `(,r)))
+#        (act (action-distance 0))
+#        (graph (init-graph sol)))
+#     (format t "~a~%" graph)) 
+            
+# #+END_SRC
+
+# #+RESULTS:
+
+** move-node-from-to
+*** documentation
+This method sums the distance between =from-client= and =to-client= but also makes the related changes in the graph.
+*** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-graph-builder.lisp
+  (defun move-node-from-to (c1 c2 output-slot d-matrix *graph*)
+    (let* ((input1 (gethash c1 (class-to-io *graph*)))
+	   (input2 (gethash c2 (class-to-io *graph*)))
+	   (out-node (gethash output-slot (slot-to-output *graph*)))
+	   (d-node (new-increment-distance-node 
+		    :output-action out-node
+		    :from-client input1
+		    :to-client input2 
+		    :distance-matrix d-matrix)))
+
+      (progn
+	(setf (second-distance-calculator input1) d-node)
+	(setf (first-distance-calculator input2) d-node)
+	(do-operations `(,#'evaluate-low-level-node ,d-node)))))
+#+END_SRC
+
+*** test
+# #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/eval-graph-builder-test.lisp
+# (let* ((depot (client 0))
+#        (c1 (client 1))
+#        (c2 (client 2))
+#        (r (route 1 `(,c1 ,c2 ,depot) depot))
+#        (sol (solution `(,r)))
+#        (act (action-distance 0))
+#        (*graph* (init-graph sol))
+#        (on (output-graph-node 0))
+#        (mat #2A((0 1 2) (1 0 2) (2 2 0))))
+#     (progn
+#         (setf (gethash 'total-distance (slot-to-output *graph*)) on)
+#         (loop for r in (routes sol) do
+#             (loop for c in (clients r) do
+#                (progn 
+#                    (move-node-from-to (prev-client r) c 'total-distance *graph* mat)
+#                    (setf (prev-client r) c))))
+#         (format t "EVALUATION (should be 5): ~a~%" (output-value on))))
+# #+END_SRC
+
+#+RESULTS:
+: EVALUATION (should be 5): 5
+** defallocable
+*** documentation
+A method to store partial or final values. Also creates accumulator nodes in the graph.
+*** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-graph-builder.lisp
+(defmethod defallocable (output-slot value-of-slot *graph*)
+    (let* ((new-node (new-accumulator-node :output-value value-of-slot)))
+        (progn
+            (setf (gethash output-slot (slot-to-output *graph*)) new-node))))
+#+END_SRC
+** increment-with
+*** documentation
+Statement used to increment an allocable with another one.
+*** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-graph-builder.lisp
+  (defmethod increment-with (output-slot partial-slot *graph*)
+    (let* ((out-node (gethash output-slot (slot-to-output *graph*)))
+	   (part-node (gethash partial-slot (slot-to-output *graph*)))
+	   (updt (new-increment-accumulator-node 
+		  :output-action out-node
+		  :partial-accumulator part-node)))
+      (progn
+	(setf (updater part-node) updt)
+	(do-operations `(,#'evaluate-low-level-node ,updt)))))
+#+END_SRC
+
+*** test
+# #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/eval-graph-builder-test.lisp
+# (let* ((depot (client 0))
+#        (c1 (client 1))
+#        (c2 (client 2))
+#        (r (route 1 `(,c1 ,c2 ,depot) depot))
+#        (sol (solution `(,r)))
+#        (act (action-distance 0))
+#        (*graph* (init-graph sol))
+#        (mat #2A((0 1 2) (1 0 2) (2 2 0))))
+#     (progn
+#         (defallocable 'total-distance 0 *graph*)
+#         (loop for r in (routes sol) do
+#             (progn
+#                 (defallocable 'route-distance 0 *graph*)
+#                 (loop for c in (clients r) do
+#                    (progn 
+#                        (move-node-from-to (prev-client r) c 'route-distance *graph* mat)
+#                        (setf (prev-client r) c)))
+#                 (increment-with 'total-distance 'route-distance *graph*)))
+#         (format t "EVALUATION (should be 5): ~a~%" (output-value 
+#                                                         (gethash 'total-distance (slot-to-output *graph*))))))
+# #+END_SRC
+
+#+RESULTS:
+: EVALUATION (should be 5): 5
+** set-output
+*** documentation
+To mark a certain variable defined during evaluation as the output.
+*** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-graph-builder.lisp
+(defmethod set-output (output-slot *graph*)
+    (setf (output *graph*) (gethash output-slot (slot-to-output *graph*))))
+#+END_SRC
+** deliver
+*** documentation
+Delivers pruduct to a demand client
+*** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-graph-builder.lisp
+(defmethod deliver (c capacity-slot-accumulator *graph*)
+    (let* ((c-node (gethash c (class-to-io *graph*)))
+           (acc (gethash capacity-slot-accumulator (slot-to-output *graph*)))
+           (c-calc (new-decrement-capacity-node :output-action acc :input-with-demand c-node)))
+        (progn
+            (setf (demand-calculator c-node) c-calc)
+            (evaluate-low-level-node c-calc))))
+
+#+END_SRC
+** penalize
+*** documentation
+It's used to apply a penalization
+on a certain field
+*** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-graph-builder.lisp
+(defmethod penalize (input-slot-accum output-slot-accum p-factor *graph*)
+    (let* ((i-node (gethash input-slot-accum (slot-to-output *graph*)))
+           (o-node (gethash output-slot-accum (slot-to-output *graph*)))
+           (penalizer (new-penalize-accumulator-node :output-action o-node :partial-accumulator i-node :factor p-factor)))
+        (progn
+            (setf (updater i-node) penalizer)
+            (evaluate-low-level-node penalizer))))
+#+END_SRC
+** remove-client-from
+*** documentation
+A wrapper that allow the user remove a client using its coordinates in the solution.
+*** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-graph-builder.lisp
+(defmethod remove-client-from (route-index client-index *graph*)
+    (let* ((target-route (car (nthcdr route-index (routes (solution-track *graph*)))))
+           (target-client (car (nthcdr client-index (clients target-route))))
+           (node-to-remove (gethash target-client (class-to-io *graph*)))) 
+        (progn
+            (setf (clients target-route) (remove target-client (clients target-route)))
+            (setf (client-buffer *graph*) (append (client-buffer *graph*) `(,target-client)))
+            (remove-node node-to-remove))))
+#+END_SRC
+** insert-client-to
+*** documentation
+A wrapper that allow the user insert a client using its coordinates in the solution.
+*** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-graph-builder.lisp
+(defmethod insert-client-to (buffer-index route-index client-index *graph*)
+    (let* ((target-route (car (nthcdr route-index (routes (solution-track *graph*)))))
+           (target-client (car (nthcdr buffer-index (client-buffer *graph*))))
+           (node-to-insert (gethash target-client (class-to-io *graph*)))
+           (client-before-insert-to (car (nthcdr client-index (clients target-route))))
+           (node-before-insert-to (gethash client-before-insert-to (class-to-io *graph*))))
+        (progn
+            (setf (client-buffer *graph*) (remove target-client (client-buffer *graph*)))
+            (if (eq client-index 0)
+                (push target-client (clients target-route))
+                (push target-client (cdr (nthcdr (- client-index 1) (clients target-route)))))
+            (insert-node node-before-insert-to node-to-insert))))
+#+END_SRC
+** get-value
+*** documentation
+A shortcut to get the value of any declared variable 
+
+*** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-graph-builder.lisp
+(defmethod get-value (var-symbol *graph*)
+    (output-value (gethash var-symbol (slot-to-output *graph*))))
+#+END_SRC
+** get-output
+*** documentation
+A shortcut to get the value of the output node
+*** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-graph-builder.lisp
+(defmethod get-output (*graph*)
+    (output-value (output *graph*)))
+#+END_SRC
+** set-route-vehicle
+*** documentation
+Allows the user to assign a specific vehicle to the route.
+*** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-graph-builder.lisp
+(defmethod set-route-vehicle (route-instance route-accumulator *graph*)
+    (let* ((v-input (gethash (vehicle route-instance) (class-to-io *graph*)))
+           (init-val (capacity (vehicle route-instance)))
+           (new-node (new-accumulator-node :output-value init-val)))
+        (progn
+            (setf (gethash route-accumulator (slot-to-output *graph*)) new-node)
+            (setf (dependent-accumulator v-input) new-node))))
+#+END_SRC
+** remove-vehicle-from
+*** documentation
+A wrapper that allow the user remove a vehicle using
+its coordinates in the solution
+*** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-graph-builder.lisp
+(defmethod remove-vehicle-from (route-index *graph*)
+    (let* ((target-vehicle (vehicle (car (nthcdr route-index (routes (solution-track *graph*))))))
+           (target-input (gethash target-vehicle (class-to-io *graph*))))
+        (progn
+            (remove-node target-input)
+            (setf (vehicle-buffer *graph*) (append (vehicle-buffer *graph*) target-input)))))
+#+END_SRC
+** insert-vehicle-to
+*** documentation
+A wrapper that allow the user insert a client using
+its coordinates in the solution
+*** code
+# #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-graph-builder.lisp
+#   (defmethod insert-vehicle-to (route-index vehicle-index *graph*)
+#     (let* ((target-route (car (nthcdr route-index (routes (solution-track *graph*)))))
+# 	   (target-vehicle (car (nthcdr vehicle-index (vehicle-buffer *graph*))))
+# 	   (node-to-insert (gethash target-vehicle (class-to-io *tape*)))
+# 	   (vehicle-before-insert-to (car (nthcdr route-index (clients target-route))))
+# 	   (node-before-insert-to (gethash vehicle-before-insert-to (class-to-io *tape*))))
+#       (progn
+# 	(setf (client-buffer *graph*) (remove target-vehicle (client-buffer *graph*)))
+# 	(insert-node node-before-insert-to node-to-insert))))
+#+END_SRC
+** TODO change-first-depot
+*** documentation
+# Changes the initial depot of the a route with another depot. Receives the index of the route and the index of the depot to insert.
+# *** code
+# #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-graph-builder.lisp
+# (defmethod change-first-depot (route-index d-index *graph*)
+#     (let* ((target-route (car (nthcdr route-index (routes (solution-track *graph*)))))
+#            (reference-client (car (clients target-route)))
+#            (io-reference (gethash reference-client (class-to-io *graph*)))
+#            (depot-to-extract (first-depot target-route))
+#            (io-to-extract (gethash depot-to-extract (class-to-io *graph*)))
+#            (depot-to-insert-orig (car (nthcdr d-index (depots (solution-track *graph*)))))
+#            (depot-to-insert (basic-depot (id depot-to-insert-orig))) ; clone the depot orig
+#            (io-to-insert (input-depot-node nil nil nil nil))) 
+#         (progn
+#            (setf (prev-slot target-route) depot-to-extract)
+#            (setf (second-distance-calculator io-to-insert) t)
+#            (setf (gethash depot-to-insert (class-to-io *graph*)) io-to-insert)
+#            (setf (content io-to-insert) depot-to-insert)
+#            (setf (first-depot target-route) depot-to-insert) ;;TODO here
+#            (append (remove-node io-to-extract)
+#                    (insert-node io-reference io-to-insert)))))
+        
+# #+END_SRC
+** TODO undo-first-depot-change
+*** documentation
+To revert the last depot change done
+*** code
+# #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-graph-builder.lisp
+# (defmethod undo-first-depot-change (route-index *graph*)
+#     (let* ((target-route (car (nthcdr route-index (routes (solution-track *graph*)))))
+#            (reference-client (car (clients target-route)))
+#            (io-reference (gethash reference-client (class-to-io *graph*)))
+#            (depot-to-extract (first-depot target-route))
+#            (io-to-extract (gethash depot-to-extract (class-to-io *graph*)))
+#            (depot-to-insert-orig (prev-slot target-route))
+#            (depot-to-insert (depot (id depot-to-insert-orig) 0)) ; clone the depot orig
+#            (io-to-insert (input-depot-node nil nil nil nil))) ; fix when refactoring is done 
+#         (progn
+#            (setf (prev-slot target-route) depot-to-extract)
+#            (setf (second-distance-calculator io-to-insert) t)
+#            (setf (gethash depot-to-insert (class-to-io *graph*)) io-to-insert)
+#            (setf (content io-to-insert) depot-to-insert)
+#            (setf (first-depot target-route) depot-to-insert)
+#            (append (remove-node io-to-extract)
+#                    (insert-node io-reference io-to-insert)))))
+        
+# #+END_SRC
+** TODO change-last-depot
+*** documentation
+Changes the last depot of the a route with another depot.
+Receives the index of the route and the index of the depot
+to insert.
+*** code
+# #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-graph-builder.lisp
+# (defmethod change-last-depot (route-index d-index *graph*)
+#     (let* ((target-route (car (nthcdr route-index (routes (solution-track *graph*)))))
+#            (reference-client (car (last (clients target-route) 2)))
+#            (io-reference (gethash reference-client (class-to-io *graph*)))
+#            (depot-to-extract (car (last (clients target-route))))
+#            (io-to-extract (gethash depot-to-extract (class-to-io *graph*)))
+#            (depot-to-insert-orig (car (nthcdr d-index (depots (solution-track *graph*)))))
+#            (depot-to-insert (depot (id depot-to-insert-orig) 0)) ; clone the depot orig
+#            (io-to-insert (input-depot-node nil nil nil nil))) ; fix when refactoring is done 
+#         (progn
+#            (setf (prev-slot target-route) depot-to-extract)
+#            (setf (first-distance-calculator io-to-insert) t)
+#            (setf (gethash depot-to-insert (class-to-io *graph*)) io-to-insert)
+#            (setf (content io-to-insert) depot-to-insert)
+#            (setf (car (last (clients target-route))) depot-to-insert)
+#            (append (remove-node io-to-extract)
+#                    (insert-node io-reference io-to-insert)))))
+# #+END_SRC
+** TODO undo-last-depot-change
+*** documentation
+To revert the last change of the last depot
+*** code
+# #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-graph-builder.lisp
+# (defmethod undo-last-depot-change (route-index *graph*)
+#     (let* ((target-route (car (nthcdr route-index (routes (solution-track *graph*)))))
+#            (reference-client (car (last (clients target-route) 2)))
+#            (io-reference (gethash reference-client (class-to-io *graph*)))
+#            (depot-to-extract (car (last (clients target-route))))
+#            (io-to-extract (gethash depot-to-extract (class-to-io *graph*)))
+#            (depot-to-insert-orig (prev-slot target-route))
+#            (depot-to-insert (depot (id depot-to-insert-orig) 0)) ; clone the depot orig
+#            (io-to-insert (input-depot-node nil nil nil nil))) 
+#         (progn
+#            (setf (prev-slot target-route) depot-to-extract)
+#            (setf (first-distance-calculator io-to-insert) t)
+#            (setf (gethash depot-to-insert (class-to-io *graph*)) io-to-insert)
+#            (setf (content io-to-insert) depot-to-insert)
+#            (setf (car (last (clients target-route))) depot-to-insert)
+#            (append (remove-node io-to-extract)
+#                    (insert-node io-reference io-to-insert)))))
+# #+END_SRC
+
+
+RIGHT NOW ROUTES CAN ONLY START AND END IN THE SAME DEPOT. A FUTURE AND SIMPLE REFACTORING WILL BE DONE TO FIX THAT
+
+
+
+* temp
+#+BEGIN_SRC lisp +n -r :results output :exports none
+  (defun foo (temp) (format t "~a" temp))
+
+    (defun test ()
+      (progn
+	(defparameter __temp 5)
+	(foo __temp)
+	__temp))
+
+    (let
+	((a (test)))
+      (format t "~a" a))
+#+END_SRC
+
+#+RESULTS:
+: 55
+

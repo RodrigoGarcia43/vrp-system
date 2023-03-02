@@ -1,0 +1,571 @@
+#+TITLE: Neighborhood Classes
+#+AUTHOR: Hector F. Masson
+#+EMAIL: h.masson1911@gmail.com
+
+
+
+* Description
+  In this file, we'll have all the classes involved in the neighborhhod counting and exploration. 
+  The src blocks will be tangled to ../src/neigh-classes.lisp.
+
+
+* Add the package to the tangled file
+  #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-classes.lisp 
+    (in-package :vrp)
+  #+END_SRC
+
+
+* Counting Solutions
+** Basic solution
+   This class represents a counting basic solution for the VRP, it is just a list of numbers where each number represents 
+   the quantity of clients in the corresponding route.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-classes.lisp 
+	  (def-vrp-class counting-basic-solution ()
+		     ((num-clients) (route-list))
+
+		     :documentation "A basic solution for counting."
+		     :constructor (new-basic-solution (num-clients route-list))
+		     :print-object-string ("<counting-basic-solution ~a, ~a>" num-clients route-list)
+		     :slots-for-obj= (num-clients route-list))
+   #+END_SRC
+
+
+* Neighborhood operations
+  This classes represent the operations that are used to built the neighborhood criterion. An exception is /op-init/ 
+  class, which represent the root node of the /neighborhood-tree/.
+
+** Init operation
+   This class represents an init operation, which is used to create the neighborhood-tree's root node.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-classes.lisp 
+     (new-class counting-op-init ()
+		()
+		(:documentation "A class to initialize the 'root' of the neighborhood tree.")
+		(new-init-operation))
+   #+END_SRC
+
+** Select route operation
+   This node represents a select route operation, where =route-symbol= is precisely 
+   the name assigned to the selected route.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-classes.lisp 
+     (new-class counting-op-select-route ()
+		((operation-id :accessor operation-id
+			       :initarg :operation-id)
+		 (route-symbol :accessor route-symbol))
+		(:documentation "A class to represent the select-route operation.")
+		(new-r-operation))
+   #+END_SRC
+
+** Select client operation
+   This node represents a select client operation, where =client-symbol= is precisely
+   the name assigned to the client selected from the route named =route-symbol=.
+   
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-classes.lisp 
+     (new-class counting-op-select-client ()
+		((operation-id :accessor operation-id
+			       :initarg :operation-id)
+		 (route-symbol :accessor route-symbol)
+		 (client-symbol :accessor client-symbol))
+		(:documentation "A class to represent the select-client operation.")
+		(new-a-operation))
+   #+END_SRC
+
+** Insert client operation
+   This node represents an insert client operation, where =client-symbol= is precisely
+   the name corresponding to the client that is going to be inserted in the route named
+   =route-symbol=.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-classes.lisp 
+     (new-class counting-op-insert-client ()
+		((operation-id :accessor operation-id
+			       :initarg :operation-id)
+		 (route-symbol :accessor route-symbol)
+		 (client-symbol :accessor client-symbol))
+		(:documentation "A class to represent the insert-client operation.")
+		(new-b-operation))
+   #+END_SRC
+
+** Swap clients operation
+   This node represents a swap clients operation, =client-1-symbol= and =client-2-symbol=
+   correspond to the name of the clients that are going to be swapped.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-classes.lisp 
+     (new-class counting-op-swap-clients ()
+		((operation-id :accessor operation-id
+			       :initarg :operation-id)
+		 (client-1-symbol :accessor client-1-symbol)
+		 (client-2-symbol :accessor client-2-symbol))
+		(:documentation "A class to represent the swap-clients operation.")
+		(new-c-operation))
+   #+END_SRC
+
+** Select subroute operation
+   This node represents a select subroute operation, where =subroute-symbol= is precisely
+   the name assigned to the subroute selected from the route named =route-symbol=.
+   
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-classes.lisp 
+     (new-class counting-op-select-subroute ()
+		((operation-id :accessor operation-id
+			       :initarg :operation-id)
+		 (route-symbol :accessor route-symbol)
+		 (subroute-symbol :accessor subroute-symbol))
+		(:documentation "A class to represent the select-subroute operation.")
+		(new-e-operation))
+   #+END_SRC
+
+** Insert subroute operation
+   This node represents an insert subroute operation, where =subroute-symbol= is precisely
+   the name corresponding to the subroute that is going to be inserted in the route named
+   =route-symbol=.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-classes.lisp 
+     (new-class counting-op-insert-subroute ()
+		((operation-id :accessor operation-id
+			       :initarg :operation-id)
+		 (route-symbol :accessor route-symbol)
+		 (subroute-symbol :accessor subroute-symbol))
+		(:documentation "A class to represent the insert-subroute operation.")
+		(new-f-operation))
+   #+END_SRC
+
+** Swap subroutes operation
+   This node represents a swap subroutes operation, =subroute-1-symbol= and =subroute-2-symbol=
+   correspond to the name of the subroutes that are going to be swapped.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-classes.lisp 
+     (new-class counting-op-swap-subroutes ()
+		((operation-id :accessor operation-id
+			       :initarg :operation-id)
+		 (subroute-1-symbol :accessor subroute-1-symbol)
+		 (subroute-2-symbol :accessor subroute-2-symbol))
+		(:documentation "A class to represent the swap-subroutes operation.")
+		(new-g-operation))
+   #+END_SRC
+** Reverse subroute operation
+   This node represents an reverse subroute operation, where =subroute-symbol= is precisely
+   the name corresponding to the subroute that is going to be reversed.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-classes.lisp 
+     (new-class counting-op-reverse-subroute ()
+		((operation-id :accessor operation-id
+			       :initarg :operation-id)
+		 (subroute-symbol :accessor subroute-symbol))
+		(:documentation "A class to represent the reverse-subroute operation.")
+		(new-h-operation))
+   #+END_SRC
+
+   
+* Neighborhood-tree nodes
+  This classes represent nodes of the /neighborhood-tree/. Each one of these has a corresponding neighborhood operation 
+  that it represents, with the exception of =root-node= and =nil-node= which represents particular concepts for 
+  constructing and counting over it. We'll explain what these nodes represent later.
+
+  This /neighborhood-tree/ has stored all the information of the neighborhood generated by applying the neighborhood
+  criterion to the current solution given, this mean that every further analysis that is wanted to be done for this
+  neighborhood can be done by processing this tree. 
+
+  Is important to state that the way in which this tree stores the resulting neighborhood, is by instantiating values for 
+  the neighborhood operations in the criterion, more clearly: by adding the corresponding node to the tree.
+
+** Description
+   Each tree node has four attributes: node-id (is the node identifier in the branch), total-count (represents the total 
+   amount of neighbors down this node in the tree), 
+   parent-node (is a reference to the parent node in the tree) and index-at-parent (since some nodes can have multiple 
+   children this value represents the position corresponding in that list for the current node, this value is 1-base indexed).
+
+   Note that root-node and nil-node, since they are especial nodes they don't necessarily follow the previous rule.
+
+** root-node
+   This node represents the neighborhood-tree's root node, it contains the total number of neighbors and a child node 
+   which is the tree node corresponding with the first neigborhood operation in the criterion.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-classes.lisp 
+     (new-class root-node ()
+		((node-id :accessor node-id
+			  :initarg :node-id
+			  :initform 0)
+		 (total-count :accessor total
+			      :initform 0)
+		 (child :accessor child
+			:initform nil))
+		(:documentation "A class to represent a root-node in the neighborhood-tree.")
+		(new-root-node))
+   #+END_SRC
+
+** r-node
+   This node represents the select route operation in the /neighborhood-tree/. The attribute /children-list/ represents
+   a list of pairs with a child node as its first element and the number of the route that was selected for that subtree
+   as its second element.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-classes.lisp 
+     (new-class r-node ()
+		((node-id :accessor node-id
+			  :initarg :node-id
+			  :initform 0)
+		 (total-count :accessor total
+			      :initform 0)
+		 (parent-node :accessor parent
+			      :initarg :parent
+			      :initform nil)
+		 (index-at-parent :accessor at-parent
+				  :initarg :at-parent
+				  :initform 1)
+		 ;; a list of pairs (child . route-number)
+		 (children-list :accessor children
+				:initform nil))
+		(:documentation "A class to represent a select-route operation in the neighborhood-tree.")
+		(new-r-node))
+
+   #+END_SRC
+
+** a-node
+   This node represents the select client operation in the /neighborhood-tree/. The attribute /route-number/
+   represents the route from which the client will be selected. The attribute /possibilities-at-node/
+   represents the number of clients in that route.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-classes.lisp 
+     (new-class a-node ()
+		((node-id :accessor node-id
+			  :initarg :node-id
+			  :initform 0)
+		 (total-count :accessor total
+			      :initform 0)
+		 (parent-node :accessor parent
+			      :initarg :parent
+			      :initform nil)
+		 (index-at-parent :accessor at-parent
+				  :initarg :at-parent
+				  :initform 1)
+		 (route-number :accessor route-number
+			       :initarg :route-number)
+		 (possibilities-at-node :accessor possibilities
+					:initform 0)
+		 (child :accessor child
+			:initform nil))
+		(:documentation "A class to represent a select-client operation in the neighborhood-tree.")
+		(new-a-node))
+   #+END_SRC
+
+** b-node
+   This node represents the insert client operation in the /neighborhood-tree/. The attribute /route-number/
+   represents the route in which the client will be inserted. The attribute /possibilities-at-node/ represents
+   the number of positions at which the selected client can be inserted, this quantity is equal to the number
+   of clients in the selected route plus one.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-classes.lisp 
+     (new-class b-node ()
+		((node-id :accessor node-id
+			  :initarg :node-id
+			  :initform 0)
+		 (total-count :accessor total
+			      :initform 0)
+		 (parent-node :accessor parent
+			      :initarg :parent
+			      :initform nil)
+		 (index-at-parent :accessor at-parent
+				  :initarg :at-parent
+				  :initform 1)
+		 (route-number :accessor route-number
+			       :initarg :route-number)
+		 (possibilities-at-node :accessor possibilities
+					:initform 0)
+		 (select-op-id :accessor select-op-id
+			       :initarg :select-op-id)
+		 (child :accessor child
+			:initform nil))
+		(:documentation "A class to represent a insert-client operation in the neighborhood-tree.")
+		(new-b-node))
+   #+END_SRC   
+   
+** c-node
+   This node represents the swap clients operation in the /neighborhood-tree/. The attributes
+   /select-op1-id/ and /select-op2-id/, represent the indentifier of the select client
+   operations.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-classes.lisp 
+     (new-class c-node ()
+		((node-id :accessor node-id
+			  :initarg :node-id
+			  :initform 0)
+		 (total-count :accessor total
+			      :initform 0)
+		 (parent-node :accessor parent
+			      :initarg :parent
+			      :initform nil)
+		 (index-at-parent :accessor at-parent
+				  :initarg :at-parent
+				  :initform 1)
+		 (select-op1-id :accessor select-op1-id
+				:initarg :select-op1-id)
+		 (select-op2-id :accessor select-op2-id
+				:initarg :select-op2-id)
+		 (child :accessor child
+			:initform nil))
+		(:documentation "A class to represent a swap-clients operation in the neighborhood-tree.")
+		(new-c-node))
+   #+END_SRC
+
+** e-node
+   This node represents the select client operation in the /neighborhood-tree/. The attribute /children-list/ represents
+   a list of pairs with a child node as its first element and a pair, with the length and available positions for the 
+   selected subroute, as the second element.
+   
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-classes.lisp 
+     (new-class e-node ()
+		((node-id :accessor node-id
+			  :initarg :node-id
+			  :initform 0)
+		 (total-count :accessor total
+			      :initform 0)
+		 (parent-node :accessor parent
+			      :initarg :parent
+			      :initform nil)
+		 (index-at-parent :accessor at-parent
+				  :initarg :at-parent
+				  :initform 1)
+		 (route-number :accessor route-number
+			       :initarg :route-number)
+		 ;; a list of pairs (child . (subroute-len . positions))
+		 (children-list :accessor children
+				:initform nil))
+		(:documentation "A class to represent a select-subroute operation in the neighborhood-tree.")
+		(new-e-node))
+   #+END_SRC
+
+** f-node
+   This node represents the select client operation in the /neighborhood-tree/. The attribute /possibilities-at-node/
+   represents the number of positions at which the selected subroute can be inserted, this quantity is equal to the 
+   number of clients in the selected route plus one.
+   
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-classes.lisp 
+     (new-class f-node ()
+		((node-id :accessor node-id
+		     :initarg :node-id
+		     :initform 0)
+		 (total-count :accessor total
+			      :initform 0)
+		 (parent-node :accessor parent
+			      :initarg :parent
+			      :initform nil)
+		 (index-at-parent :accessor at-parent
+				  :initarg :at-parent
+				  :initform 1)
+		 (route-number :accessor route-number
+			       :initarg :route-number)
+		 (possibilities-at-node :accessor possibilities
+					:initform 0)
+		 (select-op-id :accessor select-op-id
+			       :initarg :select-op-id)
+		 (child :accessor child
+			:initform nil))
+		(:documentation "A class to represent a insert-subroute operation in the neighborhood-tree.")
+		(new-f-node))
+   #+END_SRC
+
+** g-node
+   This node represents the swap subroutes operation in the /neighborhood-tree/. The attributes
+   /select-op1-id/ and /select-op2-id/, represent the indentifier of the select subroute
+   operations.   
+
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-classes.lisp 
+     (new-class g-node ()
+		((node-id :accessor node-id
+			  :initarg :node-id
+			  :initform 0)
+		 (total-count :accessor total
+			      :initform 0)
+		 (parent-node :accessor parent
+			      :initarg :parent
+			      :initform nil)
+		 (index-at-parent :accessor at-parent
+				  :initarg :at-parent
+				  :initform 1)
+		 (select-op1-id :accessor select-op1-id
+				:initarg :select-op1-id)
+		 (select-op2-id :accessor select-op2-id
+				:initarg :select-op2-id)
+		 (child :accessor child
+			:initform nil))
+		(:documentation "A class to represent a swap-subroutes operation in the neighborhood-tree.")
+		(new-g-node))
+   #+END_SRC
+** h-node
+   This node represents the reverse subroute operation in the /neighborhood-tree/. The attribute
+   /select-op-id/, represent the indentifier of the select subroute operation.   
+
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-classes.lisp 
+     (new-class h-node ()
+		((node-id :accessor node-id
+			  :initarg :node-id
+			  :initform 0)
+		 (total-count :accessor total
+			      :initform 0)
+		 (parent-node :accessor parent
+			      :initarg :parent
+			      :initform nil)
+		 (index-at-parent :accessor at-parent
+				  :initarg :at-parent
+				  :initform 1)
+		 (select-op-id :accessor select-op-id
+			       :initarg :select-op-id)
+		 (child :accessor child
+			:initform nil))
+		(:documentation "A class to represent a reverse-subroute operation in the neighborhood-tree.")
+		(new-h-node))
+   #+END_SRC
+
+** nil-node
+   This node represents a leaf of the /neighborhood-tree. It works as the neutral element for the operation defined by 
+   the parent node.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-classes.lisp 
+     (new-class nil-node ()
+		((total-count :accessor total
+			      :initform 1
+			      :initarg :total-count)
+		 (parent-node :accessor parent
+			      :initarg :parent
+			      :initform nil)
+		 (index-at-parent :accessor at-parent
+				  :initarg :at-parent
+				  :initform 1))
+		(:documentation "A class to represent a nil-node in the neighborhood tree.")
+		(new-nil-node))
+   #+END_SRC
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+* Neighborhood API
+  In this section, I'll define a class to store the /neighboerhood-tree/,
+  previously computed information and perform some operations over the
+  /neighborhood-tree/.
+
+** Description
+   Here we'll define some classes that works as an API for the system.
+
+** Search state
+   Here I'll define a class that stores the exploration state in a set if neighbor solutions.
+   This class has to store some attributes like:
+   
+   - number of solutions that have been processed
+   - a hash function that traces some chages in the order of the solutions
+     
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-classes.lisp 
+     (new-class search-state ()
+		((number-of-analysed-solutions :accessor number-of-analysed-solutions
+					       :initform 0)
+		 (solution-mapper :accessor solution-mapper
+				  :initarg :solution-mapper
+				  :initform (make-hash-table))
+		 )
+		(:documentation "A class that stores the state of a search over a set of solutions.")
+		(new-search-state))
+   #+END_SRC
+** Basic Region
+   A basic region its just a branch in the neighborhood tree.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-classes.lisp 
+     (new-class neighborhood-basic-region ()
+		((first-index :accessor first-index
+			      :initarg :first-index
+			      :initform nil)
+		 (info :accessor info
+		       :initarg :info)
+		 (subtree-sols :accessor subtree-sols
+			       :initarg :subtree-sols
+			       :initform 0)
+		 (cardinality :accessor cardinality
+			      :initarg :cardinality
+			      :initform 0)
+		 )
+		(:documentation "A class that represents a basic region in the neighborhood.")
+		(new-neighborhood-region))
+   #+END_SRC
+
+** Region
+   In this section I'll define a class that represents a region in the neighborhood.
+   This is defined as a set of basic solutions.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-classes.lisp 
+     (new-class neighborhood-region ()
+		((numer-id :accessor number-id
+			   :initarg :number-id)
+		 (index-range :accessor index-range
+			      :initarg :index-range)
+		 (cardinality :accessor cardinality
+			      :initarg :cardinality
+			      :initform 0)
+		 (basic-region-list :accessor basic-region-list
+				    :initarg :basic-region-list
+				    :initform nil)
+		 (basic-indexes :accessor basic-indexes
+				:initarg :basic-indexes
+				:initform nil)
+		 (basic-keys :accessor basic-keys
+			     :initarg :basic-keys
+			     :initform nil)
+		 (search-state :accessor search-state
+			       :initform (make-instance 'search-state))
+		 (neighborhood :accessor neighborhood
+			       :initarg :neighborhood
+			       :initform nil)
+		 )
+		(:documentation "A class that represents a region in the neighborhood.")
+		(new-neighborhood-region))
+   #+END_SRC
+** Neighborhood-tree
+   Here we define a the neighborhod, and contains the problem, solutions and criteria
+   that it represents. In addition, other important features are stored and defined
+   with the goal of only compute them once.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-classes.lisp 
+     (new-class neighborhood-tree ()
+		((problem :accessor problem
+			  :initarg :problem
+			  :initform nil)
+		 (solution :accessor solution
+			   :initarg :solution)
+		 (criterion :accessor criterion
+			    :initarg :criterion)
+		 (counting-solution :accessor counting-solution
+				    :initarg :counting-solution)
+		 (tree :accessor tree
+		       :initarg :tree)
+		 (cardinality :accessor cardinality
+			      :initarg :cardinality 
+			      :initform 0)
+		 (number-of-regions :accessor number-of-regions
+				    :initform nil)
+		 (region-list :accessor region-list
+			      :initarg :region-list
+			      :initform nil)
+		 (region-indexes :accessor region-indexes
+				 :initarg :region-indexes
+				 :initform nil)
+		 (region-keys :accessor region-keys
+			      :initarg :region-keys
+			      :initform nil)
+		 (search-state :accessor search-state
+			       :initform (make-instance 'search-state))
+		 )
+		(:documentation "A class that works as an API for the neighborhood-tree.")
+		(new-neighborhood-tree))
+   #+END_SRC
+

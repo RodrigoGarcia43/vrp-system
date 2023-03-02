@@ -1,0 +1,432 @@
+#+TITLE: VRP solver environment
+#+AUTHOR: Fernando Rodriguez Flores
+#+AUTHOR: Rodrigo Garcia Gomez
+#+AUTHOR: Heidy Abreu Fumero
+
+* Add the package to the file
+  #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-classes.lisp 
+  (in-package :vrp)
+  #+END_SRC
+
+
+* Classes
+  
+** mixed (auxiliary) classes
+*** description
+    In this section I'll add the classes that I'm not too sure about where to add =:-(=.
+
+
+*** use-neigh-generator (abstract, functional)
+**** description
+     This class indicates that we use a neighboor tree to generate solutions
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-classes.lisp 
+     (def-vrp-class use-neigh-tree ()
+         ()
+         :documentation "A class to represent a search strategy where we use the neghborhood tree to generate solutions")
+     #+END_SRC
+**** no tests because this should be an abstract class
+
+*** use-eval-graph (abstract, functional)
+**** description
+     This class indicates that we use an eval-graph to evaluate solutions
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-classes.lisp 
+     (def-vrp-class use-eval-graph (use-neigh-tree)
+         ()
+         :documentation "A class to represent a search strategy where we use the eval graph to evaluate solutions")
+     #+END_SRC
+**** no tests because this should be an abstract class
+
+
+
+*** there-is-a-best-solution (abstract functional)
+**** description
+     This class represents search strategies where we have a best-solution that should be returned.
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-classes.lisp 
+     (def-vrp-class there-is-a-best-solution ()
+         ()
+         :documentation "A class to represent a search strategy where we have a best-solution value that we update during the search.")
+     #+END_SRC
+**** no tests because this should be an abstract class
+*** return-best-solution (abstract functional)
+**** description
+     This class represents search strategies where we return the best solution found.  
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-classes.lisp 
+     (def-vrp-class return-best-solution
+         (there-is-a-best-solution)
+         ()
+         :documentation "A class to represent a search strategy where we always return the value of best-solution.  If there isn't a best-solution, we return nil.")
+     #+END_SRC
+**** no tests because this should be an abstract class
+*** return-best-cost (abstract functional)
+**** description
+     This class represents search strategies where we also return the cost of the best-solution found.  
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-classes.lisp 
+     (def-vrp-class return-best-cost
+         (there-is-a-best-solution)
+         ()
+         :documentation "A class to represent a selection strategy where we always return the cost of the best-neighbor found.  If there is not a best neighbor we return 0.")
+     #+END_SRC
+**** no tests because this should be an abstract class
+*** has-candidates-for-best-neighbor (abstract functional)
+**** description
+     This class represents search strategies where we collect a set of candidates for the best-neighbor.  An example of this is the standard random-improvement class.
+
+     This is a class that computes cost, has a best-neighbor, has candidates for best-neighbor, and returns a best-neighbor.  Hopefully, by appropriately inheriting from these classes we don't need to add any other code.
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-classes.lisp 
+     (def-vrp-class has-candidates-for-best-neighbor
+         ()
+         () ;; no slots
+         :documentation "A class to represent a search strategy where we collect a set of neighbors as candidates for the best-neighbor.")
+     #+END_SRC
+**** no tests because this should be an abstract class
+     
+
+** search strategies
+*** exhaustive-search-strategy
+**** description
+     This class represents an exhaustive search of the neighborhood.  This means, for instance, that when we have a select-route operation, we iterate through all the possible routes in the solution, and so on.
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-classes.lisp 
+   (def-vrp-class exhaustive-neighborhood-search-strategy ()
+       ()
+       :documentation "A class to represent an exhaustive search of a neighborhood."
+       :constructor (exhaustive-neighborhood-search-strategy ())
+       :print-object-string ("<exhaustive-search>")
+       :slots-for-obj= ()
+       :slots-for-clone ())
+     #+END_SRC
+
+**** test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((st1 (exhaustive-neighborhood-search-strategy)))
+       (bformat t "Testing exhaustive-neighborhood-search-strategy...")
+       (format t "exhaustive-neighborhood-search-strategy: ~a~%" st1))
+     #+END_SRC
+
+**** constant
+     Here we create a constant (variable?) with an instance of this class.
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-classes.lisp 
+     (defparameter +exhaustive-search-strategy+
+       (exhaustive-neighborhood-search-strategy))
+     #+END_SRC
+*** random-search-strategy
+**** description
+     This class represents a random search of the neighborhood.  This means, for instance, that when we have a select-route operation, instead of iterate through all the possible routes in the solution (as in an exhaustive search), we just select a random route.
+
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-classes.lisp 
+     (def-vrp-class random-neighborhood-search-strategy ()
+         ((neighborhood-size
+           :documentation "The number of neighbors that should be explored."))
+         :documentation "A class to represent an exhaustive search of a neighborhood."
+         :constructor (random-neighborhood-search-strategy
+                       (&optional (neighborhood-size 100)))
+         :print-object-string ("<random-search: ~a>" neighborhood-size)
+         :slots-for-obj= (neighborhood-size)
+         :slots-for-clone (neighborhood-size))
+     #+END_SRC
+
+**** test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((st1 (random-neighborhood-search-strategy))
+            (st2 (random-neighborhood-search-strategy 100))
+            (st3 (random-neighborhood-search-strategy 200))
+            (st4 (clone st1)))
+       (bformat t "Testing random-neighborhood-search-strategy...")
+       ;; printing the strategies
+       (loop for s in (list st1 st2 st3)
+             doing (format t "exhaustive-neighborhood-search-strategy: ~a~%" s))
+
+       (check-t (obj= st1 st1))
+       (check-t (obj= st1 st2))
+       (check-t (obj= st1 st4))
+
+       (check-nil (obj= st1 st3))
+       (check-nil (obj= st2 st3))
+
+       )
+     #+END_SRC
+
+**** constant
+     Here we create a constant (variable?) with an instance of this class.
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-classes.lisp 
+     (defparameter +random-search-strategy+
+       (random-neighborhood-search-strategy 500))
+     #+END_SRC
+*** jump-around-search-strategy
+**** description
+     This class represents a `jump-around' search of the neighborhood.  This means to create a random-neighbor, unconditionally accept it and repeat the process several times.
+
+     This strategy will inherit from =random-neighborhood-search-strategy= to use the random-neighborhood-operations.
+
+     In this case, the =neighborhood-search= slot will be used as the maximum number of times that we should `jump'.
+
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-classes.lisp 
+     (def-vrp-class jump-around-search-strategy
+         (random-neighborhood-search-strategy)
+         ()
+         :documentation "A class to represent a `jump-around' search of a neighborhood."
+         :constructor (jump-around-search-strategy
+                       (&optional (neighborhood-size 100)))
+         :print-object-string ("<jump-around-search: ~a>" neighborhood-size)
+         :slots-for-obj= (neighborhood-size)
+         :slots-for-clone (neighborhood-size))
+     #+END_SRC
+
+**** test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((st1 (jump-around-search-strategy))
+            (st2 (jump-around-search-strategy 100))
+            (st3 (jump-around-search-strategy 200))
+            (st4 (clone st1)))
+       (bformat t "Testing jump-around-strategy...")
+       ;; printing the strategies
+       (loop for s in (list st1 st2 st3)
+             doing (format t "exhaustive-neighborhood-search-strategy: ~a~%" s))
+
+       (check-t (obj= st1 st1))
+       (check-t (obj= st1 st2))
+       (check-t (obj= st1 st4))
+
+       (check-nil (obj= st1 st3))
+       (check-nil (obj= st2 st3))
+
+       )
+     #+END_SRC
+**** constant
+     Here we create a constant (variable?) with an instance of this class.
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-classes.lisp 
+     (defparameter +jump-around-strategy+
+       (jump-around-search-strategy 10))
+     #+END_SRC
+
+** selection strategies
+*** best-improvement
+**** description
+      In this selection strategy, we explore all the neighborhood and then return the best neighbor.  To do that, we need to add initializations to the let, and to code-inside the macro.
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-classes.lisp 
+      (def-vrp-class best-improvement-search-strategy
+          (
+           return-best-solution
+           use-eval-graph)
+
+          ()
+          :documentation "A class to represent a best-improvement strategy in the search of a neighborhood."
+          :constructor (best-improvement-search-strategy ())
+          :print-object-string ("<best-improvement-strategy>")
+          :slots-for-obj= ()
+          :slots-for-clone ())
+      #+END_SRC
+**** constant
+     Here we create a constant (variable?) with an instance of this class.
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-classes.lisp 
+     (defparameter +best-improvement+
+       (best-improvement-search-strategy))
+     #+END_SRC
+
+*** first-improvement
+**** description
+      In this selection strategy, we explore all the neighborhood and as soon as we find a neighbor better than the current solution, we return it.  To do this, we need to add a =(stop-neighborhood-search)= call to the `if' in inside-macro code.
+
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-classes.lisp 
+      (def-vrp-class first-improvement-search-strategy
+          (
+           return-best-solution
+           use-eval-graph)
+
+          ()
+          :documentation "A class to represent a first-improvement strategy in the search of a neighborhood."
+          :constructor (first-improvement-search-strategy ())
+          :print-object-string ("<first-improvement-strategy>")
+          :slots-for-obj= ()
+          :slots-for-clone ())
+      #+END_SRC
+**** constant
+     Here we create a constant (variable?) with an instance of this class.
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-classes.lisp 
+     (defparameter +first-improvement+
+       (first-improvement-search-strategy))
+     #+END_SRC
+
+*** random-improvement-with-candidates
+**** description
+      In this selection strategy, we explore all the neighborhood and collect all the neighbors that are better than the current solution.  Finally, we return one of these better neighbors.
+
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-classes.lisp 
+      (def-vrp-class random-improvement-with-candidates-selection-strategy
+          (
+           return-best-solution
+           has-candidates-for-best-neighbor
+           use-eval-graph)
+
+          ()
+          :documentation "A class to represent a random-improvement strategy in the search of a neighborhood."
+          :constructor (random-improvement-selection-strategy ())
+          :print-object-string ("<random-improvement-strategy>")
+          :slots-for-obj= ()
+          :slots-for-clone ())
+      #+END_SRC
+
+
+*** random-improvement (without candidates)
+**** description
+      In this selection strategy, when we find a better neighbor we return it according to a probability.  In this case there is no need to have a list of candidates.
+
+**** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-classes.lisp 
+      (def-vrp-class random-improvement-selection-strategy
+          (
+           return-best-solution
+           use-eval-graph)
+
+          ((acceptance-ratio
+            :initform 0.5
+            :documentation "The acceptance probability."))
+          :documentation "A class to represent a random-improvement strategy in the search of a neighborhood."
+          :constructor (random-improvement-selection-strategy
+                        (&optional (acceptance-ratio 0.8)))
+          :print-object-string ("<random-improvement-strategy>")
+          :slots-for-obj= (acceptance-ratio)
+          :slots-for-clone (acceptance-ratio))
+      #+END_SRC
+
+**** constant
+     Here we create a constant (variable?) with an instance of this class.
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-classes.lisp 
+     (defparameter +random-improvement+
+       (random-improvement-selection-strategy))
+     #+END_SRC
+
+*** jump-around-return-last-neighbor
+***** description
+      In this selection strategy (that should be used in conjunction with a jump-around-search-strategy) we always return the last-neighbor. 
+***** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-classes.lisp 
+      (def-vrp-class jump-around-return-last-neighbor
+          (use-eval-graph)
+
+          ()
+          :documentation "A class to represent the simplest jump-around selection strategy."
+          :constructor (jump-around-return-last-neighbor ())
+          :print-object-string ("<jump-around-last-neighbor>")
+          :slots-for-obj= ()
+          :slots-for-clone ())
+      #+END_SRC
+***** constant
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-classes.lisp 
+      (defparameter +jump-around-return-last-neighbor+
+        (make-instance 'jump-around-return-last-neighbor))
+      #+END_SRC
+*** return-last-neighbor
+***** description
+      This class represents a selection strategy where we always return some neighbor, for instance the last one we built.
+***** code
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-classes.lisp 
+      (def-vrp-class return-last-neighbor-selection-strategy
+          (return-best-cost
+           return-best-solution
+           use-eval-graph)
+          () ;; no slots
+          :documentation "A class to represent a search strategy where we return the last neighbor independently of its cost.")
+      #+END_SRC
+***** constant
+      #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-classes.lisp 
+      (defparameter +return-last-neighbor+
+        (make-instance 'return-last-neighbor-selection-strategy))
+      #+END_SRC
+
+
+** blueprints
+*** neighborhood-strategy-blueprint
+**** description
+
+     A neighborhood-strategy-blueprint is a description of a neighborhood-strategy.  This will be helpful in the generation of the code for the neighborhood exploration.  Using instances of this class, we can describe a neighborhood-exploration criteria.  For instance, we can have how to initialize things in the let*, what to do as the body of the macros, what to return, and things like that.
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-classes.lisp 
+     (def-vrp-class basic-neighborhood-strategy-blueprint ()
+         ((initializations-inside-the-let
+           :documentation "What we should initialize inside the let.")
+          (initializations-outside-the-let
+           :documentation "What we should initialize outside the let.")
+          (loop-conditional
+           :documentation "A list with the heading of the macro calls.")
+          (code-inside-the-loop
+           :documentation "What we should do with the current neigborh.")
+          (code-outside-the-loop
+           :documentation "What we should do after the iteration through all the neigborhs is over.")
+          (return-code
+           :documentation "What we should return from the exploration."))
+         :documentation "A class to represent a description of a neigborhood strategy.  It is used in the automatic generation of neigborhood search algorithms."
+         :constructor (basic-strategy-blueprint
+                       (&key (initializations-inside-the-let nil)
+                             (initializations-outside-the-let nil)
+                             (code-inside-the-loop nil)
+                             (loop-conditional nil)
+                             (code-outside-the-loop nil)
+                             (return-code nil)))
+
+         :print-object-string ("<basic-strategy-blueprint>")
+         :slots-for-obj= (initializations-inside-the-let
+                          initializations-outside-the-let
+                          loop-conditional
+                          code-inside-the-loop
+                          code-outside-the-loop
+                          return-code)
+         :slots-for-clone (initializations-inside-the-let
+                          initializations-outside-the-let
+                          loop-conditional
+                          code-inside-the-loop
+                          code-outside-the-loop
+                          return-code))
+     #+END_SRC
+
+**** test
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+     (let* ((*vrp-unit-testing-display-output* t)
+            (*vrp-unit-testing-display-results* t)
+            (bp1 (basic-strategy-blueprint))
+            (bp2 (basic-strategy-blueprint
+                  :initializations-inside-the-let
+                  `((wc (basic-working-copy s1)))))
+            (bp3 (basic-strategy-blueprint
+                  :initializations-outside-the-let
+                  `((prepare-solution-for-neighborhood-exploration wc))))
+            (bp4 (basic-strategy-blueprint
+                  :code-inside-the-macros
+                  `((pp-solution wc t))))
+            (bp5 (basic-strategy-blueprint
+                  :code-outside-the-macros
+                  `((format t "Hess"))))
+            (bp6 (basic-strategy-blueprint
+                  :return-code
+                  `(wc)))
+            (bp8 (basic-strategy-blueprint
+                  :macro-headings `((doselect-route (r1 wc)))))
+            (bp7 (clone bp1)))
+
+
+       (bformat t "Testing basic-blueprint...")
+
+       (check-t  (obj= bp1 bp1))
+       (check-t  (obj= bp1 bp7))
+
+       (check-nil (obj= bp1 bp2))
+       (check-nil (obj= bp1 bp3))
+       (check-nil (obj= bp1 bp4))
+       (check-nil (obj= bp1 bp5))
+       (check-nil (obj= bp1 bp6))
+       (check-nil (obj= bp1 bp8))
+
+       )
+     #+END_SRC
+

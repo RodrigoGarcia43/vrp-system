@@ -1,0 +1,2851 @@
+#+TITLE: VRP solver environment
+#+AUTHOR: Fernando Rodriguez Flores
+#+AUTHOR: Rodrigo Garcia Gomez
+#+AUTHOR: Heidy Abreu Fumero
+
+* Add the package to the file
+  #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-tutorials.lisp 
+  (in-package :vrp)
+  #+END_SRC
+
+
+* Description
+
+** general description
+   In this file I'm going to add the functionalities required to automatically implement several ways to explore a neighborhood according to the combinations of different strategies.
+
+   Some examples of these combinations are:
+
+    - exhaustive-search with random improvement
+    - random-search with first-improvement
+    - exhaustive-search with best improvement.
+
+   There are two things here to take into account:
+
+    1. how to explore the neighborhood
+    2. how to select the best neighbor from the explored ones.
+
+   Some strategies to search the neighborhood are:
+
+     - exhaustive search :: check all the neighbors in the neighborhood.
+     - random-search :: check a fixed number of random neighbors.
+
+   Some strategies to select the best neighbor are:
+
+     - best-improvement:
+          the best neighbor in the explored neighborhood.
+     - random-improvement:
+          a random neighbor with a better evaluation than the current solution
+     - first-improvement:
+        the first neighbor that is better than the current solution.
+     - weighted-random-improvement:
+        a random better neighbor, but the selection is not uniform, the probability of any client of being selected depends on the quality of that neighbor.
+     - simulated-annealing-selection:
+       sometimes accept worse solutions according to the quality of that solution and the state of the algorithm.
+
+   What we want to do in this file is to create a mechanism that allows us to create a function to explore a neighborhood of a solution using any combination of the existing options.
+
+   A neighborhood criterion can be described as a list of neighborhood operations with the parameters specified.  For instance, the criterion change a client inside its route can be written as:
+
+   #+BEGIN_EXAMPLE
+   (select-route r1)
+   (select-client c1 from r1)
+   (insert-client c1 into r1)
+   #+END_EXAMPLE
+
+   Now, from that description we can have several functions according to the strategies.
+
+   To create these functions, we need to define several things:
+     1. what do we need to initialize things
+     2. how to explore the neighborhood
+     3. what to do when we have the operations that define the neighbor.
+     4. what to do when the exploration is over
+   
+   Each strategy does those steps differently.  In the next section (tutorials) we'll explore these ideas with more detail, and we'll make some generalizations.
+
+   The src blocks in this file will be tangled to prefabs-tutorials.lisp.
+
+** tutorials and examples
+*** create an exhaustive-search/best-improvement search for rab
+**** description
+
+     In this section we want to create a function that explores the neighborhood of a solution using an exhaustive/best-improvement strategy.  The criterion will be =rab= that means move the client inside its route.
+
+     As we want an exhaustive search we need to explore all the neighborhood.  We can do that with the do-neighborhood-operations macro.
+
+     The description of the criterion is:
+     #+BEGIN_EXAMPLE
+     (select-route r1)
+     (select-client c1 from r1)
+     (insert-client c1 into r1)
+     #+END_EXAMPLE
+     
+     To create this function, we need to do several things:
+     1. what do we need to initialize things
+     2. how to explore the neighborhood
+     3. what to do when we have the operations that define the neighbor
+     4. what to do when the exploration is over
+
+     Let's analyze each of those points.  I'm going to leave the first point to the end, because it will be easier to deduce after we have analyzed the remaining points.
+     
+***** 2. how to explore the neighborhood (exhaustive-search)
+
+      First, let's see how to create a function that explores the full neighborhood of rab.  We can do that with the do-neighborhood macros.  For instance, for this example:
+
+      #+BEGIN_EXAMPLE
+      (select-route r1)
+      (select-client c1 from r1)
+      (insert-client c1 into r1)
+      #+END_EXAMPLE
+
+      We can translate it into:
+      #+BEGIN_EXAMPLE
+      (doselect-route (r1 wc)
+        (doselect-client (c1 r1 wc)
+          (doinsert-client (c1 r1 wc))
+            ...do whatever we want here
+          ))
+      #+END_EXAMPLE
+
+      If instead of rab the criterion were rarac, we would have:
+      #+BEGIN_EXAMPLE
+      (select-route r1)
+      (select-client c1 from r1)
+      (select-route r2)
+      (select-client c2 from r2)
+      (swap-clients c1 c2)
+      #+END_EXAMPLE
+
+      We could translate it into:
+      #+BEGIN_EXAMPLE
+      (doselect-route (r1 wc)
+        (doselect-client (c1 r1 wc)
+           (doselect-route (r2 wc)
+              (doselect-client (c2 r2 wc)
+                 (doswap-clients (c1 c2 wc)
+                   ...do whatever we want here
+                 )))))
+      #+END_EXAMPLE
+
+     So, in an exhaustive search, to create the code we only need to translate the description of the criterion into nested calls to the corresponding do-neighborhood macros.
+
+     Now we know how to explore the neighborhood in an exhaustive search, and that answers the question 2.  Let's see now what to do when we have the operations that define the neighbor.     
+     
+***** 3. what to do when we have the operations that define the neighbor
+
+      We can explore the full neighborhood with the do-neighborhood-operation macros, but still we need to define what to do when the macros give the control to our code.  What we do depends on the strategy we want to follow.  In this case we want an exhaustive search of the neighborhood and we want the best neighbor of all.
+
+      To do that we need to evaluate the current-neighbor (that we'll have in the variable ops-list in the form of the neighborhood-operations that should be applied to the current-solution to get the neighbor.)  For that we could use the function =delta-cost=.
+
+      But as we want the best neighbor, everytime we compute the delta-cost for a client, we need to compare it with the current best neighbor.  If the new one is better, then let's update things.
+
+      It could be something like this:
+
+      #+BEGIN_EXAMPLE 
+      (doselect-route (r1 wc)
+        (doselect-client (c1 r1 wc)
+          (doinsert-client (c1 r1 wc)
+
+            ;; ==== this is the new stuff ==== ;;
+
+            ;; let's get the cost of the current neighbor
+            (setf current-delta-cost
+                  (delta-cost ops-list wc problem action))
+            ;; let's see if it is better
+            (if (< current-delta-cost best-delta-cost)
+                ;; if it is
+                (then
+                   ;; let's save the ops that make it
+                   (setf best-neighbor (clone ops-list))
+                   ;; let's update the best-cost
+                   (setf best-delta-cost current-delta-cost)))
+
+            ;; ==== end of the new stuff ==== ;;
+           )))
+      #+END_EXAMPLE
+
+      So, this way, when we exit the do-neighborhood-operation macros we have in best-neighbor the operations from where we can construct the best neighbor, and in best-delta-cost we have the delta-cost of this neighbor.
+
+      The next thing to define is what to do when the exploration ends.  We'll address that point in the next section.
+     
+***** 4. what to do when the exploration is over
+      Here, we should decide what to do when the exploration is over.  In this case of best-improvement, what we need to do is simple.  If the best-delta-cost is smaller than 0, then we have a better solution than the current one, and that's what we should return.  Otherwise we should return nil.
+
+      In the code it would be something like:
+
+      #+BEGIN_EXAMPLE 
+      (doselect-route (r1 wc)
+        (doselect-client (c1 r1 wc)
+          (doinsert-client (c1 r1 wc)
+            ;; let's get the cost of the current neighbor
+            (setf current-delta-cost
+                  (delta-cost ops-list wc problem action))
+            ;; let's see if it is better
+            (if (< current-delta-cost best-delta-cost)
+                ;; if it is
+                (then
+                   ;; let's save the ops that make it
+                   (setf best-neighbor (clone ops-list))
+                   ;; let's update the best-cost
+                   (setf best-delta-cost current-delta-cost))))))
+
+      ======== from here on is the new stuff ========     
+      ;; here we check if we found a neighbor better than solution
+      ;; if so, we apply the operations in best-neighbor to solution
+      ;; and return the best-neighbor
+      ;; otherwise, we return nil
+      ;; and that means that we didn't find a better neighbor
+
+      (if best-neighbor
+          (then
+            (apply-set-of-operations (reverse best-neighbor) wc)
+            (setf best-neighbor-as-solution
+                  (solution wc))
+            ;; return best-neighbor-as-solution
+            ;; and the best-delta-cost
+            (values best-neighbor-as-solution best-delta-cost)))
+      ======== here ends the new stuff ========
+      #+END_EXAMPLE
+
+      Obviously, to do that, we need to initialize several things, and what we need to initialize depends on the strategy we want to use.  We talk about that in the next section.
+***** 1. what do we need to initialize things
+
+      To use an exhaustive search of the neighborhood and return the best neighbor found, we need to initialize the following:
+
+        - best-delta-cost (to 0, that means no improvement)
+        - best-neighbor (to nil)
+        - best-neighbor-as-solution (to nil)
+        - current-delta-cost (to avoid warnings)
+
+      And there are some things that should be initialized in any strategy:
+
+        - the ops-list (to nil)
+        - *vrp-stop-neighborhood-search* to nil
+        - we should create a working-copy from the solution
+          or initialize the working-copy, depending on what we want to pass around as arguments.
+
+          So the initializations for the criterion =rab= with an exhaustive search (assuming that the user passes a solution as argument) could look like:
+
+         
+      #+BEGIN_EXAMPLE
+      ===== here is the new stuff =====
+      (let* (;; first the standard initializations
+             (*vrp-stop-neighborhood-search* nil)
+             (ops-list nil)
+             (wc (basic-working-copy solution))
+             ;; now the corresponding to the
+             ;; best-improvement strategy
+             (current-delta-cost 0)
+             (best-delta-cost 0)
+             (best-neighbor nil)
+             (best-neighbor-as-solution nil)
+             )
+
+        (prepare-solution-for-neighborhood-exploration wc)
+
+       ===== here ends the new stuff =====
+     
+        (doselect-route (r1 wc)
+          (doselect-client (c1 r1 wc)
+            (doinsert-client (c1 r1 wc))
+              ;; let's get the cost of the current neighbor
+              (setf current-delta-cost
+                    (delta-cost ops-list wc problem action)
+              ;; let's see if it is better
+              (if (< current-delta-cost best-delta-cost)
+                  ;; if it is
+                  (then
+                     ;; let's save the ops that make it
+                     (setf best-neighbor (clone ops-list))
+                     ;; let's update the best-cost
+                     (setf best-delta-cost current-delta-cost))))))
+  
+        ;; here we check if we found a neighbor better than solution
+        ;; if so, we apply the operations in best-neighbor to solution
+        ;; and return the best-neighbor
+        ;; otherwise, we return nil
+        ;; and that means that we didn't find a better neighbor
+  
+        (if best-neighbor
+          (then
+            (apply-set-of-operations (reverse best-neighbor) wc)
+            (setf best-neighbor-as-solution
+                  (solution wc))
+            ;; return best-neighbor-as-solution
+            ;; and the best-delta-cost
+            (values best-neighbor-as-solution best-delta-cost))))
+      #+END_EXAMPLE
+      
+     In the next sections, we'll write a working code for this criterion and run some tests.
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-tutorials.lisp 
+     (defun rab-exhaustive-best (solution problem action)
+       "Returns the best neighbor of the solution in wc, using an exhaustive search and best-improvment strategy."
+       (let* ( ;; first the standard initializations
+              (*vrp-stop-neighborhood-search* nil)
+              (wc (basic-working-copy solution))
+              (ops-list nil)
+              ;; now the corresponding to the
+              ;; best-improvement strategy
+              (current-delta-cost 0)
+              (best-delta-cost 0)
+              (best-neighbor nil)
+              (best-neighbor-as-solution nil)
+              )
+         (prepare-solution-for-neighborhood-exploration wc)
+         (initialize-action-for-delta-cost-computation wc problem action)
+
+         (doselect-route (r1 wc)
+           (doselect-client (c1 r1 wc)
+             (doinsert-client (c1 r1 wc)
+               ;; let's get the cost of the current neighbor
+               (setf current-delta-cost
+                     (delta-cost (reverse ops-list) wc problem action))
+
+               (format t "~%With delta-cost: ~a~%" current-delta-cost)
+               (pp-solution wc t) (terpri)
+
+               ;; let's see if it is better
+               (if (< current-delta-cost best-delta-cost)
+                   ;; if it is
+                   (then
+                     ;; let's save the ops that make it
+                     (setf best-neighbor (clone ops-list))
+                     ;; let's update the best-cost
+                     (setf best-delta-cost current-delta-cost))))))
+
+         ;; here we check if we found a neighbor better than solution
+         ;; if so, we apply the operations in best-neighbor to solution
+         ;; and return the best-neighbor
+         ;; otherwise, we return nil
+         ;; and that means that we didn't find a better neighbor
+
+         (if best-neighbor
+             (then
+               (apply-set-of-operations (reverse best-neighbor) wc)
+               (setf best-neighbor-as-solution
+                     (solution wc))
+               (setf (cost best-neighbor-as-solution)
+                     (+ (cost solution)
+                        best-delta-cost))
+               ;; return best-neighbor-as-solution
+               (values best-neighbor-as-solution
+                       best-delta-cost)))))
+     #+END_SRC
+**** tests
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                         (5 0 6 7 2 4)  ;1
+                                         (1 8 0 3 9 1)  ;2
+                                         (4 5 1 0 5 7)  ;3
+                                         (4 5 1 5 0 6)  ;4
+                                         (1 5 7 6 9 0)) ;5
+                                         ;0 1 2 3 4 5 
+                            :demands '(10 10 15 40 20)
+                            :capacity 40)
+       (with-basic-cvrp-solution (s1 ((3 2 4) (1 5)) p1)
+         (let* ((best-solution-found nil)
+                (best-cost-found 0)
+                (wc0 (basic-working-copy s1))
+                (wc2 nil)
+                (action (delta-cvrp-action))
+                (cvrp-action (basic-cvrp-action)))
+
+
+
+           (bformat t "Testing exhaustive/best-improvement rab")
+
+           ;; let's evaluate the solution
+
+           (simulate-solution s1 p1 cvrp-action)
+           (setf (cost s1) (+ (total-distance cvrp-action)
+                              (total-penalty cvrp-action)))
+
+           (format t "Distance: ~a, penalty: ~a, cost: ~a~%"
+                   (total-distance cvrp-action)
+                   (total-penalty cvrp-action)
+                   (cost s1))
+
+           (prepare-solution-for-neighborhood-exploration wc0)
+
+           (format t "~%Testing exhaustive rab...~%")
+           (pp-solution wc0 t)
+
+           ;;{{{ let's explore the neighborhood rarb
+           (setf best-solution-found
+                 (rab-exhaustive-best s1 p1 action))
+           ;;}}}
+
+
+           (if best-solution-found
+               (then
+                 ;;{{{ print the best neighbor
+                 ;; (format t "Best value: ~a~%" (cost best-solution-found))
+                 (format t "------------------~%Best neighbor:~%")
+                 (setf wc2 (basic-working-copy best-solution-found))
+                 (prepare-solution-for-neighborhood-exploration wc2)
+                 (pp-solution wc2 t) (terpri)
+
+
+                 (format t "with cost: ~a~%" (cost wc2))
+                 (format t "------------------~%")
+                 ;;}}}
+
+                 ;; ;;{{{ using yoel approach
+                 ;; (format t "Cost of original solution: ~a~%"
+                 ;;         (solution-cost s1 p1 cvrp-action))
+                 ;; (format t "Cost of best-neighbor: ~a~%"
+                 ;;         (solution-cost best-solution-found
+                 ;;                        p1 cvrp-action))
+                 ;; ;;}}}
+                 )
+               (else
+                 (format t "No better solution found in neighbor.~%")))
+
+           )))
+     #+END_SRC
+*** create an exhaustive-search/first-improvement search for rab
+**** description
+
+     In this section we want to create a function that explores the neighborhood of a solution using an exhaustive/first-improvement strategy.  The criterion will be =rarac= that means to swap two clients.
+
+     As we want an exhaustive search we need to explore all the neighborhood.  We can do that with the do-neighborhood-operations macro.
+
+     The description of the criterion is:
+     #+BEGIN_EXAMPLE
+     (select-route r1)
+     (select-client c1 from r1)
+     (insert-client c1 into r1)
+     #+END_EXAMPLE
+     
+     To create this function, we need to do several things:
+     1. what do we need to initialize things
+     2. how to explore the neighborhood
+     3. what to do when we have the operations that define the neighbor
+     4. what to do when the exploration is over
+
+     Let's analyze each of those points.  I'm going to leave the first point to the end, because it will be easier to deduce after we have analyzed the remaining points.
+     
+***** 2. how to explore the neighborhood (exhaustive-search)
+
+      First, let's see how to create a function that explores the full neighborhood of rab.  We can do that with the do-neighborhood macros.  For instance, for this example:
+
+      #+BEGIN_EXAMPLE
+      (select-route r1)
+      (select-client c1 from r1)
+      (insert-client c1 into r1)
+      #+END_EXAMPLE
+
+      We can translate it into:
+      #+BEGIN_EXAMPLE
+      (doselect-route (r1 wc)
+        (doselect-client (c1 r1 wc)
+          (doinsert-client (c1 r1 wc))
+            ...do whatever we want here
+          ))
+      #+END_EXAMPLE
+
+      If instead of rab the criterion were rarac, we would have:
+      #+BEGIN_EXAMPLE
+      (select-route r1)
+      (select-client c1 from r1)
+      (select-route r2)
+      (select-client c2 from r2)
+      (swap-clients c1 c2)
+      #+END_EXAMPLE
+
+      We could translate it into:
+      #+BEGIN_EXAMPLE
+      (doselect-route (r1 wc)
+        (doselect-client (c1 r1 wc)
+           (doselect-route (r2 wc)
+              (doselect-client (c2 r2 wc)
+                 (doswap-clients (c1 c2 wc)
+                   ...do whatever we want here
+                 )))))
+      #+END_EXAMPLE
+
+     So, in an exhaustive search, to create the code we only need to translate the description of the criterion into nested calls to the corresponding do-neighborhood macros.
+
+     Now we know how to explore the neighborhood in an exhaustive search, and that answers the question 2.  Let's see now what to do when we have the operations that define the neighbor.     
+     
+***** 3. what to do when we have the operations that define the neighbor
+
+      We can explore the full neighborhood with the do-neighborhood-operation macros, but still we need to define what to do when the macros give the control to our code.  What we do depends on the strategy we want to follow.  In this case we want an exhaustive search of the neighborhood and we want the best neighbor of all.
+
+      To do that we need to evaluate the current-neighbor (that we'll have in the variable ops-list in the form of the neighborhood-operations that should be applied to the current-solution to get the neighbor.)  For that we could use the function =delta-cost=.
+
+      But as we want the best neighbor, everytime we compute the delta-cost for a client, we need to compare it with the current best neighbor.  If the new one is better, then let's update things.
+
+      It could be something like this:
+
+      #+BEGIN_EXAMPLE 
+      (doselect-route (r1 wc)
+        (doselect-client (c1 r1 wc)
+          (doinsert-client (c1 r1 wc)
+
+            ;; ==== this is the new stuff ==== ;;
+
+            ;; let's get the cost of the current neighbor
+            (setf current-delta-cost
+                  (delta-cost ops-list wc problem action))
+            ;; let's see if it is better
+            (if (< current-delta-cost best-delta-cost)
+                ;; if it is, set the best values 
+                ;; and stop the iterations
+                (then
+                  ;; let's save the ops that make it
+                  (setf best-neighbor (clone ops-list))
+                  ;; let's update the best-cost
+                  (setf best-delta-cost current-delta-cost)
+                  ;; let's stop the iteration
+                  (stop-neighborhood-search)))
+            ;; ==== end of the new stuff ==== ;;
+           )))
+      #+END_EXAMPLE
+
+      So, this way, when we exit the do-neighborhood-operation macros we have in best-neighbor the operations from where we can construct the best neighbor, and in best-delta-cost we have the delta-cost of this neighbor.
+
+      The next thing to define is what to do when the exploration ends.  We'll address that point in the next section.
+     
+***** 4. what to do when the exploration is over
+      Here, we should decide what to do when the exploration is over.  In this case of first-improvement, it is the same as in the best-improvement, because, the change happened inside the do-neighborhood macros.  
+
+      What we do here is the same: if the best-delta-cost is smaller than 0, then we have a better solution than the current one, and that's what we should return.  Otherwise we should return nil.
+
+      In the code it would be something like:
+
+      #+BEGIN_EXAMPLE 
+      (doselect-route (r1 wc)
+        (doselect-client (c1 r1 wc)
+          (doinsert-client (c1 r1 wc)
+            ;; let's get the cost of the current neighbor
+            (setf current-delta-cost
+                  (delta-cost ops-list wc problem action))
+            ;; let's see if it is better
+            (if (< current-delta-cost best-delta-cost)
+                ;; if it is, set the best values 
+                ;; and stop the iterations
+                (then
+                  ;; let's save the ops that make it
+                  (setf best-neighbor (clone ops-list))
+                  ;; let's update the best-cost
+                  (setf best-delta-cost current-delta-cost)
+                  ;; let's stop the iteration
+                  (stop-neighborhood-search))))))
+
+      ======== from here on is the new stuff ========     
+      ;; here we check if we found a neighbor better than solution
+      ;; if so, we apply the operations in best-neighbor to solution
+      ;; and return the best-neighbor
+      ;; otherwise, we return nil
+      ;; and that means that we didn't find a better neighbor
+
+      (if best-neighbor
+          (then
+            (apply-set-of-operations (reverse best-neighbor) wc)
+            (setf best-neighbor-as-solution
+                  (solution wc))
+            ;; return best-neighbor-as-solution
+            ;; and the best-delta-cost
+            (values best-neighbor-as-solution best-delta-cost)))
+      ======== here ends the new stuff ========
+      #+END_EXAMPLE
+
+      Obviously, to do that, we need to initialize several things, and what we need to initialize depends on the strategy we want to use.  We talk about that in the next section.
+***** 1. what do we need to initialize things
+
+      To use an exhaustive search of the neighborhood and return the first neighbor better than the current solution, we need to initialize the following:
+
+        - best-delta-cost (to 0, that means no improvement)
+        - best-neighbor (to nil)
+        - best-neighbor-as-solution (to nil)
+        - current-delta-cost (to avoid warnings)
+
+      And there are some things that should be initialized in any strategy:
+
+        - the ops-list (to nil)
+        - *vrp-stop-neighborhood-search* to nil
+        - we should also create a working-copy from the solution
+          or initialize the working-copy, depending on what we want to pass around as arguments.
+
+          So the initializations for the criterion =rab= with an exhaustive search (assuming that the user passes a solution as argument) could look like:
+
+         
+      #+BEGIN_EXAMPLE
+      ===== here is the new stuff =====
+      (let* (;; first the standard initializations
+             (*vrp-stop-neighborhood-search* nil)
+             (ops-list nil)
+             (wc (basic-working-copy solution))
+             ;; now the corresponding to the
+             ;; best-improvement strategy
+             (current-delta-cost 0)
+             (best-delta-cost 0)
+             (best-neighbor nil)
+             (best-neighbor-as-solution nil)
+             )
+
+        (prepare-solution-for-neighborhood-exploration wc)
+
+       ===== here ends the new stuff =====
+     
+        (doselect-route (r1 wc)
+          (doselect-client (c1 r1 wc)
+            (doinsert-client (c1 r1 wc))
+              ;; let's get the cost of the current neighbor
+              (setf current-delta-cost
+                    (delta-cost ops-list wc problem action)
+              ;; let's see if it is better
+              (if (< current-delta-cost best-delta-cost)
+                  ;; if it is
+                  (then
+                     ;; let's save the ops that make it
+                     (setf best-neighbor (clone ops-list))
+                     ;; let's update the best-cost
+                     (setf best-delta-cost current-delta-cost))))))
+  
+        ;; here we check if we found a neighbor better than solution
+        ;; if so, we apply the operations in best-neighbor to solution
+        ;; and return the best-neighbor
+        ;; otherwise, we return nil
+        ;; and that means that we didn't find a better neighbor
+  
+        (if best-neighbor
+          (then
+            (apply-set-of-operations (reverse best-neighbor) wc)
+            (setf best-neighbor-as-solution
+                  (solution wc))
+            ;; return best-neighbor-as-solution
+            ;; and the best-delta-cost
+            (values best-neighbor-as-solution best-delta-cost))))
+      #+END_EXAMPLE
+      
+     In the next sections, we'll write a working code for this criterion and run some tests.
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-tutorials.lisp 
+     (defun rab-exhaustive-first (solution problem action)
+       "Returns the first neighbor of the solution in wc, that is better that wc.."
+       (let* ( ;; first the standard initializations
+              (*vrp-stop-neighborhood-search* nil)
+              (wc (basic-working-copy solution))
+              (ops-list nil)
+              ;; now the corresponding to the
+              ;; best-improvement strategy
+              (current-delta-cost 0)
+              (best-delta-cost 0)
+              (best-neighbor nil)
+              (best-neighbor-as-solution nil)
+              )
+         (prepare-solution-for-neighborhood-exploration wc)
+         (initialize-action-for-delta-cost-computation wc problem action)
+
+         (doselect-route (r1 wc)
+           (doselect-client (c1 r1 wc)
+             (doinsert-client (c1 r1 wc)
+               ;; let's get the cost of the current neighbor
+               (setf current-delta-cost
+                     (delta-cost (reverse ops-list) wc problem action))
+
+               (format t "~%With delta-cost: ~a~%" current-delta-cost)
+               (pp-solution wc t) (terpri)
+
+               ;; let's see if it is better
+               (if (< current-delta-cost best-delta-cost)
+                   ;; if it is, set the best values 
+                   ;; and stop the iterations
+                   (then
+                     ;; let's save the ops that make it
+                     (setf best-neighbor (clone ops-list))
+                     ;; let's update the best-cost
+                     (setf best-delta-cost current-delta-cost)
+                     ;; let's stop the iteration
+                     (stop-neighborhood-search))))))
+
+         ;; here we check if we found a neighbor better than solution
+         ;; if so, we apply the operations in best-neighbor to solution
+         ;; and return the best-neighbor
+         ;; otherwise, we return nil
+         ;; and that means that we didn't find a better neighbor
+
+         (if best-neighbor
+             (then
+               (apply-set-of-operations (reverse best-neighbor) wc)
+               (setf best-neighbor-as-solution
+                     (solution wc))
+               (setf (cost best-neighbor-as-solution)
+                     (+ (cost solution)
+                        best-delta-cost))))
+
+         ;; return best-neighbor-as-solution
+         ;; and the best-delta-cost
+         (values best-neighbor-as-solution
+                 best-delta-cost)))
+     #+END_SRC
+**** tests
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                         (5 0 6 7 2 4)  ;1
+                                         (1 8 0 3 9 1)  ;2
+                                         (4 5 1 0 5 7)  ;3
+                                         (4 5 1 5 0 6)  ;4
+                                         (1 5 7 6 9 0)) ;5
+                                         ;0 1 2 3 4 5 
+                            :demands '(10 10 15 40 20)
+                            :capacity 40)
+       (with-basic-cvrp-solution (s1 ((3 2 4) (1 5)) p1)
+         (let* ((best-solution-found nil)
+                (best-cost-found 0)
+                (wc0 (basic-working-copy s1))
+                (wc2 nil)
+                (action (delta-cvrp-action))
+                (cvrp-action (basic-cvrp-action)))
+
+
+
+           (bformat t "Testing exhaustive/best-improvement rab")
+
+           ;; let's evaluate the solution
+
+           (simulate-solution s1 p1 cvrp-action)
+           (setf (cost s1) (+ (total-distance cvrp-action)
+                              (total-penalty cvrp-action)))
+
+           (format t "Distance: ~a, penalty: ~a, cost: ~a~%"
+                   (total-distance cvrp-action)
+                   (total-penalty cvrp-action)
+                   (cost s1))
+
+           (prepare-solution-for-neighborhood-exploration wc0)
+
+           (format t "~%Testing exhaustive rab (first)...~%")
+           (pp-solution wc0 t)
+
+           ;;{{{ let's explore the neighborhood rarb
+           (setf best-solution-found
+                 (rab-exhaustive-first s1 p1 action))
+           ;;}}}
+
+
+           (if best-solution-found
+               (then
+                 ;;{{{ print the best neighbor
+                 ;; (format t "Best value: ~a~%" (cost best-solution-found))
+                 (format t "------------------~%Best neighbor:~%")
+                 (setf wc2 (basic-working-copy best-solution-found))
+                 (prepare-solution-for-neighborhood-exploration wc2)
+                 (pp-solution wc2 t) (terpri)
+
+
+                 (format t "with cost: ~a~%" (cost wc2))
+                 (format t "------------------~%")
+                 ;;}}}
+
+                 ;; ;;{{{ using yoel approach
+                 ;; (format t "Cost of original solution: ~a~%"
+                 ;;         (solution-cost s1 p1 cvrp-action))
+                 ;; (format t "Cost of best-neighbor: ~a~%"
+                 ;;         (solution-cost best-solution-found
+                 ;;                        p1 cvrp-action))
+                 ;; ;;}}}
+                 )
+               (else
+                 (format t "No better solution found in neighbor.~%")))
+
+           )))
+     #+END_SRC
+*** create a jump-around (return the last solution) search for rab
+**** description
+
+     In this section I want to create a function that jumps around the neighborhood =*n*= times the neighborhood =rab= and inconditionally returns the last solution found.
+
+     The final code should be the following.
+**** code
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (defun jump-around-rab (solution problem action repetitions)
+       (let* (;; first the standard initializations
+             (*vrp-stop-neighborhood-search* nil)
+             (ops-list nil)
+             (wc (basic-working-copy solution))
+             (current-delta-cost 0)
+             ;; now the corresponding to the
+             ;; jump-around strategy
+             (cumulative-delta-cost 0)
+             )
+
+         (prepare-solution-for-neighborhood-exploration wc)
+
+         (loop for i from 1 to repetitions
+               while (not *vrp-stop-neighborhood-search*)
+               do (prepare-solution-for-neighborhood-exploration wc)
+               do (random-select-route (r1 wc)
+                    (random-select-client (c1 r1 wc)
+                      (random-insert-client (c1 r1 wc)
+                        ;; let's compute the delta-cost
+                        (setf current-delta-cost
+                              (delta-cost (reverse ops-list)
+                                          wc problem action))
+                        ;; let's update the cumulative-delta-cost
+                        (incf cumulative-delta-cost
+                              current-delta-cost)
+
+                        (format t "current-delta-cost: ~a, cumulative: ~a~%"
+                                current-delta-cost
+                                cumulative-delta-cost)
+
+                        ;; let's apply the operations
+                        (apply-set-of-operations
+                         (reverse ops-list) wc)
+
+                        ;; let's update the solution cost
+                        (setf (cost wc) 
+                              (+ (cost wc)
+                                 (+ (delta-distance action)
+                                    (total-penalty action))))
+
+
+                        (format t "      solution cost: ~a~%"
+                                (cost wc))
+                        ))))
+         ;; after we leave the loop
+         ;; we should return the cumulative-solution
+         ;; and the cumulative-delta-cost
+         ;; The cumulative solution is the one in the wc
+         ;; and the cumulative cost is the one we have
+         ;; computed.
+         (values (solution wc) cumulative-delta-cost)))
+     #+END_SRC
+
+     #+RESULTS:
+
+**** tests with toy problem
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                         (5 0 6 7 2 4)  ;1
+                                         (1 8 0 3 9 1)  ;2
+                                         (4 5 1 0 5 7)  ;3
+                                         (4 5 1 5 0 6)  ;4
+                                         (1 5 7 6 9 0)) ;5
+                                         ;0 1 2 3 4 5 
+                            :demands '(10 10 15 40 20)
+                            :capacity 40)
+       (with-basic-cvrp-solution (s1 ((3 2 4) (1 5)) p1)
+         (let* ((cumulative-solution-found nil)
+                (cumulative-delta-cost 0)
+                (wc0 (basic-working-copy s1))
+                (wc2 nil)
+                (action (delta-cvrp-action))
+                (cvrp-action (basic-cvrp-action)))
+
+
+
+           (bformat t "Testing jump-around rab")
+
+           ;; let's evaluate the solution
+
+           (simulate-solution s1 p1 cvrp-action)
+           (setf (cost s1) (+ (total-distance cvrp-action)
+                              (total-penalty cvrp-action)))
+
+           (format t "Distance: ~a, penalty: ~a, cost: ~a~%"
+                   (total-distance cvrp-action)
+                   (total-penalty cvrp-action)
+                   (cost s1))
+
+           (prepare-solution-for-neighborhood-exploration wc0)
+
+           (format t "~%Testing jump-around rab with solution...~%")
+           (pp-solution wc0 t)
+
+           ;;{{{ let's explore the neighborhood rarb
+           (setf (values cumulative-solution-found
+                         cumulative-delta-cost)
+                 (jump-around-rab s1 p1 action 10))
+           ;;}}}
+
+
+           (if cumulative-solution-found
+               (then
+                 ;;{{{ print the best neighbor
+                 ;; (format t "Best value: ~a~%" (cost best-solution-found))
+                 (format t "------------------~%Cumulative neighbor:~%")
+                 (setf wc2 (basic-working-copy cumulative-solution-found))
+                 (prepare-solution-for-neighborhood-exploration wc2)
+                 (pp-solution wc2 t) (terpri)
+
+
+                 (format t "with cumulative cost: ~a~%" (cost wc2))
+                 (format t "------------------~%")
+                 ;;}}}
+
+                 ;; ;;{{{ using yoel approach
+                 ;; (format t "Cost of original solution: ~a~%"
+                 ;;         (solution-cost s1 p1 cvrp-action))
+                 ;; (format t "Cost of best-neighbor: ~a~%"
+                 ;;         (solution-cost best-solution-found
+                 ;;                        p1 cvrp-action))
+                 ;; ;;}}}
+                 )
+               (else
+                 (format t "No better solution found in neighborhood.~%")))
+
+           )))
+     #+END_SRC
+**** tests with a-n33-k6
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (let* ((p1 a-n33-k6-problem)
+            (s1 (make-initial-solution-for-cvrp-deterministic p1))
+            (cumulative-solution-found nil)
+            (cumulative-delta-cost 0)
+            (wc0 (basic-working-copy s1))
+            (wc2 nil)
+            (action (delta-cvrp-action))
+            (cvrp-action (basic-cvrp-action)))
+
+
+
+       (bformat t "Testing jump-around rab")
+
+       ;; let's evaluate the solution
+
+       (simulate-solution s1 p1 cvrp-action)
+       (setf (cost s1) (+ (total-distance cvrp-action)
+                          (total-penalty cvrp-action)))
+
+       (format t "Distance: ~a, penalty: ~a, cost: ~a~%"
+               (total-distance cvrp-action)
+               (total-penalty cvrp-action)
+               (cost s1))
+
+       (prepare-solution-for-neighborhood-exploration wc0)
+
+       (format t "~%Testing jump-around rab with solution...~%")
+       (pp-solution wc0 t)
+
+       ;;{{{ let's explore the neighborhood rarb
+       (setf (values cumulative-solution-found
+                     cumulative-delta-cost)
+             (jump-around-rab s1 p1 action 20))
+       ;;}}}
+
+
+       (if cumulative-solution-found
+           (then
+             ;;{{{ print the best neighbor
+             ;; (format t "Best value: ~a~%" (cost best-solution-found))
+             (format t "------------------~%Cumulative neighbor:~%")
+             (setf wc2 (basic-working-copy cumulative-solution-found))
+             (prepare-solution-for-neighborhood-exploration wc2)
+             (pp-solution wc2 t) (terpri)
+
+
+             (format t "with cumulative cost: ~a (~a)~%"
+                     (cost wc2)
+                     (cond ((> cumulative-delta-cost 0) "worse")
+                           ((< cumulative-delta-cost 0) "better")
+                           (t "equal")))
+        
+             (format t "------------------~%")
+             ;;}}}
+
+             ;; ;;{{{ using yoel approach
+             ;; (format t "Cost of original solution: ~a~%"
+             ;;         (solution-cost s1 p1 cvrp-action))
+             ;; (format t "Cost of best-neighbor: ~a~%"
+             ;;         (solution-cost best-solution-found
+             ;;                        p1 cvrp-action))
+             ;; ;;}}}
+             )
+           (else
+             (format t "No better solution found in neighborhood.~%")))
+
+       )
+     #+END_SRC
+*** create a jump-around-rab (return the last and best solution)
+**** description
+
+     In this section I want to create a function that jumps around the neighborhood =*n*= times the neighborhood =rab= and inconditionally returns the last solution found.  If also returns the best of all the solutions with a delta-cost smaller than 0.
+
+     The final code should be the following.
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports both :tangle ../src/vrp-tests.lisp 
+     (defun jump-around-rab-best (solution problem action repetitions)
+       (let* (;; first the standard initializations
+             (*vrp-stop-neighborhood-search* nil)
+             (ops-list nil)
+             (wc (basic-working-copy solution))
+             (current-delta-cost 0)
+             ;; now the corresponding to the
+             ;; jump-around strategy
+             (cumulative-delta-cost 0)
+             ;; the corresponding to the find the best better solution
+             (best-neighbor-as-solution nil)
+             (best-delta-cost 0)
+             (how-many-better 0)
+             )
+
+         (loop for i from 1 to repetitions
+               while (not *vrp-stop-neighborhood-search*)
+               do (prepare-solution-for-neighborhood-exploration wc)
+               do (random-select-route (r1 wc)
+                    (random-select-client (c1 r1 wc)
+                      (random-insert-client (c1 r1 wc)
+                        ;; let's compute the delta-cost
+                        (setf current-delta-cost
+                              (delta-cost (reverse ops-list)
+                                          wc problem action))
+                        ;; let's update the cumulative-delta-cost
+                        (incf cumulative-delta-cost
+                              current-delta-cost)
+
+                        ;; let's apply the operations
+                        (apply-set-of-operations
+                         (reverse ops-list) wc)
+
+                        ;; let's update the solution cost
+                        (setf (cost wc) 
+                              (+ (cost wc)
+                                 (+ (delta-distance action)
+                                    (total-penalty action))))
+
+
+
+                        ;; let's check for the best better solution
+                        (if (< current-delta-cost best-delta-cost)
+                            (then ;; we found a best-better-solution
+
+                              (format t "found a better-best-better!!!~%")
+
+                              (incf how-many-better)
+
+                              (setf best-neighbor-as-solution
+                                    (clone (solution wc)))
+                              ;; we don't need to update the cost
+                              ;; of the best solution
+                              ;; because it was already done before.
+
+
+                              ;; the best-delta-cost is now 0
+                              ;; because the current-neighbor
+                              ;; is updated
+                              (setf best-delta-cost 0))
+                            (else ;; we need to update the best-delta-cost
+                              (incf best-delta-cost
+                                    (- current-delta-cost))))
+
+                        (format t "current ~a, cumulative: ~a, best: ~a"
+                                current-delta-cost
+                                cumulative-delta-cost
+                                best-delta-cost)
+                        (format t ". cost: ~a~%"
+                                 (cost wc))
+
+
+                        ))))
+         ;; after we leave the loop
+         ;; we should return the cumulative-solution
+         ;; and the cumulative-delta-cost
+         ;; The cumulative solution is the one in the wc
+         ;; and the cumulative cost is the one we have
+         ;; computed.
+         (values (solution wc)
+                 cumulative-delta-cost
+                 best-neighbor-as-solution
+                 how-many-better)))
+     #+END_SRC
+
+     
+**** tests with toy problem
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                         (5 0 6 7 2 4)  ;1
+                                         (1 8 0 3 9 1)  ;2
+                                         (4 5 1 0 5 7)  ;3
+                                         (4 5 1 5 0 6)  ;4
+                                         (1 5 7 6 9 0)) ;5
+                                         ;0 1 2 3 4 5 
+                            :demands '(10 10 15 40 20)
+                            :capacity 40)
+       (with-basic-cvrp-solution (s1 ((3 2 4) (1 5)) p1)
+         (let* ((cumulative-solution-found nil)
+                (cumulative-delta-cost 0)
+                (best-better-solution nil)
+                (wc0 (basic-working-copy s1))
+                (wc2 nil)
+                (action (delta-cvrp-action))
+                (cvrp-action (basic-cvrp-action)))
+
+
+
+           (bformat t "Testing jump-around rab")
+
+           ;; let's evaluate the solution
+
+           (simulate-solution s1 p1 cvrp-action)
+           (setf (cost s1) (+ (total-distance cvrp-action)
+                              (total-penalty cvrp-action)))
+
+           (format t "Distance: ~a, penalty: ~a, cost: ~a~%"
+                   (total-distance cvrp-action)
+                   (total-penalty cvrp-action)
+                   (cost s1))
+
+           (prepare-solution-for-neighborhood-exploration wc0)
+
+           (format t "~%Testing jump-around rab with solution...~%")
+           (pp-solution wc0 t)
+
+           ;;{{{ let's explore the neighborhood rarb
+           (setf (values cumulative-solution-found
+                         cumulative-delta-cost
+                         best-better-solution)
+                 (jump-around-rab-best s1 p1 action 10))
+           ;;}}}
+
+
+           (if cumulative-solution-found
+               (then
+                 ;;{{{ print the best neighbor
+                 ;; (format t "Best value: ~a~%" (cost best-solution-found))
+                 (format t "------------------~%Cumulative neighbor:~%")
+                 (setf wc2 (basic-working-copy cumulative-solution-found))
+                 (prepare-solution-for-neighborhood-exploration wc2)
+                 (pp-solution wc2 t) (terpri)
+
+
+                 (format t "with cumulative cost: ~a~%" (cost wc2))
+                 (format t "------------------~%")
+                 ;;}}}
+
+                 ;; ;;{{{ using yoel approach
+                 ;; (format t "Cost of original solution: ~a~%"
+                 ;;         (solution-cost s1 p1 cvrp-action))
+                 ;; (format t "Cost of best-neighbor: ~a~%"
+                 ;;         (solution-cost best-solution-found
+                 ;;                        p1 cvrp-action))
+                 ;; ;;}}}
+                 )
+               (else
+                 (format t "No better solution found in neighborhood.~%")))
+
+           (if best-better-solution
+               (format t "Found a better solution with cost ~a~%"
+                       (cost best-better-solution))
+               ;; else
+               (format t "All neighbors were worse."))
+
+           )))
+     #+END_SRC
+**** tests with a-n33-k6
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (let* ((p1 a-n33-k6-problem)
+            (s1 (make-initial-solution-for-cvrp-deterministic p1))
+            (cumulative-solution-found nil)
+            (cumulative-delta-cost 0)
+            (best-better-solution nil)
+            (how-many-better 0)
+
+            (wc0 (basic-working-copy s1))
+            (wc2 nil)
+            (action (delta-cvrp-action))
+            (cvrp-action (basic-cvrp-action)))
+
+
+
+       (bformat t "Testing jump-around rab")
+
+       ;; let's evaluate the solution
+
+       (simulate-solution s1 p1 cvrp-action)
+       (setf (cost s1) (+ (total-distance cvrp-action)
+                          (total-penalty cvrp-action)))
+
+       (format t "Distance: ~a, penalty: ~a, cost: ~a~%"
+               (total-distance cvrp-action)
+               (total-penalty cvrp-action)
+               (cost s1))
+
+       (prepare-solution-for-neighborhood-exploration wc0)
+
+       ;; (format t "~%Testing jump-around rab with solution...~%")
+       ;; (pp-solution wc0 t)
+       (format t "-----------------~2%")
+
+       ;;{{{ let's explore the neighborhood rarb
+       (setf (values cumulative-solution-found
+                     cumulative-delta-cost
+                     best-better-solution
+                     how-many-better)
+             (jump-around-rab-best s1 p1 action 10))
+       ;;}}}
+
+
+       (if cumulative-solution-found
+           (then
+             ;;{{{ print the best neighbor
+             ;; (format t "Best value: ~a~%" (cost best-solution-found))
+             (format t "------------------~%Cumulative neighbor:~%")
+             (setf wc2 (basic-working-copy cumulative-solution-found))
+             (prepare-solution-for-neighborhood-exploration wc2)
+             (pp-solution wc2 t) (terpri)
+
+
+             (format t "with cumulative cost: ~a (~a)~%"
+                     (cost wc2)
+                     (cond ((> cumulative-delta-cost 0) "worse")
+                           ((< cumulative-delta-cost 0) "better")
+                           (t "equal")))
+
+             (format t "------------------~%")
+             ;;}}}
+
+             ;; ;;{{{ using yoel approach
+             ;; (format t "Cost of original solution: ~a~%"
+             ;;         (solution-cost s1 p1 cvrp-action))
+             ;; (format t "Cost of best-neighbor: ~a~%"
+             ;;         (solution-cost best-solution-found
+             ;;                        p1 cvrp-action))
+             ;; ;;}}}
+             )
+           (else
+             (format t "No better solution found in neighborhood.~%")))
+
+       (if best-better-solution
+           (format t "Found ~a better solution, the best one with cost ~a~%"
+                   how-many-better (cost best-better-solution))
+           ;; else
+           (format t "All neighbors were worse.~%"))
+
+       )
+     #+END_SRC
+*** create a return-last-neighbor-rab (return the last-neighbor)
+**** description
+
+     In this section I want to create a function that explores a neighborhood and returns the last visited neighbor.
+
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports both :tangle ../src/vrp-tests.lisp 
+     (defun return-last-neighbor-rab
+         (solution problem action repetitions)
+       (let* (;; first the standard initializations
+             (*vrp-stop-neighborhood-search* nil)
+             (ops-list nil)
+             (wc (basic-working-copy solution))
+             (current-delta-cost 0)
+             (best-delta-cost 0)
+             (best-neighbor nil)
+             (best-neighbor-as-solution nil)
+             )
+
+         (loop for i from 1 to repetitions
+               while (not *vrp-stop-neighborhood-search*)
+               do (prepare-solution-for-neighborhood-exploration wc)
+               do (random-select-route (r1 wc)
+                    (random-select-client (c1 r1 wc)
+                      (random-insert-client (c1 r1 wc)
+                        ;; let's compute the delta-cost
+                        (setf current-delta-cost
+                              (delta-cost (reverse ops-list)
+                                          wc problem action))
+                        ;; let's inconditionally set the
+                        ;; current neighbor as the best-neighbor
+                        (setf best-neighbor (clone (reverse ops-list)))
+                        (setf best-delta-cost current-delta-cost)
+                        (format t "current ~a, best: ~a~%"
+                                current-delta-cost
+                                best-delta-cost)
+                        ))))
+
+         ;; after we leave the loop we return the best neighbor
+         (if best-neighbor
+             (then
+               (apply-set-of-operations best-neighbor wc)
+               (setf best-neighbor-as-solution
+                     (solution wc))
+               (setf (cost best-neighbor-as-solution)
+                     (+ (cost solution)
+                        best-delta-cost))
+               ;; return best-neighbor-as-solution
+               (values best-neighbor-as-solution
+                       best-delta-cost)))))
+     #+END_SRC
+**** tests with a-n33-k6
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (let* ((p1 a-n33-k6-problem)
+            (s1 (make-initial-solution-for-cvrp-deterministic p1))
+            (last-solution nil)
+            (last-cost 0)
+
+            (wc0 (basic-working-copy s1))
+            ;; (wc2 nil)
+            (action (delta-cvrp-action))
+            (cvrp-action (basic-cvrp-action)))
+
+
+
+       (bformat t "Testing jump-around rab")
+
+       ;; let's evaluate the solution
+
+       (simulate-solution s1 p1 cvrp-action)
+       (setf (cost s1) (+ (total-distance cvrp-action)
+                          (total-penalty cvrp-action)))
+
+       (format t "Distance: ~a, penalty: ~a, cost: ~a~%"
+               (total-distance cvrp-action)
+               (total-penalty cvrp-action)
+               (cost s1))
+
+       (prepare-solution-for-neighborhood-exploration wc0)
+
+       ;; (format t "~%Testing jump-around rab with solution...~%")
+       ;; (pp-solution wc0 t)
+       (format t "-----------------~2%")
+
+       ;;{{{ let's explore the neighborhood rarb
+       (setf (values last-solution
+                     last-cost)
+             (return-last-neighbor-rab s1 p1 action 10))
+       ;;}}}
+
+
+       (if last-solution
+           (then
+             ;;{{{ print the last neighbor
+             (format t "------------------~%Last neighbor:~%")
+             (pp-solution last-solution t) (terpri)
+
+
+             (format t "with delta-cost: ~a~%"
+                     (cost last-solution))
+
+             (format t "------------------~%")
+             ;;}}}
+             )
+           (else
+             (format t "No better solution found in neighborhood.~%"))))
+     #+END_SRC
+*** create a smart swap-clients (return the best-neighbor)
+**** description
+
+     In this section I want to create a function that explores the swap-clients neighborhood and does not repeat any neighbor :-o.  It will return the best-improvement.
+
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports both :tangle ../src/vrp-tests.lisp 
+     (defun smart-rarac (solution problem action)
+
+       (declare (ignorable problem action))
+       (let* (;; first the standard initializations
+             (*vrp-stop-neighborhood-search* nil)
+             (ops-list nil)
+             (wc (basic-working-copy solution))
+             ;; now the corresponding to the
+             ;; best-improvement strategy
+             (counter 1)
+             ;; (current-delta-cost 0)
+             ;; (best-delta-cost 0)
+             ;; (best-neighbor nil)
+             ;; (best-neighbor-as-solution nil)
+             )
+
+         (prepare-solution-for-neighborhood-exploration wc)
+
+         (doselect-route (r1 wc)
+           (doselect-client2 (c1 r1 wc)
+             (doselect-route (r2 wc :ge r1)
+               (doselect-client2 (c2 r2 wc :ge (list r1 c1.select.position))
+                 (doswap-clients (c1 c2 wc)
+                   ;; for now let's just pp the solution
+                   (format t "Solution #~a after swapping c~a (~a ~a) and c~a (~a ~a):~%"
+                             counter
+                             (id (client-selected-at-operation c1 wc))
+                             c1.route c1.select.position
+                             (id (client-selected-at-operation c2 wc))
+                             c2.route c2.select.position)
+                   (pp-solution wc t) (terpri)
+                   (incf counter)
+                   )))))))
+     #+END_SRC
+**** tests with small problem
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                         (5 0 6 7 2 4)  ;1
+                                         (1 8 0 3 9 1)  ;2
+                                         (4 5 1 0 5 7)  ;3
+                                         (4 5 1 5 0 6)  ;4
+                                         (1 5 7 6 9 0)) ;5
+                                         ;0 1 2 3 4 5 
+                                         :demands '(10 10 15 40 20)
+                                         :capacity 40)
+       (with-basic-solution (s1 ((2 4 5) (3 1 6)))
+         (let* ((best-solution-exhaustive nil)
+                (action (delta-cvrp-action))
+                (results nil)
+                (cvrp-action (basic-cvrp-action 
+                              :penalty-factor 1000))
+                (wc (basic-working-copy s1))
+                )
+
+           (declare (ignore results
+                            cvrp-action best-solution-exhaustive))
+
+           (prepare-solution-for-neighborhood-exploration wc)
+
+           (bformat t "Testing smart rarac")
+
+
+           (format t "Original solution:~%")
+           (pp-solution s1 t)
+
+           (funcall 'smart-rarac s1 p1 action)
+
+
+               )))
+     #+END_SRC
+     
+**** tests with a-n33-k6
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (let* ((p1 a-n33-k6-problem)
+            (s1 (make-initial-solution-for-cvrp-deterministic p1))
+            (last-solution nil)
+            (last-cost 0)
+
+            (wc0 (basic-working-copy s1))
+            ;; (wc2 nil)
+            (action (delta-cvrp-action))
+            (cvrp-action (basic-cvrp-action)))
+
+
+
+       (bformat t "Testing jump-around rab")
+
+       ;; let's evaluate the solution
+
+       (simulate-solution s1 p1 cvrp-action)
+       (setf (cost s1) (+ (total-distance cvrp-action)
+                          (total-penalty cvrp-action)))
+
+       (format t "Distance: ~a, penalty: ~a, cost: ~a~%"
+               (total-distance cvrp-action)
+               (total-penalty cvrp-action)
+               (cost s1))
+
+       (prepare-solution-for-neighborhood-exploration wc0)
+
+       ;; (format t "~%Testing jump-around rab with solution...~%")
+       ;; (pp-solution wc0 t)
+       (format t "-----------------~2%")
+
+       ;;{{{ let's explore the neighborhood rarb
+       (setf (values last-solution
+                     last-cost)
+             (return-last-neighbor-rab s1 p1 action 10))
+       ;;}}}
+
+
+       (if last-solution
+           (then
+             ;;{{{ print the last neighbor
+             (format t "------------------~%Last neighbor:~%")
+             (pp-solution last-solution t) (terpri)
+
+
+             (format t "with delta-cost: ~a~%"
+                     (cost last-solution))
+
+             (format t "------------------~%")
+             ;;}}}
+             )
+           (else
+             (format t "No better solution found in neighborhood.~%"))))
+     #+END_SRC
+*** using the macros*
+**** description
+     In this section I want to explore the neighborhood =rab= using the macros* (these macros* are the ones that after each op-simulation, they update the delta-cost).  I also want to use a best-improvement strategy.
+
+     As a first approach I'm going to handwrite it.
+
+     All right, I did it.  Let's analyze what happened.
+
+     After all the call to the macros we need to add a finish-delta-cost-computation and after everything else, we need to add an undo-delta-cost-computation.  Besides, we need to bind current-delta-cost to the result of a call to get-delta-cost-from-action, and then do everything else that we want.
+
+     After checking what every class do, I believe that the idea is to add two more classes: one for the computation of the delta-cost with the "old style" call to =delta-cost=, and another to use the * version of the macros.  These two classes should inherit from =search-with-delta-cost-computation= because this is the one that adds the current-delta-cost to the let-initializations and I don't want to duplicate that code.
+
+     I just discovered that probably we'll need another search-strategy class that inherits from exhaustive-search and maps the name of the * macros to the corresponding name.  I'll add that class now.
+     
+**** code
+***** smart*-rab
+      #+BEGIN_SRC lisp +n -r :results none :exports both :tangle ../src/vrp-tests.lisp 
+      (defun smart*-rab (solution problem action)
+
+        ;; (declare (ignorable problem action))
+        (let* (;; first the standard initializations
+              (*vrp-stop-neighborhood-search* nil)
+              (ops-list nil)
+              (wc (basic-working-copy solution))
+              ;; now the corresponding to the
+              ;; best-improvement strategy
+              ;; (counter 1)
+              (current-delta-cost 0)
+              (best-delta-cost most-positive-fixnum)
+              (best-neighbor nil)
+              (best-neighbor-as-solution nil)
+              )
+
+          (prepare-solution-for-neighborhood-exploration wc)
+          (initialize-action-for-delta-cost-computation wc problem action)
+
+          (doselect-route* (r1 wc)
+            (doselect-client* (c1 r1 wc)
+              (doinsert-client* (c1 r1 wc)
+
+                ;; here we only need to finish the delta-cost
+                ;; computation because each step where made in the
+                ;; corresponding macros*
+
+                (finish-delta-cost-computation wc problem action)
+
+                ;; now we need to store the delta-cost of the
+                ;; current neighbor and store it current-delta-cost.
+
+                (setf current-delta-cost
+                      (get-delta-cost-from-action action))
+
+
+                ;; here we need to undo the finish-delta-cost-computation
+                ;; so we can keep going with the exploration
+
+                (undo-finish-delta-cost-computation wc problem action)
+
+                ;; from here on we repeat what we have
+                ;; in the standard best-improvement strategy
+                ;; let's see if it is better
+                (if (< current-delta-cost best-delta-cost)
+                    ;; if it is
+                    (then
+                      ;; let's save the ops that make it
+                      (setf best-neighbor (clone ops-list))
+                      ;; let's update the best-cost
+                      (setf best-delta-cost current-delta-cost)))
+
+
+                ;; (incf counter)
+                ;; (format t "#~a: ~a ~10t~%"
+                ;;         counter current-delta-cost)
+                ;; (pp-route 1 wc t) (terpri)
+
+                )))
+
+          ;; here we are outside the macros,
+          ;; so we just need to build and return
+          ;; the best neighbor
+          ;; here we check if we found a neighbor better than solution
+          ;; if so, we apply the operations in best-neighbor to solution
+          ;; and return the best-neighbor
+          ;; otherwise, we return nil
+          ;; and that means that we didn't find a better neighbor
+
+          (if best-neighbor
+              (then
+                (apply-set-of-operations (reverse best-neighbor) wc)
+                (setf best-neighbor-as-solution
+                      (solution wc))
+                (setf (cost best-neighbor-as-solution)
+                      (+ (cost solution)
+                         best-delta-cost))
+                ;; return best-neighbor-as-solution
+                (values best-neighbor-as-solution
+                        best-delta-cost)))
+
+          ))
+      #+END_SRC
+     
+***** just-rab
+      #+BEGIN_SRC lisp +n -r :results none :exports both :tangle ../src/vrp-tests.lisp 
+      (defun just-rab (solution problem action)
+
+        ;; (declare (ignorable problem action))
+        (let* (;; first the standard initializations
+              (*vrp-stop-neighborhood-search* nil)
+              (ops-list nil)
+              (wc (basic-working-copy solution))
+              ;; now the corresponding to the
+              ;; best-improvement strategy
+              ;; (counter 1)
+              (current-delta-cost 0)
+              (best-delta-cost most-positive-fixnum)
+              (best-neighbor nil)
+              (best-neighbor-as-solution nil)
+              )
+
+          (prepare-solution-for-neighborhood-exploration wc)
+          ;; (initialize-action-for-delta-cost-computation wc problem action)
+
+          (doselect-route (r1 wc)
+            (doselect-client (c1 r1 wc)
+              (doinsert-client (c1 r1 wc)
+
+                ;; now we need to store the delta-cost of the
+                ;; current neighbor and store it current-delta-cost.
+
+                (setf current-delta-cost
+                      (delta-cost (reverse ops-list) wc problem action))
+
+
+                ;; from here on we repeat what we have
+                ;; in the standard best-improvement strategy
+                ;; let's see if it is better
+                (if (< current-delta-cost best-delta-cost)
+                    ;; if it is
+                    (then
+                      ;; let's save the ops that make it
+                      (setf best-neighbor (clone ops-list))
+                      ;; let's update the best-cost
+                      (setf best-delta-cost current-delta-cost)))
+
+
+                ;; (incf counter)
+                ;; (format t "#~a: ~a ~10t~%"
+                ;;         counter current-delta-cost)
+                ;; (pp-route 1 wc t) (terpri)
+
+                )))
+
+          ;; here we are outside the macros,
+          ;; so we just need to build and return
+          ;; the best neighbor
+          ;; here we check if we found a neighbor better than solution
+          ;; if so, we apply the operations in best-neighbor to solution
+          ;; and return the best-neighbor
+          ;; otherwise, we return nil
+          ;; and that means that we didn't find a better neighbor
+
+          (if best-neighbor
+              (then
+                (apply-set-of-operations (reverse best-neighbor) wc)
+                (setf best-neighbor-as-solution
+                      (solution wc))
+                (setf (cost best-neighbor-as-solution)
+                      (+ (cost solution)
+                         best-delta-cost))
+                ;; return best-neighbor-as-solution
+                (values best-neighbor-as-solution
+                        best-delta-cost)))
+
+          ))
+      #+END_SRC
+     
+***** smart*-ref
+      #+BEGIN_SRC lisp +n -r :results none :exports both :tangle ../src/vrp-tests.lisp 
+      (defun smart*-ref (solution problem action)
+
+        ;; (declare (ignorable problem action))
+        (let* (;; first the standard initializations
+              (*vrp-stop-neighborhood-search* nil)
+              (ops-list nil)
+              (wc (basic-working-copy solution))
+              ;; now the corresponding to the
+              ;; best-improvement strategy
+              ;; (counter 1)
+              (current-delta-cost 0)
+              (best-delta-cost most-positive-fixnum)
+              (best-neighbor nil)
+              (best-neighbor-as-solution nil)
+              )
+
+          (prepare-solution-for-neighborhood-exploration wc)
+          (initialize-action-for-delta-cost-computation wc problem action)
+
+          (doselect-route* (r1 wc)
+            (doselect-subroute* (c1 r1 wc)
+              (doinsert-subroute* (c1 r1 wc)
+
+                ;; here we only need to finish the delta-cost
+                ;; computation because each step where made in the
+                ;; corresponding macros*
+
+                (finish-delta-cost-computation wc problem action)
+
+                ;; now we need to store the delta-cost of the
+                ;; current neighbor and store it current-delta-cost.
+
+                (setf current-delta-cost
+                      (get-delta-cost-from-action action))
+
+
+                ;; here we need to undo the finish-delta-cost-computation
+                ;; so we can keep going with the exploration
+
+                (undo-finish-delta-cost-computation wc problem action)
+
+                ;; from here on we repeat what we have
+                ;; in the standard best-improvement strategy
+                ;; let's see if it is better
+                (if (< current-delta-cost best-delta-cost)
+                    ;; if it is
+                    (then
+                      ;; let's save the ops that make it
+                      (setf best-neighbor (clone ops-list))
+                      ;; let's update the best-cost
+                      (setf best-delta-cost current-delta-cost)))
+
+
+                ;; (incf counter)
+                ;; (format t "#~a: ~a ~10t~%"
+                ;;         counter current-delta-cost)
+                ;; (pp-route 1 wc t) (terpri)
+
+                )))
+
+          ;; here we are outside the macros,
+          ;; so we just need to build and return
+          ;; the best neighbor
+          ;; here we check if we found a neighbor better than solution
+          ;; if so, we apply the operations in best-neighbor to solution
+          ;; and return the best-neighbor
+          ;; otherwise, we return nil
+          ;; and that means that we didn't find a better neighbor
+
+          (if best-neighbor
+              (then
+                (apply-set-of-operations (reverse best-neighbor) wc)
+                (setf best-neighbor-as-solution
+                      (solution wc))
+                (setf (cost best-neighbor-as-solution)
+                      (+ (cost solution)
+                         best-delta-cost))
+                ;; return best-neighbor-as-solution
+                (values best-neighbor-as-solution
+                        best-delta-cost)))
+
+          ))
+      #+END_SRC
+     
+***** just-rab
+      #+BEGIN_SRC lisp +n -r :results none :exports both :tangle ../src/vrp-tests.lisp 
+      (defun just-ref (solution problem action)
+
+        ;; (declare (ignorable problem action))
+        (let* (;; first the standard initializations
+              (*vrp-stop-neighborhood-search* nil)
+              (ops-list nil)
+              (wc (basic-working-copy solution))
+              ;; now the corresponding to the
+              ;; best-improvement strategy
+              ;; (counter 1)
+              (current-delta-cost 0)
+              (best-delta-cost most-positive-fixnum)
+              (best-neighbor nil)
+              (best-neighbor-as-solution nil)
+              )
+
+          (prepare-solution-for-neighborhood-exploration wc)
+          ;; (initialize-action-for-delta-cost-computation wc problem action)
+
+          (doselect-route (r1 wc)
+            (doselect-subroute (c1 r1 wc)
+              (doinsert-subroute (c1 r1 wc)
+
+                ;; now we need to store the delta-cost of the
+                ;; current neighbor and store it current-delta-cost.
+
+                (setf current-delta-cost
+                      (delta-cost (reverse ops-list) wc problem action))
+
+
+                ;; from here on we repeat what we have
+                ;; in the standard best-improvement strategy
+                ;; let's see if it is better
+                (if (< current-delta-cost best-delta-cost)
+                    ;; if it is
+                    (then
+                      ;; let's save the ops that make it
+                      (setf best-neighbor (clone ops-list))
+                      ;; let's update the best-cost
+                      (setf best-delta-cost current-delta-cost)))
+
+
+                ;; (incf counter)
+                ;; (format t "#~a: ~a ~10t~%"
+                ;;         counter current-delta-cost)
+                ;; (pp-route 1 wc t) (terpri)
+
+                )))
+
+          ;; here we are outside the macros,
+          ;; so we just need to build and return
+          ;; the best neighbor
+          ;; here we check if we found a neighbor better than solution
+          ;; if so, we apply the operations in best-neighbor to solution
+          ;; and return the best-neighbor
+          ;; otherwise, we return nil
+          ;; and that means that we didn't find a better neighbor
+
+          (if best-neighbor
+              (then
+                (apply-set-of-operations (reverse best-neighbor) wc)
+                (setf best-neighbor-as-solution
+                      (solution wc))
+                (setf (cost best-neighbor-as-solution)
+                      (+ (cost solution)
+                         best-delta-cost))
+                ;; return best-neighbor-as-solution
+                (values best-neighbor-as-solution
+                        best-delta-cost)))
+
+          ))
+      #+END_SRC
+     
+**** tests
+***** simple test
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (with-cvrp-problem (problem :distances `((0 2 3 4 5 6 7 8 9)   ;0
+                                               (5 0 6 7 2 4 2 3 4)   ;1
+                                               (1 8 0 3 9 1 2 4 5)   ;2
+                                               (4 5 1 0 5 7 1 9 5)   ;3
+                                               (4 5 1 5 0 6 2 8 2)   ;4
+                                               (1 5 7 6 9 0 1 6 7)   ;5
+                                               (4 5 1 3 5 7 0 9 5)   ;6
+                                               (4 6 2 8 2 3 8 0 1)   ;7
+                                               (4 5 3 4 1 6 2 8 0)   ;8
+                                               )
+                                               ;0 1 2 3 4 5 6 7 8
+                                   :demands '(20 10 15 40 30 20 10 30)
+                                   :capacity 30)
+          (with-basic-cvrp-solution (s1 ((1 2 3 4) ;; (5 6)
+                                         )
+                                        problem)
+            (let* ((action (delta-cvrp-action*))
+                   (best-neighbor nil)
+                   (best-delta-cost 0))
+
+
+                (bformat t "Testing smart*-rab")
+
+
+                (setf (values best-neighbor best-delta-cost)
+                      (smart*-rab s1 problem action))
+
+                (if best-neighbor
+                    (then
+                      (format t "Best delta cost: ~a~%"
+                             best-delta-cost)
+                      (pp-solution best-neighbor t) (terpri))
+                    (else
+                      (format t "No best neighbor found!~%")))
+
+                (format t "total-penalty: ~a~%"
+                        (delta-distance action)))))
+      #+END_SRC
+
+***** simple test with name
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (defun tests-profile ()
+        (with-cvrp-problem (problem :distances `((0 2 3 4 5 6 7 8 9)   ;0
+                                                 (5 0 6 7 2 4 2 3 4)   ;1
+                                                 (1 8 0 3 9 1 2 4 5)   ;2
+                                                 (4 5 1 0 5 7 1 9 5)   ;3
+                                                 (4 5 1 5 0 6 2 8 2)   ;4
+                                                 (1 5 7 6 9 0 1 6 7)   ;5
+                                                 (4 5 1 3 5 7 0 9 5)   ;6
+                                                 (4 6 2 8 2 3 8 0 1)   ;7
+                                                 (4 5 3 4 1 6 2 8 0)   ;8
+                                                 )
+                                     ;0 1 2 3 4 5 6 7 8
+                                     :demands '(20 10 15 40 30 20 10 30)
+                                     :capacity 30)
+          (with-basic-cvrp-solution (s1 ((1 2 3 4) ;; (5 6)
+                                         )
+                                        problem)
+            (let* ((action (delta-cvrp-action*))
+                   (best-neighbor nil)
+                   (best-delta-cost 0))
+
+
+              (bformat t "Testing smart*-rab")
+
+
+              (setf (values best-neighbor best-delta-cost)
+                    (smart*-rab s1 problem action))
+
+              (if best-neighbor
+                  (then
+                    (format t "Best delta cost: ~a~%"
+                            best-delta-cost)
+                    (pp-solution best-neighbor t) (terpri))
+                  (else
+                    (format t "No best neighbor found!~%")))
+
+              (format t "total-penalty: ~a~%"
+                      (delta-distance action))
+              ))))
+      #+END_SRC
+
+      #+RESULTS:
+
+***** functions to make big cvrp instances and solutions
+      #+BEGIN_SRC lisp +n -r :results none :exports both :tangle ../src/vrp-tests.lisp 
+      (defun make-random-cvrp-instance (size &optional
+                                               (distance-bound 20)
+                                               (demand-bound 20)
+                                               (capacity 100))
+        (let* ((distance-list nil)
+               (demand-list nil))
+          (setf distance-list
+                (loop for i from 1 to size
+                      collect (loop for j from 1 to size
+                                    if (= i j) collect 0
+                                    else collect (random distance-bound 1))))
+          (setf demand-list
+                (loop for i from 1 below size
+                      collect (random demand-bound 1)))
+          (make-cvrp-from-lists distance-list demand-list capacity)))
+
+      (defun make-deterministic-cvrp-instance
+          (size &optional (capacity 100))
+  
+        (let* ((distance-list nil)
+               (demand-list nil))
+          (setf distance-list
+                (loop for i from 1 to size
+                      collect (loop for j from 1 to size
+                                    if (= i j) collect 0
+                                    else collect (* i j))))
+          (setf demand-list
+                (loop for i from 1 below size
+                      collect i))
+          (make-cvrp-from-lists distance-list demand-list capacity)))
+      #+END_SRC
+***** tests to find out why undo-delta-cost-computation is slow
+      #+BEGIN_SRC lisp +n -r :results none :exports both :tangle ../src/vrp-tests.lisp 
+      (defun test-undo-delta-cost-computation (size
+                                               &key
+                                                 (fun 'smart*-rab)
+                                                 ;; (demand 20)
+                                                 ;; (distance 20)
+                                                 (capacity 400))
+        (let* ((problem (make-deterministic-cvrp-instance size capacity))
+               (s1 (make-initial-solution-for-cvrp-deterministic problem))
+               (action (delta-cvrp-action*)))
+
+          (funcall fun s1 problem action)
+    
+          ;; (pp-solution (smart*-rab s1 problem action) t)
+          ;; (terpri)
+          (values)
+          ))
+      #+END_SRC
+*** exhaustive-search/best-improvement for rab with delta-cost*
+**** description
+
+     In this section we want to create a function that explores the neighborhood of a solution with an exhaustive/best-improvement strategy using the delta-cost* function.  The criterion will be =rab= that means move the client inside its route.
+
+     The description of the criterion is:
+     #+BEGIN_EXAMPLE
+     (select-route r1)
+     (select-client c1 from r1)
+     (insert-client c1 into r1)
+     #+END_EXAMPLE
+     
+     To create use the delta-cost* function we need to create an extra working-copy that will be passed to the delta-cost* function, and an action.  These two objects should be initialized at the beginning of the search.
+     
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-tutorials.lisp 
+     (defun rab-exhaustive-best-with-delta-cost* (solution problem action)
+       "Returns the best neighbor of the solution in wc, using an exhaustive search and best-improvment strategy."
+       (let* ( ;; first the standard initializations
+              (*vrp-stop-neighborhood-search* nil)
+              (wc (basic-working-copy solution))
+              (ops-list nil)
+              ;; the following line is what we need
+              ;; to use the function delta-cost*
+              (wc-for-delta-cost (clone wc)) ;; the 2nd wc we'll need
+              ;; now what corresponds to the
+              ;; best-improvement strategy
+              (current-delta-cost 0)
+              (best-delta-cost 0)
+              (best-neighbor nil)
+              (best-neighbor-as-solution nil)
+              )
+
+
+         (prepare-solution-for-neighborhood-exploration wc)
+
+         ;; let's clone the initialized wc to wc-for-delta-cost
+         ;; (setf wc-for-delta-cost (clone wc))
+         (prepare-solution-for-neighborhood-exploration wc-for-delta-cost)
+
+         ;; this is the for the computation of the delta-cost
+         ;; this action should be of the *-type
+         (initialize-action-for-delta-cost-computation wc problem action)
+
+
+         ;; here starts the exploration of the neighborhood
+         (doselect-route (r1 wc)
+           (doselect-client (c1 r1 wc)
+             (doinsert-client (c1 r1 wc)
+
+               ;; let's get the cost of the current neighbor
+               (setf current-delta-cost
+                     (delta-cost* (reverse ops-list)
+                                  wc-for-delta-cost
+                                  problem
+                                  action))
+               (format t "~%With delta-cost: ~a~%" current-delta-cost)
+               (pp-solution wc t) (terpri)
+
+               ;; let's see if it is better
+               (if (< current-delta-cost best-delta-cost)
+                   ;; if it is
+                   (then
+                     ;; let's save the ops that make it
+                     (setf best-neighbor (clone ops-list))
+                     ;; let's update the best-cost
+                     (setf best-delta-cost current-delta-cost))))))
+
+         ;; here we check if we found a neighbor better than solution
+         ;; if so, we apply the operations in best-neighbor to solution
+         ;; and return the best-neighbor
+         ;; otherwise, we return nil
+         ;; and that means that we didn't find a better neighbor
+
+         (if best-neighbor
+             (then
+               (apply-set-of-operations (reverse best-neighbor) wc)
+               (setf best-neighbor-as-solution
+                     (solution wc))
+               (setf (cost best-neighbor-as-solution)
+                     (+ (cost solution)
+                        best-delta-cost))
+               ;; return best-neighbor-as-solution
+               (values best-neighbor-as-solution
+                       best-delta-cost)))))
+     #+END_SRC
+**** tests
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                         (5 0 6 7 2 4)  ;1
+                                         (1 8 0 3 9 1)  ;2
+                                         (4 5 1 0 5 7)  ;3
+                                         (4 5 1 5 0 6)  ;4
+                                         (1 5 7 6 9 0)) ;5
+                                         ;0 1 2 3 4 5 
+                            :demands '(10 10 15 40 20)
+                            :capacity 40)
+       (with-basic-cvrp-solution (s1 ((3 2 4) (1 5)) p1)
+         (let* ((best-solution-found nil)
+                (wc0 (basic-working-copy s1))
+                (wc2 nil)
+                (action (delta-cvrp-action*))
+                (cvrp-action (basic-cvrp-action)))
+
+
+
+           (bformat t "Testing exhaustive/best-improvement rab with delta-cost*")
+
+           ;; let's evaluate the solution
+
+           (simulate-solution s1 p1 cvrp-action)
+           (setf (cost s1) (+ (total-distance cvrp-action)
+                              (total-penalty cvrp-action)))
+
+           (format t "Distance: ~a, penalty: ~a, cost: ~a~%"
+                   (total-distance cvrp-action)
+                   (total-penalty cvrp-action)
+                   (cost s1))
+
+           (prepare-solution-for-neighborhood-exploration wc0)
+
+           (format t "~%Testing exhaustive rab...~%")
+           (pp-solution wc0 t)
+
+           ;;{{{ let's explore the neighborhood rarb
+           (setf best-solution-found
+                 (rab-exhaustive-best-with-delta-cost* s1 p1 action))
+           ;;}}}
+
+
+           (if best-solution-found
+               (then
+                 ;;{{{ print the best neighbor
+                 ;; (format t "Best value: ~a~%" (cost best-solution-found))
+                 (format t "------------------~%Best neighbor:~%")
+                 (setf wc2 (basic-working-copy best-solution-found))
+                 (prepare-solution-for-neighborhood-exploration wc2)
+                 (pp-solution wc2 t) (terpri)
+
+
+                 (format t "with cost: ~a~%" (cost wc2))
+                 (format t "------------------~%")
+                 ;;}}}
+
+                 ;; ;;{{{ using yoel approach
+                 ;; (format t "Cost of original solution: ~a~%"
+                 ;;         (solution-cost s1 p1 cvrp-action))
+                 ;; (format t "Cost of best-neighbor: ~a~%"
+                 ;;         (solution-cost best-solution-found
+                 ;;                        p1 cvrp-action))
+                 ;; ;;}}}
+                 )
+               (else
+                 (format t "No better solution found in neighbor.~%")))
+
+           )))
+     #+END_SRC
+
+
+*** exhaustive/best-improvement for rab with eval-graph and generator
+**** description
+
+     In this section we want to create a function that explores the neighborhood of a solution with an exhaustive/best-improvement strategy using the delta-cost* function, and the code generators created by Hector.  The criterion will be =rab= that means move the client inside its route.
+
+     The description of the criterion is:
+     #+BEGIN_EXAMPLE
+     (select-route r1)
+     (select-client c1 from r1)
+     (insert-client c1 into r1)
+     #+END_EXAMPLE
+     
+     To create use the delta-cost* function we need to create an extra working-copy that will be passed to the delta-cost* function, and an action.  These two objects should be initialized at the beginning of the search.  We also need to create the generator.
+     
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code
+       (defun rab-exhaustive-best-with-generator (solution problem graph)
+	 "Returns the best neighbor of the solution in wc, using an exhaustive search and best-improvement strategy."
+	 (let* (;; first the standard initializations
+		(*vrp-stop-neighborhood-search* nil)
+		(code `((select-route r1)
+			(select-client c1 from r1)
+			(insert-client c1 into r1)))
+
+		(expl-type 'exhaustive-exploration)
+
+		;; the next lines are for the generation
+		;; let's create the neighborhood tree
+		(neigh-tree (build-neighborhood-tree code solution))
+		;; here we crete the exahustive generator from the tree
+		(sol-generator (funcall expl-type neigh-tree))
+		;; the current neighbor-solution
+		(current-solution (funcall sol-generator))
+
+		;; eval-graph-stuff
+		(ops nil)
+
+		;; what follows is the required elements
+		;; for the exhaustive search
+		(best-delta-cost (output-value (output graph)))
+		(best-neighbor nil)
+		(best-neighbor-as-solution nil)
+		)
+
+
+	   ;; here starts the exploration of the neighborhood
+	   (loop while current-solution
+		 do 
+		    (setf ops (from-coordinates-to-operations current-solution))
+
+		    ;; let's get the cost of the current neighbor
+		    (do-suite-operations graph ops)
+		    (setf current-delta-cost (output-value (output graph)))
+		    (format t "~%With cost ~a:~% ~a"
+			    current-delta-cost
+			    (solution-track graph))
+		    (format t "operations: ~a ~%~%" ops)
+		    (undo-suite-operations graph ops)
+
+		    ;; let's see if it is better
+		    (if (< current-delta-cost best-delta-cost)
+			;; if it is
+			(then
+			  ;; let's save the ops that make it
+			  (format t "----> found better cost <---- ~%~%")
+			  (setf best-neighbor (clone ops))
+			  ;; let's update the best-cost
+			  (setf best-delta-cost current-delta-cost)))
+		    ;; now let's create the next solution
+		    (setf current-solution (funcall sol-generator)))
+
+	   ;; here we check if we found a neighbor better than solution
+	   ;; if so, we apply the operations in best-neighbor to solution
+	   ;; and return the best-neighbor
+	   ;; otherwise, we return nil
+	   ;; and that means that we didn't find a better neighbor
+
+	   (if best-neighbor
+	       (then
+		 (setf ops best-neighbor)
+		 (do-suite-operations graph ops)		 
+		 (setf best-neighbor-as-solution
+		       (solution-track graph))
+		 (setf (cost best-neighbor-as-solution)
+		       best-delta-cost)
+		 ;; return best-neighbor-as-solution
+		 (values best-neighbor-as-solution
+			 best-delta-cost)
+
+
+		 ;;	   (values best-neighbor best-delta-cost)
+		 ))))
+     #+END_SRC
+**** tests
+
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+       (progn (defparameter c1 (basic-cvrp-client 1 1))
+	      (defparameter c2 (basic-cvrp-client 2 1))
+	      (defparameter c3 (basic-cvrp-client 3 4))
+	      (defparameter c4 (basic-cvrp-client 4 3))
+	      (defparameter c5 (basic-cvrp-client 5 2))
+	      (defparameter c6 (basic-cvrp-client 6 1))
+
+	      (defparameter v1 (cvrp-vehicle 1 20))
+	      (defparameter v2 (cvrp-vehicle 2 20))
+
+	      (defparameter d0 (basic-depot))
+
+	      ;; Solution for the eval-graph
+	      ;; remember to start and end all the routes with depot
+	      ;; the starting depot is placed in the previous-client slot
+	      (defparameter r1 (route-for-simulation :id 1 :vehicle v1 :depot d0
+						     :clients (list c1 c2 c3 (clone d0)) :previous-client (clone d0)))
+	      (defparameter r2 (route-for-simulation :id 2 :vehicle v2 :depot d0
+						     :clients (list c4 c5 c6 (clone d0)) :previous-client (clone d0)))
+
+	      (defparameter s1 (basic-solution :id 1 :routes (list r1 r2)))
+
+	      ;; Solution for the neighborhood-tree
+	      ;; In this case we use normal routes without depots
+	      (defparameter r1-t (basic-route :id 1 :vehicle v1 :depot d0
+					      :clients (list c1 c2 c3)))
+	      (defparameter r2-t (basic-route :id 2 :vehicle v2 :depot d0
+					      :clients (list c4 c5 c6)))
+
+	      (defparameter s1-t (basic-solution :id 1 :routes (list r1-t r2-t)))
+
+
+	      (defparameter dist-mat #2A((0 1 2 3 4 5 6)
+					 (1 0 20 2 1 3 2)
+					 (2 20 0 2 2 2 2)
+					 (3 2 2 0 1 2 1)
+					 (4 1 2 1 0 2 3)
+					 (5 3 2 2 2 0 1)
+					 (6 2 2 1 3 1 0)))
+	      (defparameter problem (finite-fleet-cvrp-problem :id 1 :clients (list c1 c2 c3 c4 c5 c6)
+							       :depot d0 :distance-matrix dist-mat :fleet (list v1 v2) ))
+
+	      (defparameter graph (init-graph s1)))
+
+       (let* ((best-solution-found nil))
+
+	 (bformat t "Testing exhaustive/best-improvement rab with delta-cost* and generator.")
+
+	 ;; let's evaluate the solution
+
+	 (progn
+	   (def-var total-distance 0 graph)
+	   (loop for r in (routes s1) do 
+	     (progn
+	       (def-var route-distance 0 graph)
+	       (def-var route-demand (capacity (vehicle r)) graph) 
+	       (loop for c in (clients r) do 
+		 (progn
+		   (increment-distance (previous-client r) c route-distance dist-mat graph)
+		   (decrement-demand c route-demand graph) 
+		   (setf (previous-client r) c)))
+	       (increment-value total-distance route-distance graph)
+	       (apply-penalty route-demand total-distance 10 graph)) 
+	     (return-value total-distance graph)))
+
+	 (format t "initial cost: ~a~%" (output-value (output graph)))
+	 (format t "initial solution: ~a~%" (solution-track graph))
+
+
+	 (format t "~%Testing exhaustive rab...~%")
+
+	 ;;{{{ let's explore the neighborhood rarb
+	 (setf best-solution-found
+	       (rab-exhaustive-best-with-generator s1-t problem graph))
+	 ;;}}}
+
+
+	 (if best-solution-found
+	     (then
+	       (format t "------------------~%Best neighbor:~%")
+	       (format t "~a" best-solution-found)
+	       (format t "with cost ~a ~%" (cost best-solution-found))
+	       (format t "------------------~%")
+	       )
+	     (else
+	       (format t "No better solution found in neighbor.~%")))))
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+=========================================================================
+ Testing exhaustive/best-improvement rab with delta-cost* and generator.
+=========================================================================
+
+initial cost: 39
+initial solution: S1: (0)
+routes:
+  <r1: <cv:1. 0/20> (<d:0>: (<c1: 1> <c2: 1> <c3: 4> <d:0>))>
+  <r2: <cv:2. 0/20> (<d:0>: (<c4: 3> <c5: 2> <c6: 1> <d:0>))>
+
+
+Testing exhaustive rab...
+
+With cost 39:
+ S1: (0)
+routes:
+  <r1: <cv:1. 0/20> (<d:0>: (<c1: 1> <c2: 1> <c3: 4> <d:0>))>
+  <r2: <cv:2. 0/20> (<d:0>: (<c4: 3> <c5: 2> <c6: 1> <d:0>))>
+operations: (<op:a 1 1 0> <op:b 1 1 0>) 
+
+
+With cost 40:
+ S1: (0)
+routes:
+  <r1: <cv:1. 0/20> (<d:0>: (<c2: 1> <c1: 1> <c3: 4> <d:0>))>
+  <r2: <cv:2. 0/20> (<d:0>: (<c4: 3> <c5: 2> <c6: 1> <d:0>))>
+operations: (<op:a 1 1 0> <op:b 1 2 0>) 
+
+
+With cost 20:
+ S1: (0)
+routes:
+  <r1: <cv:1. 0/20> (<d:0>: (<c2: 1> <c3: 4> <c1: 1> <d:0>))>
+  <r2: <cv:2. 0/20> (<d:0>: (<c4: 3> <c5: 2> <c6: 1> <d:0>))>
+operations: (<op:a 1 1 0> <op:b 1 3 0>) 
+
+----> found better cost <---- 
+
+
+With cost 40:
+ S1: (0)
+routes:
+  <r1: <cv:1. 0/20> (<d:0>: (<c2: 1> <c1: 1> <c3: 4> <d:0>))>
+  <r2: <cv:2. 0/20> (<d:0>: (<c4: 3> <c5: 2> <c6: 1> <d:0>))>
+operations: (<op:a 1 2 0> <op:b 1 1 0>) 
+
+
+With cost 39:
+ S1: (0)
+routes:
+  <r1: <cv:1. 0/20> (<d:0>: (<c1: 1> <c2: 1> <c3: 4> <d:0>))>
+  <r2: <cv:2. 0/20> (<d:0>: (<c4: 3> <c5: 2> <c6: 1> <d:0>))>
+operations: (<op:a 1 2 0> <op:b 1 2 0>) 
+
+
+With cost 20:
+ S1: (0)
+routes:
+  <r1: <cv:1. 0/20> (<d:0>: (<c1: 1> <c3: 4> <c2: 1> <d:0>))>
+  <r2: <cv:2. 0/20> (<d:0>: (<c4: 3> <c5: 2> <c6: 1> <d:0>))>
+operations: (<op:a 1 2 0> <op:b 1 3 0>) 
+
+
+With cost 40:
+ S1: (0)
+routes:
+  <r1: <cv:1. 0/20> (<d:0>: (<c3: 4> <c1: 1> <c2: 1> <d:0>))>
+  <r2: <cv:2. 0/20> (<d:0>: (<c4: 3> <c5: 2> <c6: 1> <d:0>))>
+operations: (<op:a 1 3 0> <op:b 1 1 0>) 
+
+
+With cost 20:
+ S1: (0)
+routes:
+  <r1: <cv:1. 0/20> (<d:0>: (<c1: 1> <c3: 4> <c2: 1> <d:0>))>
+  <r2: <cv:2. 0/20> (<d:0>: (<c4: 3> <c5: 2> <c6: 1> <d:0>))>
+operations: (<op:a 1 3 0> <op:b 1 2 0>) 
+
+
+With cost 39:
+ S1: (0)
+routes:
+  <r1: <cv:1. 0/20> (<d:0>: (<c1: 1> <c2: 1> <c3: 4> <d:0>))>
+  <r2: <cv:2. 0/20> (<d:0>: (<c4: 3> <c5: 2> <c6: 1> <d:0>))>
+operations: (<op:a 1 3 0> <op:b 1 3 0>) 
+
+
+With cost 39:
+ S1: (0)
+routes:
+  <r1: <cv:1. 0/20> (<d:0>: (<c1: 1> <c2: 1> <c3: 4> <d:0>))>
+  <r2: <cv:2. 0/20> (<d:0>: (<c4: 3> <c5: 2> <c6: 1> <d:0>))>
+operations: (<op:a 2 1 0> <op:b 2 1 0>) 
+
+
+With cost 42:
+ S1: (0)
+routes:
+  <r1: <cv:1. 0/20> (<d:0>: (<c1: 1> <c2: 1> <c3: 4> <d:0>))>
+  <r2: <cv:2. 0/20> (<d:0>: (<c5: 2> <c4: 3> <c6: 1> <d:0>))>
+operations: (<op:a 2 1 0> <op:b 2 2 0>) 
+
+
+With cost 39:
+ S1: (0)
+routes:
+  <r1: <cv:1. 0/20> (<d:0>: (<c1: 1> <c2: 1> <c3: 4> <d:0>))>
+  <r2: <cv:2. 0/20> (<d:0>: (<c5: 2> <c6: 1> <c4: 3> <d:0>))>
+operations: (<op:a 2 1 0> <op:b 2 3 0>) 
+
+
+With cost 42:
+ S1: (0)
+routes:
+  <r1: <cv:1. 0/20> (<d:0>: (<c1: 1> <c2: 1> <c3: 4> <d:0>))>
+  <r2: <cv:2. 0/20> (<d:0>: (<c5: 2> <c4: 3> <c6: 1> <d:0>))>
+operations: (<op:a 2 2 0> <op:b 2 1 0>) 
+
+
+With cost 39:
+ S1: (0)
+routes:
+  <r1: <cv:1. 0/20> (<d:0>: (<c1: 1> <c2: 1> <c3: 4> <d:0>))>
+  <r2: <cv:2. 0/20> (<d:0>: (<c4: 3> <c5: 2> <c6: 1> <d:0>))>
+operations: (<op:a 2 2 0> <op:b 2 2 0>) 
+
+
+With cost 39:
+ S1: (0)
+routes:
+  <r1: <cv:1. 0/20> (<d:0>: (<c1: 1> <c2: 1> <c3: 4> <d:0>))>
+  <r2: <cv:2. 0/20> (<d:0>: (<c4: 3> <c6: 1> <c5: 2> <d:0>))>
+operations: (<op:a 2 2 0> <op:b 2 3 0>) 
+
+
+With cost 42:
+ S1: (0)
+routes:
+  <r1: <cv:1. 0/20> (<d:0>: (<c1: 1> <c2: 1> <c3: 4> <d:0>))>
+  <r2: <cv:2. 0/20> (<d:0>: (<c6: 1> <c4: 3> <c5: 2> <d:0>))>
+operations: (<op:a 2 3 0> <op:b 2 1 0>) 
+
+
+With cost 39:
+ S1: (0)
+routes:
+  <r1: <cv:1. 0/20> (<d:0>: (<c1: 1> <c2: 1> <c3: 4> <d:0>))>
+  <r2: <cv:2. 0/20> (<d:0>: (<c4: 3> <c6: 1> <c5: 2> <d:0>))>
+operations: (<op:a 2 3 0> <op:b 2 2 0>) 
+
+
+With cost 39:
+ S1: (0)
+routes:
+  <r1: <cv:1. 0/20> (<d:0>: (<c1: 1> <c2: 1> <c3: 4> <d:0>))>
+  <r2: <cv:2. 0/20> (<d:0>: (<c4: 3> <c5: 2> <c6: 1> <d:0>))>
+operations: (<op:a 2 3 0> <op:b 2 3 0>) 
+
+------------------
+Best neighbor:
+S1: (20)
+routes:
+  <r1: <cv:1. 0/20> (<d:0>: (<c2: 1> <c3: 4> <c1: 1> <d:0>))>
+  <r2: <cv:2. 0/20> (<d:0>: (<c4: 3> <c5: 2> <c6: 1> <d:0>))>
+with cost 20 
+------------------
+#+end_example
+
+*** random/best-improvement for rab with eval-graph and generator
+**** description
+
+     In this section we want to create a function that explores the neighborhood of a solution with an exhaustive/best-improvement strategy using the delta-cost* function, and the code generators created by Hector.  The criterion will be =rab= that means move the client inside its route.
+
+     The description of the criterion is:
+     #+BEGIN_EXAMPLE
+     (select-route r1)
+     (select-client c1 from r1)
+     (insert-client c1 into r1)
+     #+END_EXAMPLE
+     
+     To create use the delta-cost* function we need to create an extra working-copy that will be passed to the delta-cost* function, and an action.  These two objects should be initialized at the beginning of the search.  We also need to create the generator.
+     
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code
+	      (defun rab-random-best-with-generator (solution problem graph)
+		"Returns the best neighbor of the solution in wc, using an random search and best-improvement strategy."
+		(let* (;; first the standard initializations
+		       (*vrp-stop-neighborhood-search* nil)
+		       (code `((select-route r1)
+			       (select-client c1 from r1)
+			       (insert-client c1 into r1)))
+		       ;; the next lines are for the generation
+		       ;; let's create the neighborhood tree
+		       (neigh-tree (build-neighborhood-tree code solution))
+		       ;; here we crete the exahustive generator from the tree
+		       (sol-generator (random-exploration neigh-tree 5))
+		       ;; the current neighbor-solution
+		       (current-solution (funcall sol-generator))
+
+		       ;; eval-graph-stuff
+		       (ops nil)
+
+		       ;; what follows is the required elements
+		       ;; for the random search
+		       (best-delta-cost (output-value (output graph)))
+		       (best-neighbor nil)
+		       (best-neighbor-as-solution nil)
+		       )
+
+
+		  ;; here starts the exploration of the neighborhood
+		  (loop while current-solution
+			do 
+			   (setf ops (from-coordinates-to-operations current-solution))
+
+			   ;; let's get the cost of the current neighbor
+			   (do-suite-operations graph ops)
+			   (setf current-delta-cost (output-value (output graph)))
+			   (format t "~%With cost ~a:~% ~a"
+				   current-delta-cost
+				   (solution-track graph))
+			   (format t "operations: ~a ~%~%" ops)
+			   (undo-suite-operations graph ops)
+
+			   ;; let's see if it is better
+			   (if (< current-delta-cost best-delta-cost)
+			       ;; if it is
+			       (then
+				 ;; let's save the ops that make it
+				 (format t "----> found better cost <---- ~%~%")
+				 (setf best-neighbor (clone ops))
+				 ;; let's update the best-cost
+				 (setf best-delta-cost current-delta-cost)))
+			   ;; now let's create the next solution
+			   (setf current-solution (funcall sol-generator)))
+
+		  ;; here we check if we found a neighbor better than solution
+		  ;; if so, we apply the operations in best-neighbor to solution
+		  ;; and return the best-neighbor
+		  ;; otherwise, we return nil
+		  ;; and that means that we didn't find a better neighbor
+
+		  (if best-neighbor
+		      (then
+			(setf ops best-neighbor)
+			(do-suite-operations graph ops)		 
+			(values best-neighbor best-delta-cost)
+			))))
+     #+END_SRC
+**** tests
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+       (progn (defparameter c1 (basic-cvrp-client 1 1))
+	      (defparameter c2 (basic-cvrp-client 2 1))
+	      (defparameter c3 (basic-cvrp-client 3 4))
+	      (defparameter c4 (basic-cvrp-client 4 3))
+	      (defparameter c5 (basic-cvrp-client 5 2))
+	      (defparameter c6 (basic-cvrp-client 6 1))
+
+	      (defparameter v1 (cvrp-vehicle 1 20))
+	      (defparameter v2 (cvrp-vehicle 2 20))
+
+	      (defparameter d0 (basic-depot))
+
+	      ;; Solution for the eval-graph
+	      ;; remember to start and end all the routes with depot
+	      ;; the starting depot is placed in the previous-client slot
+	      (defparameter r1 (route-for-simulation :id 1 :vehicle v1 :depot d0
+						     :clients (list c1 c2 c3 (clone d0)) :previous-client (clone d0)))
+	      (defparameter r2 (route-for-simulation :id 2 :vehicle v2 :depot d0
+						     :clients (list c4 c5 c6 (clone d0)) :previous-client (clone d0)))
+
+	      (defparameter s1 (basic-solution :id 1 :routes (list r1 r2)))
+
+	      ;; Solution for the neighborhood-tree
+	      ;; In this case we use normal routes without depots
+	      (defparameter r1-t (basic-route :id 1 :vehicle v1 :depot d0
+					      :clients (list c1 c2 c3)))
+	      (defparameter r2-t (basic-route :id 2 :vehicle v2 :depot d0
+					      :clients (list c4 c5 c6)))
+
+	      (defparameter s1-t (basic-solution :id 1 :routes (list r1-t r2-t)))
+
+
+	      (defparameter dist-mat #2A((0 1 2 3 4 5 6)
+					 (1 0 20 2 1 3 2)
+					 (2 20 0 2 2 2 2)
+					 (3 2 2 0 1 2 1)
+					 (4 1 2 1 0 2 3)
+					 (5 3 2 2 2 0 1)
+					 (6 2 2 1 3 1 0)))
+	      (defparameter problem (finite-fleet-cvrp-problem :id 1 :clients (list c1 c2 c3 c4 c5 c6)
+							       :depot d0 :distance-matrix dist-mat :fleet (list v1 v2) ))
+
+	      (defparameter graph (init-graph s1)))
+
+       (let* ((best-solution-found nil))
+
+	 (bformat t "Testing exhaustive/best-improvement rab with delta-cost* and generator.")
+
+	 ;; let's evaluate the solution
+
+	 (progn
+	   (def-var total-distance 0 graph)
+	   (loop for r in (routes s1) do 
+	     (progn
+	       (def-var route-distance 0 graph)
+	       (def-var route-demand (capacity (vehicle r)) graph) 
+	       (loop for c in (clients r) do 
+		 (progn
+		   (increment-distance (previous-client r) c route-distance dist-mat graph)
+		   (decrement-demand c route-demand graph) 
+		   (setf (previous-client r) c)))
+	       (increment-value total-distance route-distance graph)
+	       (apply-penalty route-demand total-distance 10 graph)) 
+	     (return-value total-distance graph)))
+
+	 (format t "initial cost: ~a~%" (output-value (output graph)))
+	 (format t "initial solution: ~a~%" (solution-track graph))
+
+
+	 (format t "~%Testing exhaustive rab...~%")
+
+	 ;;{{{ let's explore the neighborhood rarb
+	 (setf best-solution-found
+	       (rab-random-best-with-generator s1-t problem graph))
+	 ;;}}}
+
+
+	 (if best-solution-found
+	     (then
+	       (format t "------------------~%Best neighbor:~%")
+	       (format t "~a" (solution-track graph))
+	       (format t "with cost ~a ~%" (output-value (output graph)))
+	       (format t "------------------~%")
+	       )
+	     (else
+	       (format t "No better solution found in neighbor.~%")))))
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+=========================================================================
+ Testing exhaustive/best-improvement rab with delta-cost* and generator.
+=========================================================================
+
+initial cost: 39
+initial solution: S1: (0)
+routes:
+  <r1: <cv:1. 0/20> (<d:0>: (<c1: 1> <c2: 1> <c3: 4> <d:0>))>
+  <r2: <cv:2. 0/20> (<d:0>: (<c4: 3> <c5: 2> <c6: 1> <d:0>))>
+
+
+Testing exhaustive rab...
+
+With cost 39:
+ S1: (0)
+routes:
+  <r1: <cv:1. 0/20> (<d:0>: (<c1: 1> <c2: 1> <c3: 4> <d:0>))>
+  <r2: <cv:2. 0/20> (<d:0>: (<c4: 3> <c5: 2> <c6: 1> <d:0>))>
+operations: (<op:a 1 2 0> <op:b 1 2 0>) 
+
+
+With cost 40:
+ S1: (0)
+routes:
+  <r1: <cv:1. 0/20> (<d:0>: (<c2: 1> <c1: 1> <c3: 4> <d:0>))>
+  <r2: <cv:2. 0/20> (<d:0>: (<c4: 3> <c5: 2> <c6: 1> <d:0>))>
+operations: (<op:a 1 1 0> <op:b 1 2 0>) 
+
+
+With cost 39:
+ S1: (0)
+routes:
+  <r1: <cv:1. 0/20> (<d:0>: (<c1: 1> <c2: 1> <c3: 4> <d:0>))>
+  <r2: <cv:2. 0/20> (<d:0>: (<c4: 3> <c5: 2> <c6: 1> <d:0>))>
+operations: (<op:a 1 2 0> <op:b 1 2 0>) 
+
+
+With cost 40:
+ S1: (0)
+routes:
+  <r1: <cv:1. 0/20> (<d:0>: (<c2: 1> <c1: 1> <c3: 4> <d:0>))>
+  <r2: <cv:2. 0/20> (<d:0>: (<c4: 3> <c5: 2> <c6: 1> <d:0>))>
+operations: (<op:a 1 2 0> <op:b 1 1 0>) 
+
+
+With cost 39:
+ S1: (0)
+routes:
+  <r1: <cv:1. 0/20> (<d:0>: (<c1: 1> <c2: 1> <c3: 4> <d:0>))>
+  <r2: <cv:2. 0/20> (<d:0>: (<c4: 3> <c5: 2> <c6: 1> <d:0>))>
+operations: (<op:a 1 2 0> <op:b 1 2 0>) 
+
+No better solution found in neighbor.
+#+end_example
+
+** general idea
+   The idea is to have several classes (one for each of the different situations) and then add a generic method to write the neighborhood exploration code according to the classes passed as arguments.
+
+   So far we'll have two class hierarchies, one for the type of search (exhaustive, random, other) and another for the remaining aspects (how to select the best neighbor, what to return, etc).
+
+   First, we'll add the classes, and then the generic functions.
+
+
+* Tests
+*** exhaustive/best-improvement for rab with eval-graph and generator
+
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+       (progn (defparameter c1 (basic-cvrp-client 1 1))
+	      (defparameter c2 (basic-cvrp-client 2 1))
+	      (defparameter c3 (basic-cvrp-client 3 4))
+	      (defparameter c4 (basic-cvrp-client 4 3))
+	      (defparameter c5 (basic-cvrp-client 5 2))
+	      (defparameter c6 (basic-cvrp-client 6 1))
+
+	      (defparameter v1 (cvrp-vehicle 1 20))
+	      (defparameter v2 (cvrp-vehicle 2 20))
+
+	      (defparameter d0 (basic-depot))
+
+	      ;; Solution for the eval-graph
+	      ;; remember to start and end all the routes with depot
+	      ;; the starting depot is placed in the previous-client slot
+	      (defparameter r1 (route-for-simulation :id 1 :vehicle v1 :depot d0
+						     :clients (list c1 c2 c3 (clone d0)) :previous-client (clone d0)))
+	      (defparameter r2 (route-for-simulation :id 2 :vehicle v2 :depot d0
+						     :clients (list c4 c5 c6 (clone d0)) :previous-client (clone d0)))
+
+	      (defparameter s1 (basic-solution :id 1 :routes (list r1 r2)))
+
+	      ;; Solution for the neighborhood-tree
+	      ;; In this case we use normal routes without depots
+	      (defparameter r1-t (basic-route :id 1 :vehicle v1 :depot d0
+					      :clients (list c1 c2 c3)))
+	      (defparameter r2-t (basic-route :id 2 :vehicle v2 :depot d0
+					      :clients (list c4 c5 c6)))
+
+	      (defparameter s1-t (basic-solution :id 1 :routes (list r1-t r2-t)))
+
+
+	      (defparameter dist-mat #2A((0 1 2 3 4 5 6)
+					 (1 0 20 2 1 3 2)
+					 (2 20 0 2 2 2 2)
+					 (3 2 2 0 1 2 1)
+					 (4 1 2 1 0 2 3)
+					 (5 3 2 2 2 0 1)
+					 (6 2 2 1 3 1 0)))
+	      (defparameter problem (finite-fleet-cvrp-problem :id 1 :clients (list c1 c2 c3 c4 c5 c6)
+							       :depot d0 :distance-matrix dist-mat :fleet (list v1 v2) ))
+
+	      (defparameter graph (init-graph s1)))
+
+       (let* ((best-solution-found nil))
+
+	 (bformat t "Testing exhaustive/best-improvement rab with delta-cost* and generator.")
+
+	 ;; let's evaluate the solution
+
+	 (progn
+	   (def-var total-distance 0 graph)
+	   (loop for r in (routes s1) do 
+	     (progn
+	       (def-var route-distance 0 graph)
+	       (def-var route-demand (capacity (vehicle r)) graph) 
+	       (loop for c in (clients r) do 
+		 (progn
+		   (increment-distance (previous-client r) c route-distance dist-mat graph)
+		   (decrement-demand c route-demand graph) 
+		   (setf (previous-client r) c)))
+	       (increment-value total-distance route-distance graph)
+	       (apply-penalty route-demand total-distance 10 graph)) 
+	     (return-value total-distance graph)))
+
+	 (format t "initial cost: ~a~%" (output-value (output graph)))
+	 (format t "initial solution: ~a~%" (solution-track graph))
+
+	 (setf bp1 (basic-strategy-blueprint))
+
+	 ;; let's populate the blueprint
+	 (prepare-blueprint-for-code-generation
+	  `((select-route r1)
+	    (select-client c1 from r1)
+	    (select-route r2)
+	    (select-client c2 from r2)
+	    (swap-clients c1 c2))
+	  +exhaustive-search-strategy+
+	  +best-improvement+
+	  bp1)
+
+	 (format t "the generated code:~%~a~%"
+		 (write-neighborhood-exploration-code bp1)))
+
+
+
+       ;;       (progn ;; for rarac
+       ;;
+       ;;	 (setf rarb (make-neighborhood-criterion 
+       ;;		     `((select-route r1)
+       ;;		       (select-client c1 from r1)
+       ;;		       (select-route r2)
+       ;;		       (select-client c2 from r2)
+       ;;		       (swap-clients c1 c2))
+       ;;		     +exhaustive-search-strategy+ 
+       ;;		     +best-improvement+))
+       ;;
+       ;;	 ;; (setf rarb (make-neighborhood-exploration-function bp))
+       ;;	 ;; let's get the best neighbor
+       ;;	 (setf best-neighbor (funcall rarb s1-t problem graph))
+       ;;
+       ;;	 (if best-neighbor
+       ;;	     (then
+       ;;	       (format t "After rarb we found...~%")
+       ;;	       (format t "With cost ~a...~%" (cost best-neighbor))
+       ;;	       (pp-solution best-neighbor t))
+       ;;	     (else
+       ;;       (format t "No best neighbor found :-[."))))
+
+       ))
+
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+=========================================================================
+ Testing exhaustive/best-improvement rab with delta-cost* and generator.
+=========================================================================
+
+initial cost: 39
+initial solution: S1: (0)
+routes:
+  <r1: <cv:1. 0/20> (<d:0>: (<c1: 1> <c2: 1> <c3: 4> <d:0>))>
+  <r2: <cv:2. 0/20> (<d:0>: (<c4: 3> <c5: 2> <c6: 1> <d:0>))>
+
+the generated code:
+(LAMBDA (SOLUTION PROBLEM ACTION &OPTIONAL (INITIAL-BEST-DELTA-COST 0))
+  (DECLARE (IGNORABLE INITIAL-BEST-DELTA-COST SOLUTION PROBLEM ACTION))
+  (LET* ((*VRP-STOP-NEIGHBORHOOD-SEARCH* NIL)
+         (OPS-LIST NIL)
+         (CURRENT-DELTA-COST 0)
+         (WC (MAKE-WORKING-COPY (CLONE SOLUTION)))
+         (BEST-NEIGHBOR NIL)
+         (BEST-DELTA-COST INITIAL-BEST-DELTA-COST)
+         (BEST-NEIGHBOR-AS-SOLUTION NIL))
+    (PREPARE-SOLUTION-FOR-NEIGHBORHOOD-EXPLORATION WC)
+    (DOSELECT-ROUTE (R1 WC)
+      (DOSELECT-CLIENT (C1 R1 WC)
+        (DOSELECT-ROUTE (R2 WC)
+          (DOSELECT-CLIENT (C2 R2 WC)
+            (DOSWAP-CLIENTS (C1 C2 WC)
+              (SETF CURRENT-DELTA-COST
+                      (DELTA-COST (REVERSE OPS-LIST) WC PROBLEM ACTION))
+              (IF (< CURRENT-DELTA-COST BEST-DELTA-COST)
+                  (THEN
+                    (SETF BEST-NEIGHBOR (CLONE OPS-LIST))
+                    (SETF BEST-DELTA-COST CURRENT-DELTA-COST))))))))
+    (IF BEST-NEIGHBOR
+        (THEN
+          (APPLY-SET-OF-OPERATIONS (REVERSE BEST-NEIGHBOR) WC)
+          (SETF BEST-NEIGHBOR-AS-SOLUTION (SOLUTION WC))
+          (SETF (COST BEST-NEIGHBOR-AS-SOLUTION)
+                  (+ (COST SOLUTION) BEST-DELTA-COST))))
+    (VALUES BEST-NEIGHBOR-AS-SOLUTION)))
+#+end_example
+
+
+
+
+
+

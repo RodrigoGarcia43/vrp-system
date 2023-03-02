@@ -1,0 +1,923 @@
+#+TITLE: VRP solver environment
+#+AUTHOR: Fernando Rodriguez Flores
+#+DATE 2018-09-01
+#+TODO: TODO WIP BROKEN | DONE
+
+* Description
+  In this file, I'm going to add to functions and macros to ease the creation of neighborhood exploration macros.  The src blocks will be tangled to src/vrp-neighborhood-exploration-macros.lisp.
+
+
+
+* Add the package to the tangled file
+  #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-neighborhood-exploration-macros.lisp 
+  (in-package :vrp)
+  #+END_SRC
+
+
+* Analysis of the doselect/insert macros
+
+** simulate and undo simpler operations
+   In these two macros (doselect-client and doinsert) client there are at least two codes of block that repeat over and over again.  They are:
+
+   #+BEGIN_EXAMPLE
+   (progn
+     ;; here we process all the operations
+     ;; in simpler-ops
+     (dolist (,simple-op ,simpler-ops)
+       ;; push the current op into ops-list
+       (push ,simple-op ops-list)
+       ;; simulate the operation
+       (simulate-neighborhood-operation
+        ,simple-op ,working-copy)))
+   #+END_EXAMPLE
+
+   and
+
+   #+BEGIN_EXAMPLE
+   (progn
+     ;; here we undo all the operations in
+     ;; simpler-ops:
+     (dolist (,simple-op (reverse ,simpler-ops))
+       ;; pop the op from the list of operations
+       (pop ops-list)
+       ;; undo the operation
+       (undo-neighborhood-operation
+        ,simple-op ,working-copy)))
+   #+END_EXAMPLE
+
+   This blocks appear even in other macros such as select-subroute and insert-subroute.  I'd like to abstract them.  They will also be present in other search strategies such as the random search strategies.
+
+   As the first step in this file, I'll try to abstract that.
+
+** BROKEN +the loop keywords+
+   In all the select/insert do-neighborhood macros we have the same clauses:
+
+   #+BEGIN_EXAMPLE
+   for ,op = (,',op-name ,,@op-params)
+   for ,simpler-ops = (get-simpler-operations-from
+                       ,op ,working-copy)
+   while (not *vrp-stop-neighborhood-search*)
+   #+END_EXAMPLE
+
+   I'd like to also abstract them.  In this case, =op-name=, =op-params= and =working-copy= are user's arguments; =op= and =simpler-ops= are gensyms.  Probably that explains the number of commas before them :-).
+
+   I think that to abstract that, I'm going to have to pass everything as parameters.  I'll give it a first approach.
+
+
+* Snippets for the simulation (and undoing) of the operations
+** description
+   In these code snippets, we receive two parameters:
+    - simpler-ops (a list with the simpler operations)
+    - working-copy (the working-copy we are working on)
+
+   We don't need the simple-op because as it is used only locally, we can create it inside them.
+** simulate-simpler-ops-macro
+*** description
+    This is a code snippet that will be present in most macros related to the exploration of a neighborhood.  Here we iterate through the simpler-operations of the current op, pushing them into the ops-list and simulating them.
+*** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-neighborhood-exploration-macros.lisp 
+    (defmacro simulate-simpler-ops-macro (simpler-ops working-copy)
+      (with-gensyms (simple-op)
+        `(progn
+           ;; here we process all the operations
+           ;; in simpler-ops
+           (dolist (,simple-op ,simpler-ops)
+             ;; push the current op into ops-list
+             (push ,simple-op ops-list)
+             ;; simulate the operation
+             (simulate-neighborhood-operation
+              ,simple-op ,working-copy)))))
+    #+END_SRC
+*** tests
+**** testing macroexpansion
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (simulate-simpler-ops 'simpler 'wc1)
+     #+END_SRC
+**** testing it inside an actual macro
+     #+BEGIN_SRC lisp +n -r :results none :exports both :tangle ../src/vrp-tests.lisp 
+      (defmacro doselect-client%%%% ((cname route working-copy) &body body)
+       "Iterates through each position in the given route, creates an instance of op-select-client, pushes it int ops-lists, increment the op-counter, do whatever the users wants to do, and restores everything to the previous state.
+     Example:
+         (doselect-client (c1 r1 wc1)
+            (format t \"Selecting client ~a from route ~a~%\"
+             (client-selected-at-operation c1)
+             (get-route-with-id r1 wc1)))"
+       (with-gensyms (pos op simpler-ops simple-op%)
+         `(loop for ,pos from 1 to (route-length ,route ,working-copy)
+                for ,op = (op-select-client
+                           ,route ,pos
+                           (1+ (selections-count ,working-copy)))
+                for ,cname = (1+ (selections-count ,working-copy))
+                for ,simpler-ops = (get-simpler-operations-from
+                                    ,op ,working-copy)
+
+                ;; the following line allows the final user
+                ;; to stop the iteration by setting that
+                ;; variable to t
+                while (not *vrp-stop-neighborhood-search*)
+
+                ;; now the simulation
+                do (simulate-simpler-ops-macro ,simpler-ops ,working-copy)
+
+                ;; let's do what the user wants
+                do (progn ,@body)
+
+                ;; now the clean up
+                do (progn
+                     ;; here we undo all the operations in
+                     ;; simpler-ops:
+                     (dolist (,simple-op% (reverse ,simpler-ops))
+                       ;; pop the op from the list of operations
+                       (pop ops-list)
+                       ;; undo the operation
+                       (undo-neighborhood-operation
+                        ,simple-op% ,working-copy))))))
+     #+END_SRC
+
+***** testing the code
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (with-basic-solution (s1 ((1 2 3 4) (5 6 7 8)))
+        (let* ((wc (basic-working-copy s1))
+               (ops-list nil))
+
+          (prepare-solution-for-neighborhood-exploration wc)
+
+          (bformat t "Testing doselect-route")
+          (doselect-client%% (c1 1 wc)
+            (format t "Selected client: ~a~%"
+                    (client-selected-at-operation c1 wc))
+            (pp-solution wc t) (terpri))))
+       #+END_SRC
+** undo-simpler-ops-macro
+*** description
+    This is a code snippet that will be present in most macros related to the exploration of a neighborhood.  Here we iterate through the simpler-operations of the current op, pop them from the ops-list and undo them.
+*** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-neighborhood-exploration-macros.lisp 
+    (defmacro undo-simpler-ops-macro (simpler-ops working-copy)
+      (with-gensyms (simple-op)
+        `(progn
+           ;; here we undo all the operations in
+           ;; simpler-ops:
+           (dolist (,simple-op (reverse ,simpler-ops))
+             ;; pop the op from the list of operations
+             (pop ops-list)
+             ;; undo the operation
+             (undo-neighborhood-operation
+              ,simple-op ,working-copy)))))
+    #+END_SRC
+*** tests
+**** testing macroexpansion
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (undo-simpler-ops-macro 'simpler 'wc1)
+     #+END_SRC
+**** testing it inside an actual macro
+     #+BEGIN_SRC lisp +n -r :results none :exports both :tangle ../src/vrp-tests.lisp 
+      (defmacro doselect-client%%%% ((cname route working-copy) &body body)
+       "Iterates through each position in the given route, creates an instance of op-select-client, pushes it int ops-lists, increment the op-counter, do whatever the users wants to do, and restores everything to the previous state.
+     Example:
+         (doselect-client (c1 r1 wc1)
+            (format t \"Selecting client ~a from route ~a~%\"
+             (client-selected-at-operation c1)
+             (get-route-with-id r1 wc1)))"
+       (with-gensyms (pos op simpler-ops simple-op%)
+         `(loop for ,pos from 1 to (route-length ,route ,working-copy)
+                for ,op = (op-select-client
+                           ,route ,pos
+                           (1+ (selections-count ,working-copy)))
+                for ,cname = (1+ (selections-count ,working-copy))
+                for ,simpler-ops = (get-simpler-operations-from
+                                    ,op ,working-copy)
+
+                ;; the following line allows the final user
+                ;; to stop the iteration by setting that
+                ;; variable to t
+                while (not *vrp-stop-neighborhood-search*)
+
+                ;; now the simulation
+                do (simulate-simpler-ops-macro ,simpler-ops ,working-copy)
+
+                ;; let's do what the user wants
+                do (progn ,@body)
+
+                ;; now the clean up
+                do (undo-simpler-ops-macro ,simpler-ops ,working-copy))))
+     #+END_SRC
+
+***** testing the code
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (with-basic-solution (s1 ((1 2 3 4) (5 6 7 8)))
+        (let* ((wc (basic-working-copy s1))
+               (ops-list nil))
+
+          (prepare-solution-for-neighborhood-exploration wc)
+
+          (bformat t "Testing doselect-route")
+          (doselect-client%% (c1 1 wc)
+            (format t "Selected client: ~a~%"
+                    (client-selected-at-operation c1 wc))
+            (pp-solution wc t) (terpri))))
+       #+END_SRC
+** simulate-simpler-ops-macro*
+*** description
+    This is a code snippet that will be present in most macros related to the exploration of a neighborhood.  Here we iterate through the simpler-operations of the current op, pushing them into the ops-list and simulating them.  We also call compute-delta-cost-after before simulating each operation.
+
+    We'll assume that when we'll expand this macro there will be a working-copy, a problem, and an action in the scope.
+*** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-neighborhood-exploration-macros.lisp 
+    (defmacro simulate-simpler-ops-macro* (simpler-ops working-copy)
+      (with-gensyms (simple-op)
+        `(progn
+           ;; here we process all the operations
+           ;; in simpler-ops
+           (dolist (,simple-op ,simpler-ops)
+             ;; push the current op into ops-list
+             (push ,simple-op ops-list)
+             ;; compute the delta cost after
+             (compute-delta-cost-after ,simple-op ,working-copy problem action)
+             ;; simulate the operation
+             (simulate-neighborhood-operation
+              ,simple-op ,working-copy)))))
+    #+END_SRC
+*** tests
+**** testing macroexpansion
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (simulate-simpler-ops-macro* 'simpler 'wc1)
+     #+END_SRC
+**** testing it inside an actual macro
+     #+BEGIN_SRC lisp +n -r :results none :exports both :tangle ../src/vrp-tests.lisp 
+      (defmacro doselect-client%%%% ((cname route working-copy) &body body)
+       "Iterates through each position in the given route, creates an instance of op-select-client, pushes it int ops-lists, increment the op-counter, do whatever the users wants to do, and restores everything to the previous state.
+     Example:
+         (doselect-client (c1 r1 wc1)
+            (format t \"Selecting client ~a from route ~a~%\"
+             (client-selected-at-operation c1)
+             (get-route-with-id r1 wc1)))"
+       (with-gensyms (pos op simpler-ops simple-op%)
+         `(loop for ,pos from 1 to (route-length ,route ,working-copy)
+                for ,op = (op-select-client
+                           ,route ,pos
+                           (1+ (selections-count ,working-copy)))
+                for ,cname = (1+ (selections-count ,working-copy))
+                for ,simpler-ops = (get-simpler-operations-from
+                                    ,op ,working-copy)
+
+                ;; the following line allows the final user
+                ;; to stop the iteration by setting that
+                ;; variable to t
+                while (not *vrp-stop-neighborhood-search*)
+
+                ;; now the simulation
+                do (simulate-simpler-ops-macro* ,simpler-ops ,working-copy)
+
+                ;; let's do what the user wants
+                do (progn ,@body)
+
+                ;; now the clean up
+                do (progn
+                     ;; here we undo all the operations in
+                     ;; simpler-ops:
+                     (dolist (,simple-op% (reverse ,simpler-ops))
+                       ;; pop the op from the list of operations
+                       (pop ops-list)
+                       ;; undo the operation
+                       (undo-neighborhood-operation
+                        ,simple-op% ,working-copy))))))
+     #+END_SRC
+
+**** testing the code
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (with-cvrp-problem (problem :distances `((0 2 3 4 5 6 7 8 9)  ;0
+                                              (5 0 6 7 2 4 2 3 4)  ;1
+                                              (1 8 0 3 9 1 2 4 5)  ;2
+                                              (4 5 1 0 5 7 1 9 5)  ;3
+                                              (4 5 1 5 0 6 2 8 2)  ;4
+                                              (1 5 7 6 9 0 1 6 7)  ;5
+                                              (4 5 1 3 5 7 0 9 5)  ;6
+                                              (4 6 2 8 2 3 8 0 1)  ;7
+                                              (4 5 3 4 1 6 2 8 0)  ;8
+                                              )
+                                              ;0 1 2 3 4 5 6 7 8
+                                :demands '(20 10 15 40 30 20 10 30)
+                                :capacity 30)
+       (with-basic-cvrp-solution (s1 ((1 2 3 4) (5 6 7 8)) problem)
+         (let* ((wc (basic-working-copy s1))
+                (ops-list nil)
+                (action (delta-cvrp-action*)))
+
+           (prepare-solution-for-neighborhood-exploration wc)
+           (initialize-action-for-delta-cost-computation wc problem action)
+
+           (bformat t "Testing doselect-route")
+           (doselect-client%%%% (c1 1 wc)
+                              (format t "Selected client: ~a~%"
+                                      (client-selected-at-operation c1 wc))
+                              (pp-solution wc t) (terpri)
+                              (format t "Delta distance after op: ~a~%"
+                                      (delta-distance action))
+                              (format t "Route feasibility after op: ~a~%"
+                                      (delta-routes-feasibility action))))))
+      #+END_SRC
+** undo-simpler-ops-macro*
+*** description
+    This is a code snippet that will be present in most macros related to the exploration of a neighborhood.  Here we iterate through the simpler-operations of the current op, pop them from the ops-list and undo them.  In this case, we undo the delta-cost computation that should had been done in the expansion of a previous =simulate-simpler-ops-macro*=.
+*** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-neighborhood-exploration-macros.lisp 
+    (defmacro undo-simpler-ops-macro* (simpler-ops working-copy)
+      (with-gensyms (simple-op)
+        `(progn
+           ;; here we undo all the operations in
+           ;; simpler-ops:
+           (dolist (,simple-op (reverse ,simpler-ops))
+             ;; pop the op from the list of operations
+             (pop ops-list)
+             ;; undo the operation
+             (undo-neighborhood-operation
+              ,simple-op ,working-copy)
+             ;; let's undo the delta-cost computation
+             (undo-delta-cost-computation ,simple-op ,working-copy problem action)))))
+    #+END_SRC
+*** tests
+**** testing macroexpansion
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (undo-simpler-ops-macro* 'simpler 'wc1)
+     #+END_SRC
+**** testing it inside an actual macro
+     #+BEGIN_SRC lisp +n -r :results none :exports both :tangle ../src/vrp-tests.lisp 
+      (defmacro doselect-client%%%% ((cname route working-copy) &body body)
+       "Iterates through each position in the given route, creates an instance of op-select-client, pushes it int ops-lists, increment the op-counter, do whatever the users wants to do, and restores everything to the previous state.
+     Example:
+         (doselect-client (c1 r1 wc1)
+            (format t \"Selecting client ~a from route ~a~%\"
+             (client-selected-at-operation c1)
+             (get-route-with-id r1 wc1)))"
+       (with-gensyms (pos op simpler-ops)
+         `(loop for ,pos from 1 to (route-length ,route ,working-copy)
+                for ,op = (op-select-client
+                           ,route ,pos
+                           (1+ (selections-count ,working-copy)))
+                for ,cname = (1+ (selections-count ,working-copy))
+                for ,simpler-ops = (get-simpler-operations-from
+                                    ,op ,working-copy)
+
+                ;; the following line allows the final user
+                ;; to stop the iteration by setting that
+                ;; variable to t
+                while (not *vrp-stop-neighborhood-search*)
+
+                ;; now the simulation
+                do (simulate-simpler-ops-macro* ,simpler-ops ,working-copy)
+
+                ;; let's do what the user wants
+                do (progn ,@body)
+
+                ;; now the clean up
+                do (undo-simpler-ops-macro* ,simpler-ops ,working-copy))))
+     #+END_SRC
+
+**** testing the code
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (with-cvrp-problem (problem :distances `((0 2 3 4 5 6 7 8 9)  ;0
+                                              (5 0 6 7 2 4 2 3 4)  ;1
+                                              (1 8 0 3 9 1 2 4 5)  ;2
+                                              (4 5 1 0 5 7 1 9 5)  ;3
+                                              (4 5 1 5 0 6 2 8 2)  ;4
+                                              (1 5 7 6 9 0 1 6 7)  ;5
+                                              (4 5 1 3 5 7 0 9 5)  ;6
+                                              (4 6 2 8 2 3 8 0 1)  ;7
+                                              (4 5 3 4 1 6 2 8 0)  ;8
+                                              )
+                                              ;0 1 2 3 4 5 6 7 8
+                                :demands '(20 10 15 40 30 20 10 30)
+                                :capacity 30)
+       (with-basic-cvrp-solution (s1 ((1 2 3 4) (5 6 7 8)) problem)
+         (let* ((wc (basic-working-copy s1))
+                (ops-list nil)
+                (action (delta-cvrp-action*)))
+
+           (prepare-solution-for-neighborhood-exploration wc)
+           (initialize-action-for-delta-cost-computation wc problem action)
+
+           (bformat t "Testing doselect-route")
+           (doselect-client%%%% (c1 1 wc)
+                              (format t "Selected client: ~a~%"
+                                      (client-selected-at-operation c1 wc))
+                              (pp-solution wc t) (terpri)
+                              (format t "Delta distance after op: ~a~%"
+                                      (delta-distance action))
+                              (format t "Route feasibility after op: ~a~%"
+                                      (delta-routes-feasibility action))))))
+      #+END_SRC
+
+
+* Snippets for the initializations of the constraints
+  
+** description
+
+   It this section I'm going to add macros that will abstract the repetition in the initializations of the variables in the constraints.
+
+   For instance, in the doselect-client and doinsert-client we have the following declarations inside a let:
+
+   #+BEGIN_EXAMPLE
+   (,initial-pos
+     ;; let's compute the starting pos
+     (cond (,ge
+            (if (and (listp ,ge))
+                (second ,ge)
+                ,ge))
+           (,gt
+            (if (listp ,gt)
+                (1+ (second ,gt))
+                (1+ ,gt)))
+           (t 1)))
+
+   (,final-pos
+     ;; let's compute the last pos
+     (cond (,le
+            (if (and (listp ,le))
+                (second ,le)
+                ,le))
+           (,lt
+            (if (listp ,lt)
+                (1- (second ,lt))
+                (1- ,lt)))
+           (t (route-length ,route ,working-copy))))
+   #+END_EXAMPLE
+
+   And there are others for initial-target-route, final-target-route, and exclude-target-route.
+
+   In this section I want to abstract that.
+
+** with-variables-for-constraints-for-selection
+*** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-neighborhood-exploration-macros.lisp 
+    (defmacro with-variables-for-constraints-for-selection
+        ((initial-pos ge gt
+         final-pos le lt
+         route working-copy
+         initial-target-route
+         final-target-route
+         exclude-target-route
+         exclude-pos
+         dt)
+         &body body)
+      `(let* ((,initial-pos
+               ;; let's compute the starting pos
+                  (max 1 (cond (,ge
+                                (if (and (listp ,ge))
+                                    (second ,ge)
+                                    ,ge))
+                               (,gt
+                                (if (listp ,gt)
+                                    (1+ (second ,gt))
+                                    (1+ ,gt)))
+                               (t 1))))
+              (,final-pos
+               ;; let's compute the last pos
+                  (cond (,le
+                         (if (and (listp ,le))
+                             (second ,le)
+                             ,le))
+                        (,lt
+                         (if (listp ,lt)
+                             (1- (second ,lt))
+                             (1- ,lt)))
+                        ;; we need to add 1+ because we can
+                        ;; add at the end of the route
+                        (t (route-length ,route ,working-copy))))
+              (,initial-target-route
+               (cond
+                 (,ge (if (listp ,ge) (first ,ge)))
+                 (,gt (if (listp ,gt) (first ,gt)))))
+              (,final-target-route
+               (cond
+                 (,le (if (listp ,le) (first ,le)))
+                 (,lt (if (listp ,lt) (first ,lt)))))
+              (,exclude-target-route
+               (cond
+                 (,dt (if (listp ,dt) (first ,dt)))))
+              (,exclude-pos
+               ;; let's check if we should exclude something
+               (cond (,dt
+                      (if (and (listp ,dt))
+                          (second ,dt)
+                          ,dt)))))
+         ,@body))
+    #+END_SRC
+** with-variables-for-constraints-for-insertion
+*** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-neighborhood-exploration-macros.lisp 
+    (defmacro with-variables-for-constraints-for-insertion
+        ((initial-pos ge gt
+         final-pos le lt
+         route working-copy
+         initial-target-route
+         final-target-route
+         exclude-target-route
+         exclude-pos
+         dt)
+         &body body)
+      `(let* ((,initial-pos
+               ;; let's compute the starting pos
+                  (max 1 (cond (,ge
+                                (if (and (listp ,ge))
+                                    (second ,ge)
+                                    ,ge))
+                               (,gt
+                                (if (listp ,gt)
+                                    (1+ (second ,gt))
+                                    (1+ ,gt)))
+                               (t 1))))
+              (,final-pos
+               ;; let's compute the last pos
+                  (cond (,le
+                         (if (and (listp ,le))
+                             (second ,le)
+                             ,le))
+                        (,lt
+                         (if (listp ,lt)
+                             (1- (second ,lt))
+                             (1- ,lt)))
+                        ;; we need to add 1+ because we can
+                        ;; add at the end of the route
+                        (t (1+ (route-length ,route ,working-copy)))))
+              (,initial-target-route
+               (cond
+                 (,ge (if (listp ,ge) (first ,ge)))
+                 (,gt (if (listp ,gt) (first ,gt)))))
+              (,final-target-route
+               (cond
+                 (,le (if (listp ,le) (first ,le)))
+                 (,lt (if (listp ,lt) (first ,lt)))))
+              (,exclude-target-route
+               (cond
+                 (,dt (if (listp ,dt) (first ,dt)))))
+              (,exclude-pos
+               ;; let's check if we should exclude something
+               (cond (,dt
+                      (if (and (listp ,dt))
+                          (second ,dt)
+                          ,dt)))))
+         ,@body))
+    #+END_SRC
+** with-variables-for-constraints-for-subroute-selection
+*** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-neighborhood-exploration-macros.lisp 
+    (defmacro with-variables-for-constraints-for-subroute-selection
+        ((initial-pos
+          ge gt
+          final-pos le lt
+          initial-target-route
+          final-target-route
+          exclude-target-route
+          exclude-pos
+          dt
+          last-pos)
+         &body body)
+      `(let* ((,initial-pos
+               ;; let's compute the starting pos
+                  (max 1 (cond (,ge
+                                (if (and (listp ,ge))
+                                    (second ,ge)
+                                    ,ge))
+                               (,gt
+                                (if (listp ,gt)
+                                    (1+ (second ,gt))
+                                    (1+ ,gt)))
+                               (t 1))))
+              (,final-pos
+               ;; let's compute the last pos
+                  (cond (,le
+                         (if (and (listp ,le))
+                             (second ,le)
+                             ,le))
+                        (,lt
+                         (if (listp ,lt)
+                             (1- (second ,lt))
+                             (1- ,lt)))
+                        ;; we need to add 1+ because we can
+                        ;; add at the end of the route
+                        (t ,last-pos)))
+              (,initial-target-route
+               (cond
+                 (,ge (if (listp ,ge) (first ,ge)))
+                 (,gt (if (listp ,gt) (first ,gt)))))
+              (,final-target-route
+               (cond
+                 (,le (if (listp ,le) (first ,le)))
+                 (,lt (if (listp ,lt) (first ,lt)))))
+              (,exclude-target-route
+               (cond
+                 (,dt (if (listp ,dt) (first ,dt)))))
+              (,exclude-pos
+               ;; let's check if we should exclude something
+               (cond (,dt
+                      (if (and (listp ,dt))
+                          (second ,dt)
+                          ,dt)))))
+         ,@body))
+    #+END_SRC
+** with-variables-for-constraints-for-subroute-insertion
+*** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-neighborhood-exploration-macros.lisp 
+    (defmacro with-variables-for-constraints-in-exhaustive-macro
+        ((initial-pos
+          ge gt
+          final-pos le lt
+          initial-target-route
+          final-target-route
+          exclude-target-route
+          exclude-pos
+          dt
+          last-pos)
+         &body body)
+      `(let* ((,initial-pos
+               ;; let's compute the starting pos
+                  (max 1 (cond (,ge
+                                (if (and (listp ,ge))
+                                    (second ,ge)
+                                    ,ge))
+                               (,gt
+                                (if (listp ,gt)
+                                    (1+ (second ,gt))
+                                    (1+ ,gt)))
+                               (t 1))))
+              (,final-pos
+               ;; let's compute the last pos
+                  (cond (,le
+                         (if (and (listp ,le))
+                             (second ,le)
+                             ,le))
+                        (,lt
+                         (if (listp ,lt)
+                             (1- (second ,lt))
+                             (1- ,lt)))
+                        ;; we need to add 1+ because we can
+                        ;; add at the end of the route
+                        (t ,last-pos)))
+              (,initial-target-route
+               (cond
+                 (,ge (if (listp ,ge) (first ,ge)))
+                 (,gt (if (listp ,gt) (first ,gt)))))
+              (,final-target-route
+               (cond
+                 (,le (if (listp ,le) (first ,le)))
+                 (,lt (if (listp ,lt) (first ,lt)))))
+              (,exclude-target-route
+               (cond
+                 (,dt (if (listp ,dt) (first ,dt)))))
+              (,exclude-pos
+               ;; let's check if we should exclude something
+               (cond (,dt
+                      (if (and (listp ,dt))
+                          (second ,dt)
+                          ,dt)))))
+         ,@body))
+    #+END_SRC
+** unless-forbidden-coord
+*** description
+    This macro receives the current route and position and returns t if we are in a forbidden coord.  To know whether or not we are in a forbidden coord we need to check the value of a list with the forbidden coords (which is in the variable =ex=.)
+*** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-neighborhood-exploration-macros.lisp 
+    (defmacro unless-forbidden-coord
+        ((ex
+          route
+          pos
+          dt
+          exclude-target-route
+          exclude-pos
+          &optional ex-cond)
+         &body body)
+
+      `(unless ,ex-cond
+           (unless
+               (or
+                (and ,dt ;; there is a different from
+                     ;; argument, and there is
+                     ;; an exclude-target-route
+                     ,exclude-target-route
+                     ;; and we are in the
+                     ;; forbidden route
+                     (= ,exclude-target-route ,route)
+                     ;; and we are in the
+                     ;; forbidden pos
+                     (= ,exclude-pos ,pos)
+                     ;; then we should not
+                     ;; do this
+                     )
+                (and ,dt ;; there is a :dt arg
+                     ;; and there is not exclude-target-route
+                     (null ,exclude-target-route)
+                     ;; if we are in the :dt pos
+                     (= ,exclude-pos ,pos)
+                     ;; we should do nothing
+                     )
+                ;; ;; we also need to check that the current
+                ;; ;; coord is not in the list of
+                ;; ;; excluded coords [ex]
+                (member (list ,route ,pos)
+                        ,ex
+                        :test(lambda (x y)
+                               (and
+                                (= (first x) (first y))
+                                (= (second x) (second y)))))
+                ) 
+             ,@body)))
+    #+END_SRC
+** unless-forbidden-length-code
+*** description
+    The idea is to be able to pass some arbitrary code and then skip this route length if the code returns T.
+
+    This is the first approach, so it will be very specific to the route-length property.  If it works, then I'll extend it.
+*** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-neighborhood-exploration-macros.lisp 
+    (defmacro unless-forbidden-length-code
+        ((lex-cond)
+         &body body)
+  
+      `(unless ,lex-cond
+         ,@body))
+    #+END_SRC
+** unless-forbidden-condition
+*** description
+    The idea is to be able to pass some arbitrary lisp code and then skip this coordinate if the evaluation of the code returns non nil.
+*** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-neighborhood-exploration-macros.lisp 
+    (defmacro unless-forbidden-condition
+        ((ex-cond)
+         &body body)
+  
+      `(unless ,ex-cond
+         ,@body))
+    #+END_SRC
+    
+
+
+* WIP Snippets for the for loop clauses initializations
+
+** Initial value of the for clause for *everything?*
+*** description
+    The idea is to abstract the value of the first position for the selection in the for loop initialization in a macro to use it in several places.
+
+    So far we need to check if the user passed
+     - a list with a route, and a position :: in this case we need to impose the constraint only in that route.
+     - only a position :: we impose the constraint in every route.
+
+    Let's give it a try to the code.
+
+*** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-neighborhood-exploration-macros.lisp 
+    (defmacro initial-for-value-in-all-macros
+        (initial-target-route
+         route
+         initial-pos)
+
+      (declare (special *vrp-max-route-length*))
+
+      `(if ,initial-target-route
+           (then ;; select the appropriate initial-pos
+             (cond
+               ((= ,initial-target-route ,route)
+                ,initial-pos)
+               ((< ,route ,initial-target-route)
+                ,,*vrp-max-route-length*)
+               (t 1)))
+           (else ;; set pos to initial-pos
+             ;; because we apply the
+             ;; constraint to all the routes
+             ,initial-pos)))
+    #+END_SRC
+
+*** tests
+**** tested it in make-insertion macro
+** +Initial value of the for clause for *insertions*+
+*** description
+    The idea is to abstract the value of the first position for the insertion in the for loop initialization in a macro to use it in several places.
+
+    So far we need to check if the user defined
+     - a route, and a position :: in this case we need to impose the constraint only in that route.
+     - only a position :: we impose the constraint in every route.
+
+    Let's give it a try to the code.
+
+    Right now I'm going to take the approach used in the macro make-do-neighborhood-route-insertion.
+*** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-neighborhood-exploration-macros.lisp 
+    (defmacro initial-for-value-in-insertion-macro
+        (initial-target-route
+         route
+         initial-pos)
+
+      (declare (special *vrp-max-route-length*))
+
+      `(if ,initial-target-route
+           (then ;; select the appropriate initial-pos
+             (cond
+               ((= ,initial-target-route ,route)
+                ,initial-pos)
+               ((< ,route ,initial-target-route)
+                ,,*vrp-max-route-length*)
+               (t 1)))
+           (else ;; set pos to initial-pos
+             ;; because we apply the
+             ;; constraint to all the routes
+             ,initial-pos)))
+    #+END_SRC
+
+*** tests
+**** tested it in make-insertion macro
+** +Final value of the for clause for *insertions*+
+*** description
+    The idea is to abstract, in a macro, the computation of the last position for the insertion in the doinsert-things macros, so we can use it in several places.
+
+    So far we need to check if the user defined
+     - a route, and a position :: in this case we need to impose the constraint only in that route.
+     - only a position :: we impose the constraint in every route.
+
+    Let's give it a try to the code.
+
+    Right now I'm going to take the approach used in the macro make-do-neighborhood-route-insertion.
+*** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-neighborhood-exploration-macros.lisp 
+    (defmacro initial-for-value-in-insertion-macro
+        (initial-target-route
+         route
+         initial-pos)
+
+      (declare (special *vrp-max-route-length*))
+
+      `(if ,initial-target-route
+           (then ;; select the appropriate initial-pos
+             (cond
+               ((= ,initial-target-route ,route)
+                ,initial-pos)
+               ((< ,route ,initial-target-route)
+                ,,*vrp-max-route-length*)
+               (t 1)))
+           (else ;; set pos to initial-pos
+             ;; because we apply the
+             ;; constraint to all the routes
+             ,initial-pos)))
+    #+END_SRC
+
+*** tests
+**** tested it in make-insertion macro
+** Final value of the for clause for *everything*?
+*** description
+    The idea is to abstract, in a macro, the computation of the last position for the operation in the do-operation macros, so we can use it in several places.
+
+    So far we need to check if the user defined
+     - a route, and a position :: in this case we need to impose the constraint only in that route.
+     - only a position :: we impose the constraint in every route.
+
+    It could be very convenient to also have defaults values for the last pasition, and that way we can really make it generic (or at least, that's what I hope).
+
+    Right now I'm going to copy the approach used in the macro make-do-neighborhood-route-selection.
+*** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-neighborhood-exploration-macros.lisp 
+    (defmacro final-value-for-loop-in-route-operation-macro
+        (final-target-route
+         route
+         final-pos
+         default-final-position)
+      "This macro writes the code to compute the last position in a route for a do-neighborhood macro (it could be for insertion, selection, or another operation that iterates through the route). We can use it for several operations because of the parameter default-final-position, that is the only thing that changes from one operation to another."
+
+      `(if ,final-target-route
+           ;; if there was a final route
+           ;; as a target
+           (then ;; select the appropriate
+             ;; final-pos
+             (cond
+               ;; let's check if we are
+               ;; in the same route as the
+               ;; target-route
+               ((= ,final-target-route ,route)
+                ;; if we are, return the final-pos
+                ;; unless it is beyond the default
+                ;; final-position
+                ;; (that's why we take the min)
+                (min ,final-pos ,default-final-position))
+               ;; if we are in a route
+               ;; after the target-route
+               ((> ,route ,final-target-route)
+                ;; then don't iterate
+                ;; through it
+                ;; so set the final pos to
+                -1)
+               (t ;; this is the case where
+                ;; we are in a route before
+                ;; the final-target-route
+                ;; so, we can iterate through
+                ;; all the route, up to the
+                ;; default-final-position
+                ,default-final-position)))
+           (else ;; there was not a final-target-route
+             ;; so we have to impose the restrictions
+             ;; in all the routes :-/
+             (min ,final-pos ,default-final-position))))
+    #+END_SRC
+
+*** tests
+**** tested it in make-insertion macro
+
+
+

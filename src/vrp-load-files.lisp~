@@ -1,0 +1,7 @@
+(dolist (f (list "src/vrp-package.lisp"
+                 "src/vrp-utilities.lisp"
+                 "src/vrp-random-number-generation.lisp"
+                 "src/vrp-generic-functions.lisp"
+                 "src/vrp-class-definition-macro.lisp"))
+  (format t "Loading ~a...~%" f)
+  (load f))

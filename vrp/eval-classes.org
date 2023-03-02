@@ -1,0 +1,287 @@
+#+TITLE: Eval Classes
+#+AUTHOR: Rodrigo Garía Gómez
+#+EMAIL: rodrigo.garcia21111@gmail.com
+
+* Description
+In this file we'll have all the classes invloved in the automatic and effective evaluation of vrp problem solutions. The src code blocks will be tangled to ../src/eval-classes.lisp
+
+* Add the package to the tangled file
+  #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-classes.lisp 
+    (in-package :vrp)
+  #+END_SRC
+
+
+* Eval-Graph
+** Description
+The class that represents an evaluation graph. It contains all the information needed for the solution evaluations. The inputs are the clients and routes. The output is the output node. Class to io and slot to output are hash tables used to store the correspondence between =io-nodes= and problem description classes. The node-list is a list of the nodes sorted in the order they where placed. The solution represents the initial solution.
+** Code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-classes.lisp 
+	(def-vrp-class eval-graph ()
+	  ((inputs :initarg :inputs
+		   :initform nil)
+	   (output :initarg :output
+		   :initform nil)
+	   (class-to-io :initarg :class-to-io
+			:initform (make-hash-table))
+	   (slot-to-output :initarg :slot-to-output
+			   :initform (make-hash-table))
+	   (solution-track)
+	   (client-buffer :initarg :client-buffer
+			  :initform (make-hash-table))
+	   (vehicle-buffer :initarg :client-buffer
+			  :initform (make-hash-table))
+	   )
+	  :documentation "A class that represents an evaluation graph."
+	  :constructor (new-eval-graph (&key solution-track))
+	  :print-object-string ("<EVAL-GRAPH: ~% output: ~a  ~% inputs: ~%~{  ~a~%~} ~% client-buffer: ~a ~%~% solution-track: ~a>" output inputs client-buffer solution-track)
+	  :slots-for-obj= (inputs output class-to-io slot-to-output solution-track client-buffer vehicle-buffer)
+	  :slots-for-clone (inputs output class-to-io slot-to-output solution-track client-buffer vehicle-buffer))
+
+
+   #+END_SRC
+
+
+
+* High level nodes
+** documentation
+Here will implement the high nodes hierarchy. First we code the node generic class which contains
+inputs and outputs. Then we create nodes related to the instance of classes like /clients/ or
+/routes/ which play the role of inputs and outputs. Finally we implement the rest of the nodes
+related with moments, which the tape are made of.
+
+THE INPUTS/OUTPUTS FEATURES ARE UNDONE CAUSE THEY HAVE TO BE DIVIDED IN THE DIFFERENT TYPE OF
+INPUTS AND OUTPUTS RESPECTIVELY
+
+** Root node
+*** documentation
+Every node will inherits from this class
+*** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-classes.lisp
+  (def-vrp-class node () ()
+    :documentation "Ancestor node for eval-graph")
+#+END_SRC
+*** test (no test)
+** IO nodes
+*** documentation
+Now let's define the nodes that are built from the classes instances, like /client/ or /route/.
+These nodes play the role of inputs and outputs of the actual graph nodes.
+*** Root node
+**** documentation
+Ancestor for IO nodes
+**** code 
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-classes.lisp
+  (def-vrp-class io-node (node) ()
+    :documentation "ancestor for IO nodes in eval-graph")
+#+END_SRC
+**** test (no test)
+*** Input
+**** documetation
+The input abstract node
+**** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-classes.lisp
+  (def-vrp-class input-node (io-node) 
+    ((content))
+    :documentation "input node node eval-graph"
+    :constructor (new-input-node (&key content))
+    :print-object-string ("<Input node, content: ~a>" content)
+    :slots-for-obj= (content)
+    :slots-for-clone (content))
+
+#+END_SRC
+**** test (no test)
+*** Distance Input
+**** documetation
+An input to a node that calculates distances. Contains the references
+of the node that increment distance from it to the next client and 
+of the node that increment distance from previous client to it.  
+**** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-classes.lisp
+  (def-vrp-class input-distance-node (input-node) 
+    ((first-distance-calculator :initform nil)
+     (second-distance-calculator :initform nil))
+    :documentation "distance node in eval-graph"
+    :constructor (new-input-distance-node (&key content))
+    :print-object-string ("<Cliient node ~a, ~%     first-distance-calculator: ~a, ~%     second-distance-calculator: ~a>" content first-distance-calculator second-distance-calculator)
+    :slots-for-obj= (content first-distance-calculator second-distance-calculator)
+    :slots-for-clone (content first-distance-calculator second-distance-calculator))
+#+END_SRC
+**** test
+#+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+  (let* ((n 1) 
+	(dist-node (new-input-distance-node n)))
+  (format t "~a" dist-node))
+#+END_SRC
+
+#+RESULTS:
+: <Distance node, first-distance-calculator: NIL, second-distance-calculator: NIL, content: 1>
+
+*** Demand Input
+**** documentation
+An input which contains a client with demand
+**** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-classes.lisp
+  (def-vrp-class input-demand-node (input-node) 
+    ((demand-calculator :initform nil))
+    :documentation "client with demand node in eval-graph"
+    :constructor (new-demand-node (&key content))
+    :print-object-string ("<Client node, demand: ~a>" demand-calculator)
+    :slots-for-obj= (content demand-calculator)
+    :slots-for-clone (content demand-calculator))
+#+END_SRC
+*** Demand and Distance Input
+**** documentation
+An input which contains a client with demand and for a problem with
+distance
+**** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-classes.lisp
+  (def-vrp-class input-distance-demand-node (input-distance-node
+					    input-demand-node) 
+    ()
+    :documentation "client with demand node for a problem with distance in eval-graph"
+    :constructor (new-input-distance-demand-node (&key content))
+    :print-object-string ("<Cliient node ~a, ~%     first-distance-calculator: ~a, ~%     second-distance-calculator: ~a, ~%     demand-calculator: ~a>" content first-distance-calculator second-distance-calculator demand-calculator)
+    :slots-for-obj= (content first-distance-calculator second-distance-calculator demand-calculator)
+    :slots-for-clone (content first-distance-calculator second-distance-calculator demand-calculator))
+#+END_SRC
+*** Output
+**** documentation
+The output node
+**** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-classes.lisp
+    (def-vrp-class output-node (io-node) 
+      ((output-value)
+       (updater :initform nil))
+      :documentation "output node in eval-graph"
+      :constructor (new-output-node (&key output-value))   
+      :print-object-string ("<Output node, value: ~a>" output-value)
+      :slots-for-obj= (output-value)
+      :slots-for-clone (output-value))
+#+END_SRC
+**** test (no test)
+*** Accumulator
+**** documentation
+A class to which accumulates partial results. It can be
+output and input at the same time
+**** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-classes.lisp
+  (def-vrp-class accumulator-node (input-node output-node) 
+    ((output-copy :initform nil))
+    :documentation "accumulator node for partial results in eval-graph"
+    :constructor (new-accumulator-node (&key content output-value))
+    :print-object-string ("<value: ~a>" output-value)
+    :slots-for-obj= (content output-value)
+    :slots-for-clone (content output-value))
+#+END_SRC
+*** Initial value Accumulator
+**** documentation
+An accumulator that is initialized with a value that will be modified later
+**** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-classes.lisp
+  (def-vrp-class initial-value-accumulator-node (accumulator-node) 
+    ((initial-value))
+    :documentation "accumulator node for partial results in eval-graph"
+    :constructor (new-initial-value-accumulator-node (&key content output-value initial-value))
+    :print-object-string ("Initial value accumulator node, initial value: ~a, content: ~a, output-value: ~a>" initial-value content output-value)
+    :slots-for-obj= (initial-value content output-value)
+    :slots-for-clone (initial-value content output-value))
+#+END_SRC
+*** Vehicle Input
+**** documentation
+This is an input for vehicles with capacity. This is usefull for problems that include heterogeneous fleet
+**** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-classes.lisp
+  (def-vrp-class input-vehicle-node (input-node) 
+    ((dependent-accumulator :initform nil)) ;; An initial-value accumulator
+    :documentation "vehicle node in eval-graph"
+    :constructor (new-input-vehicle-node (&key content))
+    :print-object-string ("<Vehicle node, content: ~a, accumulator: ~a>" content dependent-accumulator)
+    :slots-for-obj= (content dependent-accumulator)
+    :slots-for-clone (content dependent-accumulator)) 
+#+END_SRC
+*** Depot Input
+**** documentation
+To represent a simple depot in the graph
+**** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-classes.lisp
+  (def-vrp-class input-depot-node (input-distance-demand-node)
+    ()
+    :documentation "vehicle node in eval-graph"
+    :constructor (new-input-depot-node (&key content))
+    :print-object-string ("<depot node ~a, ~%     first-distance-calculator: ~a, ~%     second-distance-calculator: ~a, ~%     demand-calculator: ~a>" content first-distance-calculator second-distance-calculator demand-calculator)
+    :slots-for-obj= (content demand-calculator first-distance-calculator second-distance-calculator)
+    :slots-for-clone (content demand-calculator first-distance-calculator second-distance-calculator))
+#+END_SRC
+
+#+RESULTS:
+: INPUT:
+: NXT INPUT
+: OUTPUT:
+: PREV OUTPUT
+
+* Low level nodes
+** documentation
+   Nodes that represents low level operations like increment total-distance, etc.
+** Root node
+*** documentation
+A class to distinguish the low level nodes from the high level ones.
+*** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-classes.lisp
+  (def-vrp-class low-level-node (node) 
+    ((previous-node) (next-node) (output-action))
+    :documentation "low-level node in eval-graph")
+#+END_SRC
+*** test (no test)
+** Increment distance node
+*** documentation
+A node to represent the increment distance operation
+*** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-classes.lisp
+  (def-vrp-class increment-distance-node (low-level-node) 
+      ((from-client) (to-client) (distance-matrix))
+      :documentation "increment distance node in eval-graph"
+    :constructor (new-increment-distance-node (&key previous-node next-node output-action from-client to-client distance-matrix))
+      :print-object-string ("<output: ~a>" output-action)
+      :slots-for-obj= (previous-node next-node output-action from-client to-client distance-matrix)
+      :slots-for-clone (previous-node next-node output-action from-client to-client distance-matrix))
+#+END_SRC
+** Decrement capacity node
+*** documentation
+    This node is the one which decrement the capacity of the vehicle assingned to a route in the same value that have the demand of the current client. Actually we increment an action slot called total-demand, that is equivalent to decrement the actual capacity of the vehicle.
+*** code 
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-classes.lisp
+  (def-vrp-class decrement-capacity-node (low-level-node)
+    ((input-with-demand))
+    :documentation "decrement capacity node in eval-graph"
+    :constructor (new-decrement-capacity-node (&key previous-node next-node output-action input-with-demand))
+    :print-object-string ("decrement-capacity: ouput: ~a>" output-action)
+    :slots-for-obj= (previous-node next-node output-action input-with-demand)
+    :slots-for-clone (previous-node next-node output-action input-with-demand))
+#+END_SRC
+** Increment accumulator node
+*** documentation
+This node is the one to increment the value of an accumulator with the
+value of another one
+*** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-classes.lisp
+  (def-vrp-class increment-accumulator-node (low-level-node)
+    ((partial-accumulator))
+    :documentation "increment accumulator node in eval-graph"
+    :constructor (new-increment-accumulator-node (&key previous-node next-node output-action partial-accumulator))
+    :print-object-string ("increment accumulator node, prev: ~a, next: ~a>" previous-node next-node)
+    :slots-for-obj= (previous-node next-node output-action partial-accumulator)
+    :slots-for-clone (previous-node next-node output-action partial-accumulator))
+#+END_SRC
+** Penalize node
+*** documentation
+This node is the one that penalizes a magnitude and stores it in another accumulator.
+*** code
+#+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-classes.lisp
+  (def-vrp-class penalize-accumulator-node (low-level-node)
+    ((partial-accumulator)
+     (factor))
+    :documentation "penalize node in eval-graph"
+    :constructor (new-penalize-accumulator-node (&key previous-node next-node output-action partial-accumulator factor))
+    :print-object-string ("Penalizee node, action: ~a, accumulator: ~a>" output-action partial-accumulator)
+    :slots-for-obj= (previous-node next-node output-action partial-accumulator factor)
+    :slots-for-clone (previous-node next-node output-action partial-accumulator factor))
+#+END_SRC

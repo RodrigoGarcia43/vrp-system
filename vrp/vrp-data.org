@@ -1,0 +1,929 @@
+#+TITLE: VRP solver environment
+#+AUTHOR: Fernando Rodriguez Flores
+#+AUTHOR: Camila Perez Mosquera
+#+DATE 2018-08-09
+#+TODO: TODO BROKEN | DONE
+
+
+* Description
+  In this file we add the data for several real problems.
+  The src blocks will be tangled appropriately to several files.  The main file is vrp-data.lisp
+
+
+* Add the package to the file
+  #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-data.lisp 
+  (in-package :vrp)
+  #+END_SRC
+
+
+* CVRP data
+
+** basic-cvrp-problem
+   
+*** description
+    The basic-cvrp-problem has the following characteristics:
+     - the clients are basic-cvrp-client
+     - the depot is just a basic-depot
+     - the vehicles are cvrp-vehicle
+     - and the problem is a cvrp-problem
+       
+    The function make-basic-cvrp-problem should return an instance of this class.
+    
+*** make-basic-cvrp-problem
+**** description
+     This function receives a distance-matrix, a list with the demands and the capacity of the vehicles, and returns a basic-cvrp-problem.
+**** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-data.lisp
+    (defun make-basic-cvrp-problem (distance demands capacity
+                                    &optional (id 1))
+      "Returns an instance of a basic-cvrp-problem from the distance-matrix, the demands and the capacity of the vehicles."
+      (let* ((clients (loop for i from 1
+                            for demand in demands
+                            collecting (basic-cvrp-client i demand)))
+             (depot (basic-depot)))
+        ;; return an instance of the class
+        (cvrp-problem :id id :clients clients :depot depot
+                      :distance-matrix distance :capacity capacity)))
+    #+END_SRC
+**** tests
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (let* ((distance #2A((0 1 2)
+                          (1 0 3)
+                          (2 3 0)))
+            (capacity 40)
+            (demands `(10 20))
+            (p (make-basic-cvrp-problem distance demands capacity 1)))
+       (format t "===============================
+     Testing make-basic-cvrp-problem
+     ===============================~2%")
+       (format t "Problem: ~a~%" p)
+       (format t "Clients: ~a~%" (clients p)))
+     #+END_SRC
+
+*** A-n33-k5 (661)
+    In this section we add the data for the A-n33-k5 problem.
+**** add the package to the file
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-a-n33-k5.lisp 
+      (in-package :vrp)
+     #+END_SRC
+
+**** coordinates
+***** description
+      In this section we add a list where each element has two elements: the x-coord and the y-coord.
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-a-n33-k5.lisp 
+     (defparameter A-n33-k5-coords
+      '((42 68) (77 97) (28 64) (77 39) (32 33) (32 8) 
+        (42 92) (8 3) (7 14) (82 17) (48 13) (53 82) 
+        (39 27) (7 24) (67 98) (54 52) (72 43) (73 3) 
+        (59 77) (58 97) (23 43) (68 98) (47 62) (52 72) 
+        (32 88) (39 7) (17 8) (38 7) (58 74) (82 67) 
+        (42 7) (68 82) (7 48)))
+     #+END_SRC
+
+**** distance-matrix
+***** description
+      In this section we create the distance matrix for the problem.
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-a-n33-k5.lisp 
+     (defparameter A-n33-k5-distance-matrix
+      (make-distance-matrix A-n33-k5-coords))
+     #+END_SRC
+**** demands
+***** description
+      In this section we have a list with the demand of each of the clients.
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-a-n33-k5.lisp 
+     (defparameter A-n33-k5-demands
+      '(5 23 14 13 8 18 19 10 18 20 5 9 23 9 18 
+        10 24 13 14 8 10 19 14 13 14 2 23 15 8 20 
+        24 3))
+     #+END_SRC
+**** problem
+***** description
+      In this section we create the actual problem.
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-a-n33-k5.lisp 
+     (defparameter A-n33-k5-problem
+       (make-basic-cvrp-problem A-n33-k5-distance-matrix
+                                A-n33-k5-demands
+                                100
+                                1))
+     #+END_SRC
+**** test
+***** description
+      In this section I'll test that we get the optimal value for the best known solution.
+***** simple test
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+      (with-basic-cvrp-solution (s1 ((15 17 9 3 16 29)
+                                     (12 5 26 7 8 13 32 2)
+                                     (20 4 27 25 30 10)
+                                     (23 28 18 22)
+                                     (24 6 19 14 21 1 31 11))
+                                    A-n33-k5-problem)
+        (let* ((action (basic-cvrp-action)))
+
+          (format t "Let's simulate the solution:~%")
+          (simulate-solution s1 A-n33-k5-problem action)
+
+          (format t "Distance: ~a, penalties: ~a~%"
+                  (total-distance action)
+                  (total-penalty action))))
+      #+END_SRC
+***** testing Camila's solution
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+      (with-basic-cvrp-solution (s1 ((29 3 16 15 22)
+                                     (32 13 8 7 26 20)
+                                     (24 6 19 14 21 1 31)
+                                     (11 18 28 23)
+                                     (9 17 10 30 25 27 5 12 4 2))
+                                    A-n33-k5-problem)
+        (let* ((action (basic-cvrp-action)))
+
+          (format t "Let's simulate the solution:~%")
+          (simulate-solution s1 A-n33-k5-problem action)
+
+          (format t "Distance: ~a, penalties: ~a~%"
+                  (total-distance action)
+                  (total-penalty action))
+
+          (loop for r in (routes s1)
+                for demand =  (loop for c in (clients r)
+                                    summing (demand c))
+                do (format t "Route ~d: ~a~%"
+                           (id r) demand))))
+      #+END_SRC
+*** A-n33-k6 (742)
+    In this section we add the data for the A-n33-k6 problem.
+**** add the package to the file
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-a-n33-k6.lisp 
+      (in-package :vrp)
+     #+END_SRC
+    
+**** coordinates
+***** description
+      In this section we add a list where each element has two elements: the x-coord and the y-coord.
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-a-n33-k6.lisp 
+     (defparameter a-n33-k6-coords
+      '((34  31) (45  55) (70  80) (81  70) (85  61) (59  55) (45  60)
+        (50  64) (80  64) (75  90) (25  40) ( 9  66) ( 1  44) (50  54)
+        (35  45) (71  84) ( 1   9) (25  54) (45  59) (45  71) (66  84)
+        (11  35) (81  46) (85  10) (75  20) (15  21) (90  45) (15   0)
+        (31  26) (10  95) ( 6   6) (51   5) (26  36)))
+     #+END_SRC
+
+**** distance-matrix
+***** description
+      In this section we create the distance matrix for the problem.
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-a-n33-k6.lisp 
+     (defparameter a-n33-k6-distance-matrix
+      (make-distance-matrix a-n33-k6-coords))
+     #+END_SRC
+**** demands
+***** description
+      In this section we have a list with the demand of each of the clients.
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-a-n33-k6.lisp 
+     (defparameter a-n33-k6-demands
+      '(26 17  6 15  7  5 15 16 17  1 21 66 25 16 11  7 
+        17 17 22 10 25 16  7 21 11 21 11 21 22 25  2 22))
+     #+END_SRC
+**** problem
+***** description
+      In this section we create the actual problem.
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-a-n33-k6.lisp 
+     (defparameter a-n33-k6-problem
+       (make-basic-cvrp-problem a-n33-k6-distance-matrix
+                                a-n33-k6-demands
+                                100
+                                1))
+     #+END_SRC
+**** test
+***** description
+      In this section I'll test that we get the optimal value for the best known solution.
+***** code
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (with-basic-cvrp-solution (s1 ((5 2 20 15 9 3 8 4)
+                                     (31 24 23 26 22)
+                                     (17 11 29 19 7)
+                                     (10 12 21)
+                                     (28 27 30 16 25 32)
+                                     (13 6 18 1 14))
+                                    a-n33-k6-problem)
+        (let* ((action (basic-cvrp-action)))
+
+          (format t "Let's simulate the solution:~%")
+          (simulate-solution s1 a-n33-k6-problem action)
+
+          (format t "Distance: ~a, penalties: ~a~%"
+                  (total-distance action)
+                  (total-penalty action))))
+      #+END_SRC
+*** A-n32-k5 (784)
+    In this section we add the data for the A-n32-k5 problem.
+**** add the package to the file
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-a-n32-k5.lisp 
+      (in-package :vrp)
+     #+END_SRC
+    
+**** coordinates
+***** description
+      In this section we add a list where each element has two elements: the x-coord and the y-coord.
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-a-n32-k5.lisp 
+     (defparameter a-n32-k5-coords
+       '((82 76) (96 44) (50  5) (49  8) (13  7) (29 89) (58 30)
+         (84 39) (14 24) ( 2 39) ( 3 82) ( 5 10) (98 52) (84 25)
+         (61 59) ( 1 65) (88 51) (91  2) (19 32) (93  3) (50 93)
+         (98 14) ( 5 42) (42  9) (61 62) ( 9 97) (80 55) (57 69)
+         (23 15) (20 70) (85 60) (98  5)))
+     #+END_SRC
+
+**** distance-matrix
+***** description
+      In this section we create the distance matrix for the problem.
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-a-n32-k5.lisp 
+     (defparameter a-n32-k5-distance-matrix
+      (make-distance-matrix a-n32-k5-coords))
+     #+END_SRC
+**** demands
+***** description
+      In this section we have a list with the demand of each of the clients.
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-a-n32-k5.lisp 
+     (defparameter a-n32-k5-demands
+       '(19 21  6 19  7 12 16  6 16  8 14 21 16  3 22
+          18 19  1 24  8 12  4  8 24 24  2 20 15  2 14  9))
+     #+END_SRC
+**** problem
+***** description
+      In this section we create the actual problem.
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-a-n32-k5.lisp 
+     (defparameter a-n32-k5-problem
+       (make-basic-cvrp-problem a-n32-k5-distance-matrix
+                                a-n32-k5-demands
+                                100
+                                1))
+     #+END_SRC
+**** tests
+***** simple test
+****** description
+       In this section I'll test that we get the optimal value for the best known solution.
+****** code
+       #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+       (with-basic-cvrp-solution (s1 ((21 31 19 17 13 7 26)
+                                      (12 1 16 30)
+                                      (27 24)
+                                      (29 18 8 9 22 15 10 25 5 20)
+                                      (14 28 11 4 23 3 2 6)) 
+                                     a-n32-k5-problem)
+         (let* ((action (basic-cvrp-action)))
+
+           (format t "Let's simulate the solution:~%")
+           (simulate-solution s1 a-n32-k5-problem action)
+
+           (format t "Distance: ~a, penalties: ~a~%"
+                   (total-distance action)
+                   (total-penalty action))))
+       #+END_SRC
+*** A-n37-k5 (669)
+    In this section we add the data for the A-n37-k5 problem.
+**** add the package to the file
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-a-n37-k5.lisp 
+      (in-package :vrp)
+     #+END_SRC
+
+**** coordinates
+***** description
+      In this section we add a list where each element has two elements: the x-coord and the y-coord.
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-a-n37-k5.lisp 
+     (defparameter A-n37-k5-coords
+      '((38 46) (59 46) (96 42) (47 61) (26 15) (66 6) 
+        (96 7) (37 25) (68 92) (78 84) (82 28) (93 90) 
+        (74 42) (60 20) (78 58) (36 48) (45 36) (73 57) 
+        (10 91) (98 51) (92 62) (43 42) (53 25) (78 65) 
+        (72 79) (37 88) (16 73) (75 96) (11 66) (9 49) 
+        (25 72) (8 68) (12 61) (50 2) (26 54) (18 89) 
+        (22 53)))
+     #+END_SRC
+
+**** distance-matrix
+***** description
+      In this section we create the distance matrix for the problem.
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-a-n37-k5.lisp 
+     (defparameter A-n37-k5-distance-matrix
+      (make-distance-matrix A-n37-k5-coords))
+     #+END_SRC
+**** demands
+***** description
+      In this section we have a list with the demand of each of the clients.
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-a-n37-k5.lisp 
+     (defparameter A-n37-k5-demands
+      '(16 18 1 13 8 23 7 27 1 3 6 24 19 2 5 
+        16 7 4 22 7 23 16 2 2 9 2 12 1 9 23 
+        6 19 7 7 20 20))
+     #+END_SRC
+**** problem
+***** description
+      In this section we create the actual problem.
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-a-n37-k5.lisp 
+     (defparameter A-n37-k5-problem
+       (make-basic-cvrp-problem A-n37-k5-distance-matrix
+                                A-n37-k5-demands
+                                100
+                                1))
+     #+END_SRC
+**** test
+***** description
+      In this section I'll test that we get the optimal value for the best known solution.
+***** code
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+      (with-basic-cvrp-solution (s1 ((22 13 10 6 5 33 4 7)
+                                     (1 12 2 19 20 23 14 17)
+                                     (36 29 32 28 31 30 15)
+                                     (3 24 9 11 27 8 25 35 18 26 34)
+                                     (21 16))
+                                    A-n37-k5-problem)
+        (let* ((action (basic-cvrp-action)))
+
+          (format t "Let's simulate the solution:~%")
+          (simulate-solution s1 A-n37-k5-problem action)
+
+          (format t "Distance: ~a, penalties: ~a~%"
+                  (total-distance action)
+                  (total-penalty action))))
+      #+END_SRC
+***** testing Camila's solution
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp
+      (with-basic-cvrp-solution (s1 ((34 36 32 28 31 29 4 7)
+                                     (16 22 13 33 5 6 10 21)
+                                     (15 30 26 18 35 25 8 27 11 9 24 3)
+                                     (17 14 23 20 19 2 12 1))
+                                    A-n37-k5-problem)
+        (let* ((action (basic-cvrp-action)))
+
+          (format t "Let's simulate the solution:~%")
+          (simulate-solution s1 A-n37-k5-problem action)
+
+          (format t "Distance: ~a, penalties: ~a~%"
+                  (total-distance action)
+                  (total-penalty action))
+
+          (loop for r in (routes s1)
+                for demand =  (loop for c in (clients r)
+                                    summing (demand c))
+                do (format t "Route ~d: ~a~%"
+                           (id r) demand))))
+      #+END_SRC
+*** A-n65-k9 (1174)
+    In this section we add the data for the A-n65-k9 problem.
+**** add the package to the file
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-a-n65-k9.lisp 
+      (in-package :vrp)
+     #+END_SRC
+    
+**** coordinates
+***** description
+      In this section we add a list where each element has two elements: the x-coord and the y-coord.
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-a-n65-k9.lisp 
+     (defparameter a-n65-k9-coords
+       '((25 51) (35  7) (93 75) (53 95) (51 81) (51 55) ( 1 67)
+         ( 9 23) (75  7) (15 97) (79  5) ( 9 19) (39  1) (47  1)
+         (33 97) (27 83) (83 79) (17 59) (47 19) (57  9) (87 41)
+         (55 25) (21 91) (21 13) (67  1) (59 21) ( 1 75) (33 85)
+         (25 21) (45 29) (63 77) ( 1 77) (77 41) (35 11) ( 9 77)
+         (61 87) (59 91) (63 79) (97 67) ( 9 45) (93 21) (83 71)
+         (95 57) (31 69) (77 17) (63 57) ( 3 63) (11 69) ( 7  9)
+         (37 65) (75 83) (15 53) (69  5) (69 27) ( 5 19) (49 31)
+         (77 17) (15  7) (91 39) (79 17) (67 75) (93 51) (25 33)
+         ( 9 19) ( 3 65)))
+     #+END_SRC
+
+**** distance-matrix
+***** description
+      In this section we create the distance matrix for the problem.
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-a-n65-k9.lisp 
+     (defparameter a-n65-k9-distance-matrix
+      (make-distance-matrix a-n65-k9-coords))
+     #+END_SRC
+**** demands
+***** description
+      In this section we have a list with the demand of each of the clients.
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-a-n65-k9.lisp 
+     (defparameter a-n65-k9-demands
+       '(12 24 16  7  9 20 10 18 26 17  2 11  9
+         12 11 12 23  7  1 26 10  9 22 21 17  2
+         15 16 14 23 24  2 12 18  5 19 15  8  6
+         14 13  5 24 25  2  8 14  2 13 10  6  6
+         24 21 20 24  4 19 14 23  2 16 23 14))
+     #+END_SRC
+**** problem
+***** description
+      In this section we create the actual problem.
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-a-n65-k9.lisp 
+     (defparameter a-n65-k9-problem
+       (make-basic-cvrp-problem a-n65-k9-distance-matrix
+                                a-n65-k9-demands
+                                100
+                                1))
+     #+END_SRC
+**** test
+***** description
+      In this section I'll test that we get the optimal value for the best known solution.
+***** code
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (with-basic-cvrp-solution (s1 ((55 29 62 39 51 17) 
+                                     (45 61 42 38 2 41 16 50 60) 
+                                     (21 25 52 24 13 12 1 33) 
+                                     (49 4 3 36 35 37 30) 
+                                     (47 34 31 26 6 64 46) 
+                                     (28 23 57 48 54 63 11 7) 
+                                     (44 59 40 58 20 32) 
+                                     (5 53 56 10 8 19 18) 
+                                     (43 27 14 9 22 15)) 
+                                    a-n65-k9-problem)
+        (let* ((action (basic-cvrp-action)))
+
+          (format t "Let's simulate the solution:~%")
+          (simulate-solution s1 a-n65-k9-problem action)
+
+          (format t "Distance: ~a, penalties: ~a~%"
+                  (total-distance action)
+                  (total-penalty action))
+          (check-= 1174 (total-distance action))
+          (check-=    0 (total-penalty action))))
+      #+END_SRC
+      
+*** A-n80-k10 (1764)
+    In this section we add the data for the a-n80-k10 problem.
+**** add the package to the file
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-a-n80-k10.lisp 
+      (in-package :vrp)
+     #+END_SRC
+    
+**** coordinates
+***** description
+      In this section we add a list where each element has two elements: the x-coord and the y-coord.
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-a-n80-k10.lisp 
+     (defparameter a-n80-k10-coords
+       '((92  92) (88  58) (70   6) (57  59) ( 0  98)
+         (61  38) (65  22) (91  52) (59   2) ( 3  54)
+         (95  38) (80  28) (66  42) (79  74) (99  25)
+         (20  43) (40   3) (50  42) (97   0) (21  19)
+         (36  21) (100  6) (11  85) (69  35) (69  22)
+         (29  35) (14   9) (50  33) (89  17) (57  44)
+         (60  25) (48  42) (17  93) (21  50) (77  18)
+         ( 2   4) (63  83) (68   6) (41  95) (48  54)
+         (98  73) (26  38) (69  76) (40   1) (65  41)
+         (14  86) (32  39) (14  24) (96   5) (82  98)
+         (23  85) (63  69) (87  19) (56  75) (15  63)
+         (10  45) ( 7  30) (31  11) (36  93) (50  31)
+         (49  52) (39  10) (76  40) (83  34) (33  51)
+         ( 0  15) (52  82) (52  82) (46   6) ( 3  26)
+         (46  80) (94  30) (26  76) (75  92) (57  51)
+         (34  21) (28  80) (59  66) (51  16) (87  11)))
+     #+END_SRC
+**** distance-matrix
+***** description
+      In this section we create the distance matrix for the problem.
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-a-n80-k10.lisp 
+     (defparameter a-n80-k10-distance-matrix
+      (make-distance-matrix a-n80-k10-coords))
+     #+END_SRC
+**** demands
+***** description
+      In this section we have a list with the demand of each of the clients.
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-a-n80-k10.lisp 
+     (defparameter a-n80-k10-demands
+       '(24 22 23  5 11 23 26  9 23  9 14 16 12  2
+          2  6 20 26 12 15 13 26 17  7 12  4  4 20
+         10  9  2  9  1  2  2 12 14 23 21 13 13 23
+          3  6 23 11  2  7 13 10  3  6 13  2 14  7
+         21  7 22 13 22 18 22  6  2 11  5  9  9  5
+         12  2 12 19  6 14  2  2 24))
+     #+END_SRC
+**** problem
+***** description
+      In this section we create the actual problem.
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-a-n80-k10.lisp 
+     (defparameter a-n80-k10-problem
+       (make-basic-cvrp-problem a-n80-k10-distance-matrix
+                                a-n80-k10-demands
+                                100
+                                1))
+     #+END_SRC
+**** TODO test
+***** description
+      In this section I'll test that we get the optimal value for the best known solution.
+***** code
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (with-basic-cvrp-solution (s1 ((55 29 62 39 51 17) 
+                                     (45 61 42 38 2 41 16 50 60) 
+                                     (21 25 52 24 13 12 1 33) 
+                                     (49 4 3 36 35 37 30) 
+                                     (47 34 31 26 6 64 46) 
+                                     (28 23 57 48 54 63 11 7) 
+                                     (44 59 40 58 20 32) 
+                                     (5 53 56 10 8 19 18) 
+                                     (43 27 14 9 22 15)) 
+                                    a-n80-k10-problem)
+        (let* ((action (basic-cvrp-action)))
+
+          (format t "Let's simulate the solution:~%")
+          (simulate-solution s1 a-n80-k10-problem action)
+
+          (format t "Distance: ~a, penalties: ~a~%"
+                  (total-distance action)
+                  (total-penalty action))
+          (check-= 1174 (total-distance action))
+          (check-=    0 (total-penalty action))))
+      #+END_SRC
+*** F-n135-k7 (1165)
+    In this section we add the data for the F-n135-k7 problem
+**** add the package to the file
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-f-n135-k7.lisp 
+      (in-package :vrp)
+     #+END_SRC
+    
+**** coordinates
+***** description
+      In this section we add a list where each element has two elements: the x-coord and the y-coord.
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-f-n135-k7.lisp 
+     (defparameter f-n135-k7-coords
+       '((  -6.0  15.0) (   3.2   5.1) (  24.6   8.3)
+         (  23.3   1.3) (  27.8   8.3) (  29.0   8.0)
+         (  31.0   8.0) (  33.5  10.5) (  30.0  10.5)
+         (  29.0  10.0) (  26.5  11.7) (  28.3  14.3)
+         (  27.0  14.3) (  23.5  19.0) (  26.0  20.0)
+         (  25.0  20.0) (  20.5  19.0) ( -20.0  13.0)
+         ( -21.0  14.0) ( -30.0  30.0) (  -5.0  30.0)
+         (   1.3  17.8) (   1.8  13.8) (   1.8  13.1)
+         (   2.0  13.6) (   4.8  17.0) (   7.0  15.0)
+         (   9.8  16.6) (  11.4  14.5) (  14.4  11.3)
+         (  11.0  12.0) (   9.3  10.7) (   0.6   2.8)
+         ( -30.0 -10.0) (   2.0   0.0) (  14.5   1.0)
+         (  15.0   1.8) (  17.2   2.4) (  17.2   4.2)
+         (  18.2   4.4) (  20.3   2.1) (  22.8   3.1)
+         (  23.0   4.0) (  20.8   4.0) (  20.8   4.0)
+         (  18.5   6.4) ( -14.0  16.0) (  -0.5   6.9)
+         (   3.2   2.8) (   5.6   1.8) (   8.7   2.8)
+         (   9.0   3.3) (   9.0   3.5) (  11.2   3.3)
+         (  10.8   4.7) (  11.5   4.6) (  12.3  4.7)
+         (  12.3   5.5) (  11.2   6.9) (   6.5   9.7)
+         (   5.8   8.5) (   7.2   6.0) (   7.2   4.0)
+         (  -4.0  -4.0) (  -3.0   1.2) ( -40.0  49.0)
+         ( -15.0  10.0) ( -11.0 -10.0) ( -25.0 -20.0)
+         ( -25.0 -35.0) ( -24.0 -35.0) ( -18.0  10.0)
+         (  -2.0  10.0) (  -4.0   8.0) (  -3.0   5.0)
+         (   2.1   6.2) (  -1.7   3.0) (  -3.0   2.0)
+         (  -7.0   0.0) (  -3.0  -6.0) ( -30.0 -11.0)
+         ( -62.0 -10.0) (  -8.0  30.0) (   1.0  60.0)
+         (  10.0  52.0) (  10.0  52.0) (  10.0  51.0)
+         (  16.0  29.0) (  26.0  21.0) (  16.0  21.0)
+         (  15.5  19.2) (   0.0  16.5) (  17.2  14.3)
+         (  16.5   7.8) (  16.9   7.7) (  18.0   2.0)
+         (  16.2   4.0) (  15.0   4.0) (  15.0   3.0)
+         (  14.8   2.4) (  14.5   3.0) (  13.0   2.6)
+         (  11.8   3.0) (  12.0   4.0) (  12.8   3.6)
+         (  13.4   5.5) (-150.0   8.0) (-152.0   1.0)
+         (-152.0   0.0) (-142.0 -31.0) ( -78.0 -19.0)
+         ( -78.0 -18.0) ( -78.0 -17.0) ( -80.0 -14.0)
+         (-118.0  22.0) (-107.0  30.0) ( -85.0  14.0)
+         ( -78.0  15.0) ( -15.0  16.0) ( -62.0  32.0)
+         (-120.0 -20.0) ( -90.0 -22.0) ( -79.0 -19.0)
+         ( -79.0 -18.5) ( -79.0 -18.0) ( -78.0 -17.5)
+         ( -79.0 -17.0) ( -80.0 -17.0) ( -80.0 -16.0)
+         ( -80.0 -15.0) ( -48.0  37.0) ( -85.0  15.0)
+         ( -62.0  -9.0) ( -15.0  -4.0) (  -1.0   3.2)))
+     #+END_SRC
+**** distance-matrix
+***** description
+      In this section we create the distance matrix for the problem.
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-f-n135-k7.lisp 
+     (defparameter f-n135-k7-distance-matrix
+      (make-distance-matrix f-n135-k7-coords))
+     #+END_SRC
+**** demands
+***** description
+      In this section we have a list with the demand of each of the clients.
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-f-n135-k7.lisp 
+     (defparameter f-n135-k7-demands
+       '(30   226   37   24    36     1
+         31    24   30   24    24    32
+         24    24   19   24    18    36
+         115   24   24   61    71    36
+         18    30   31   36    18  1004
+         18    34  504   18    39    24
+         37    24   99   24    24    36
+         30    25   24  122   196   229
+         83    18   24  306    18    20
+         18    24   22   24    18    18
+         24    24   30   24    40   166
+         254  187   94   17   285    24
+         24   205   23   28    51    49
+         19   262  120  266   704    38
+         18    30   25   12    18    25
+         35    18   12   20  1126     9
+         36    12   31   96    27    54
+         137   12   58  206   178   486
+         36   261  135  135   373   535
+         42     9  110   36    18   726
+         187   23  134   47    51    43
+         79   112   91  232   483   828
+         11    12))
+     #+END_SRC
+**** problem
+***** description
+      In this section we create the actual problem.
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-f-n135-k7.lisp 
+     (defparameter f-n135-k7-problem
+       (make-basic-cvrp-problem f-n135-k7-distance-matrix
+                                f-n135-k7-demands
+                                2210
+                                1))
+     #+END_SRC
+**** TODO test
+***** description
+      In this section I'll test that we get the optimal value for the best known solution.
+***** code
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (with-basic-cvrp-solution (s1 ((55 29 62 39 51 17) 
+                                     (45 61 42 38 2 41 16 50 60) 
+                                     (21 25 52 24 13 12 1 33) 
+                                     (49 4 3 36 35 37 30) 
+                                     (47 34 31 26 6 64 46) 
+                                     (28 23 57 48 54 63 11 7) 
+                                     (44 59 40 58 20 32) 
+                                     (5 53 56 10 8 19 18) 
+                                     (43 27 14 9 22 15)) 
+                                    f-n135-k7-problem)
+        (let* ((action (basic-cvrp-action)))
+
+          (format t "Let's simulate the solution:~%")
+          (simulate-solution s1 f-n135-k7-problem action)
+
+          (format t "Distance: ~a, penalties: ~a~%"
+                  (total-distance action)
+                  (total-penalty action))
+          (check-= 1174 (total-distance action))
+          (check-=    0 (total-penalty action))))
+      #+END_SRC
+
+
+* Finite-fleet-CVRP data
+
+** finite-fleet-cvrp-problem
+   
+*** description
+    The finite-fleet-basic-cvrp-problem has the following characteristics:
+     - the clients are basic-cvrp-client
+     - the depot is just a basic-depot
+     - the vehicles are cvrp-vehicle
+     - and the problem is a finite-fleet-cvrp-problem
+       
+    The function make-finite-fleet-cvrp-problem should return an instance of this class.
+    
+*** make-finite-fleet-cvrp-problem
+**** description
+     This function receives a distance-matrix, a list with the demands and a list with with the capacities of the vehicles, and returns a finite-fleet-cvrp-problem.
+**** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-data.lisp
+    (defun make-finite-fleet-cvrp-problem (distance demands capacities
+                                    &optional (id 1))
+      "Returns an instance of a finite-fleet-cvrp-problem from the distance-matrix, the demands and the capacities of the vehicles."
+      (let* ((clients (loop for i from 1
+                            for demand in demands
+                            collecting (basic-cvrp-client i demand)))
+             (vehicles (loop for i from 1
+                             for capacity in capacities
+                            collecting (cvrp-vehicle i capacity)))
+             (depot (basic-depot)))
+        ;; return an instance of the class
+        (finite-fleet-cvrp-problem :id id
+                                   :clients clients
+                                   :depot depot
+                                   :distance-matrix distance
+                                   :fleet vehicles)))
+    #+END_SRC
+**** tests
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (let* ((distance #2A((0 1 2)
+                          (1 0 3)
+                          (2 3 0)))
+            (capacities `(20 30))
+            (demands `(10 20))
+            (p (make-finite-fleet-cvrp-problem distance
+                                               demands
+                                               capacities
+                                               1)))
+       (bformat t "Testing make-basic-cvrp-problem")
+       (format t "Problem: ~a~%" p)
+       (format t "Clients: ~a~%" (clients p))
+       (format t "Vehicles: ~a~%" (fleet p)))
+     #+END_SRC
+*** ff-A-n33-k6 (???)
+    In this section we add the data for the finite-fleet-A-n33-k6 problem.
+**** add the package to the file
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-ffa-n33-k6.lisp 
+      (in-package :vrp)
+     #+END_SRC
+    
+**** problem
+***** description
+      In this section we create the actual problem.
+***** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../data/vrp-data-a-n33-k6.lisp 
+     (defparameter ff-a-n33-k6-problem
+       (make-finite-fleet-cvrp-problem a-n33-k6-distance-matrix
+                                       a-n33-k6-demands
+                                       `(100 100 100 100 100 100)
+                                       1))
+     #+END_SRC
+**** test
+***** description
+      In this section I'll test that we get the optimal value for the best known solution.
+***** code
+      #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+      (with-finite-fleet-cvrp-solution
+          (s1 ((1 5 2 20 15 9 3 8 4)
+               (2 31 24 23 26 22)
+               (3 17 11 29 19 7)
+               (4 10 12 21)
+               (5 28 27 30 16 25 32)
+               (6 13 6 18 1 14))
+              ff-a-n33-k6-problem)
+        (let* ((action (basic-cvrp-action)))
+
+          (format t "Let's simulate the solution:~%")
+          (simulate-solution s1 a-n33-k6-problem action)
+
+          (format t "Distance: ~a, penalties: ~a~%"
+                  (total-distance action)
+                  (total-penalty action))
+
+          (pp-solution s1 t) (terpri)
+          ))
+      #+END_SRC
+
+
+* Generate data for jj tape prototype
+
+** Function to generate the data required by JJ tape prototype
+*** description
+    This is a function to generate the date we need and te write the code that we need to copy and paste.
+*** code
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-tests.lisp
+    (defun write-data-for-jj-tape-prototype-from-problem (problem name
+                                                          &optional (stream t))
+      "problem is an instance of cvrp-problem.
+    name is the name that problem has: a-n33-k5, etc.
+    stream is the stream where we want to write the code"
+      ;; let's write the name of the problem as a 2nd level heading
+      (format stream "** ~a~%" name)
+      ;; now the demands as a level 3 heading
+      (format stream "*** demands~%")
+      ;; the headers
+      (format stream "    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle src/vrp-tape-data.lisp~%")
+      ;; lets create the demands
+      (format stream "    (defparameter ~a-demands~%      '(" name)
+      ;; let's add the demands
+      (loop for c in (clients problem)
+            for i from 1
+            do
+            (format stream "~4d  " (demand c))
+            ;; let's keep only 10 elements by line
+            (if (= 0 (mod i 10))
+                (format stream "~%        ")))
+      ;; the closing parenthesis
+      (format stream "))~%")
+      ;; finally we close the src block
+      (format stream "    #+END_SRC~%")
+
+
+      ;; now the distances as a level 3 heading
+      (format stream "*** distances~%")
+      ;; the headers
+      (format stream "    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle src/vrp-tape-data.lisp~%")
+      ;; lets write the distance matrix
+      (format stream "    (defparameter ~a-distance-matrix~%     " name)
+      ;; let's write the distance-matrix
+      (format stream "    ~a" (distance-matrix problem))
+      ;; the closing parenthesis
+      (format stream ")~%")
+      ;; finally we close the src block
+      (format stream "    #+END_SRC~%")
+
+      ;; let's create the problem as a level 3 heading
+      (format stream "*** problem~%")
+      ;; the headers
+      (format stream "    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle src/vrp-tape-data.lisp~%")
+      ;; lets write the distance matrix
+      (format stream "    (defparameter ~a-problem~%     " name)
+      ;; let's write the distance-matrix
+      (format stream " (list ~a-demands~%            ~a-distance-matrix
+                ;; this is the capacity~%            ~a)"
+              name
+              name
+              (capacity problem))
+      ;; the closing parenthesis
+      (format stream ")~%")
+      ;; finally we close the src block
+      (format stream "    #+END_SRC~%")
+  
+  
+
+      )
+    #+END_SRC
+*** tests
+    #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+    (let* ()
+      (bformat t "Testing write-data-for-jj-tape-prototype-from-problem")
+      (format t "~a~%" (write-data-for-jj-tape-prototype-from-problem
+                        a-n33-k5-problem
+                        "a-n33-k5"
+                        t))
+
+      (with-open-file (f "/tmp/test.org"
+                         :direction :output
+                         :if-exists :supersede)
+        (write-data-for-jj-tape-prototype-from-problem
+                        a-n33-k5-problem
+                        "a-n33-k5"
+                        f)))
+    #+END_SRC
+** generating the data
+*** description
+    In this section we write the code to generate the data from the problems
+*** macro make problem and problem name
+**** code
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-tests.lisp
+     (defmacro make-list-with-cvrp-problem-and-name (name)
+      `(list ,(symb name '-problem) ',name))
+     #+END_SRC
+**** tests
+     #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+     (let* ()
+       (bformat t "Testing make-cvrp-problem-names")
+       (format t "~a~%" (make-list-with-cvrp-problem-and-name a-n33-k5))
+       )
+     #+END_SRC
+
+*** list with cvrp problems
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-tests.lisp
+    (defparameter *cvrp-problem-names*
+     (list (make-list-with-cvrp-problem-and-name a-n33-k5)
+           (make-list-with-cvrp-problem-and-name a-n33-k6)
+           (make-list-with-cvrp-problem-and-name a-n32-k5)
+           (make-list-with-cvrp-problem-and-name a-n37-k5)
+           (make-list-with-cvrp-problem-and-name a-n65-k9)
+           (make-list-with-cvrp-problem-and-name a-n80-k10)
+           (make-list-with-cvrp-problem-and-name f-n135-k7)))
+    #+END_SRC
+
+*** file to store the data
+    A variable to define the file where we'll store the data
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-tests.lisp
+    (defparameter *file-with-data-for-jj-tape-tests*
+     "/tmp/jj-data-for-tape-with-vrp.org")
+    #+END_SRC
+    
+*** actual data generation
+    #+BEGIN_SRC lisp +n -r :results output :exports both :tangle ../src/vrp-tests.lisp 
+    (let* ()
+      (with-open-file (f *file-with-data-for-jj-tape-tests*
+                         :direction :output
+                         :if-exists :supersede)
+        (loop for (problem problem-name) in *cvrp-problem-names*
+              doing (write-data-for-jj-tape-prototype-from-problem
+                        problem problem-name
+                        f))))
+    #+END_SRC

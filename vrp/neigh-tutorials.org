@@ -1,0 +1,1966 @@
+#+TITLE: Neighborhood Tutorials
+#+AUTHOR: Hector F. Masson
+#+EMAIL: h.masson1911@gmail.com
+
+
+
+* Description
+  In this file we'll write all the tutorial explaining the neigh system.
+
+
+* Initializing the system
+  Here we'll assume that the user is "smart enough" to use emacs with slime and org-mode =:-P=.  With that, the steps are the following:
+
+  First the vrp system should be initialized, then all the .org files corresponding to the :neigh system should be tangled. This is very similar to the first 7 steps for vrp system initialization. Note that quicklisp, vrp and neigh folder, should be in the same directory as well as two folder that will store the tangled source files and data.
+  
+  1. Follow the tutorial to initialize the vrp system until step 7.
+   
+  2. Clone the git repo in the folder =neigh= to the working directory where the vrp system is.
+
+  3. In the working directory there should exists two folders:
+     - src/
+     - data/
+
+  4. Tangle the following files in any order (always working in the working directory):
+     - =neigh-suite.org=
+     - =neigh-class-macros.org=
+     - =neigh-classes.org=
+     - =neigh-criterion.org=
+     - =neigh-compatibility.org=
+     - =neigh-cardinality.org=
+     - =neigh-indexer.org=
+     - =neigh-exploration.org=
+     - =neigh-statistics.org=
+     - =neigh-exploration-heuristics.org=
+     - =neigh-data.org=
+
+     Or you can only tangle the file =neigh-suite.org=:
+       - Open the file neigh-suite.org and do =M-x org-babel-tangle=
+
+     And then, from emacs  load =neigh-emacs-utils.el=
+       - =M-x load-file neigh-emacs-utils.el=
+
+     Finally, from emacs execute =neigh-tangle-all-files=
+       - =M-x neigh-tangle-all-files=
+  
+  5. From emacs fire up slime (=M-x slime=)
+
+  6. In Slime, change the current directory to the working directory
+
+     (this can be done by typing =,= in the REPL and then =cd= <RETURN>, and navigate to the working directory)
+
+  7. In slime load the quicklisp setup file
+     
+     Note: in this example we assume that quicklisp folder is located in the working directory, if it is not your case, you can either move it to the working directory or give its entire path to the load function.
+
+     #+BEGIN_SRC lisp
+       (load "quicklisp/setup.lisp")
+     #+END_SRC
+  8. In slime load the file vrp-load-files in order to load the :vrp system
+     #+BEGIN_SRC lisp
+       (load "vrp/src/vrp-load-files.lisp")
+     #+END_SRC
+  9. In slime load the file neigh-load-files in order to load the :neigh system
+     #+BEGIN_SRC lisp
+       (load "src/neigh-load-files.lisp")
+     #+END_SRC
+  10. Change to the package :vrp
+     #+BEGIN_SRC lisp
+       (in-package :vrp)
+     #+END_SRC
+
+* Count the number of neighbor solutions for rraac and rreeff
+   The neighborhood tree class stores the cardinality of the neighborhood that it represents. Then, use the function =build-neighborhood-tree= to construct the neighborhood and access to the cardinality attribute.
+
+   #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+	       (with-basic-solution (s1 ((1 2 3)
+					 (4 5)
+					 (6 7 8)))
+		 ;; code here
+		 (let* ((code `((select-route r1)
+				(select-route r2)
+				(select-client c1 from r1)
+				(select-client c2 from r2)
+				(swap-clients c1 c2)))
+			;; here you build the neighborhood tree
+			(neighborhood-tree (build-neighborhood-tree code s1)))
+		   ;; here we compute the total number of neighbor solutions
+    
+		   (setf card (cardinality neighborhood-tree))
+		   (format t "cardinality ~a" card)))
+   #+END_SRC
+
+   #+RESULTS:
+   : cardinality 56
+
+   #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+     (with-basic-solution (s1 ((1 2 3 4 5)
+			       (4 5 7 9)
+			       (6 7 8)))
+       ;; code here
+       (let* ((code '((select-route r1)
+		      (select-route r2)
+		      (select-subroute c1 from r1)
+		      (select-subroute c2 from r2)
+		      (insert-subroute c1 into r2)
+		      (insert-subroute c2 into r1)))
+	      ;; here you build the neighborhood tree
+	      (neighborhood-tree (build-neighborhood-tree code s1)))
+
+	 ;; here we compute the total number of neighbor solutions
+	 (setf card (cardinality neighborhood-tree))
+	 (format t "cardinality ~a" card)))
+
+   #+END_SRC
+
+   #+RESULTS:
+   : cardinality 6981
+   
+* Indexer functions and their properties
+   A main component in the analysis of a given neighborhood is the indexing function that is used to assign an order to the neighbor's solutions.  Two indexing functions are defined in this system: the classical one and a customize one.  The former, is a classical order in the neighborhood where solutions are sorted using the less or equal function. The latter, is a new way of order the neighbor solutions taking into account the regions (this concept will be explain on comming sections) that they belong.  For example, this custom indexer function is the correct option to use when an exploration over the regions is desired.
+
+   Note: The are some properties of a neighborhood that have to be initialized before start using the customize indexer function, such as compute the regions in the neighborhood. The function =prepare-neighborhood-for-exploration= was created with this purpose, and it has to be called before using the customize indexer.
+
+   There are also two functions that are used to check if the indexers are correct, they are called =nth-ops-classic-indexer-test= and =nth-ops-customize-indexer-test=. The idea behind them is to use the two functions defined for an indexer to test if they are really inverse functions. This is done computing for every index in the neighborhood their corresponding solution using the =nth-neighbor= function and for this solution its respective index with the function =ops-neighbor=.  If the indexer functions are well defined the last index should be equal to the first one, so computing the modular difference for each index in the neighborhood should be 0.
+   
+   Example 1: Classical indexer function
+   #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+   (with-basic-solution (s1 ((1 2 3)
+                             (4 5)
+                             (6 7 8)))
+
+     (let* (;; here you define the neighborhood criteria
+            (code `((select-route r1)
+                    (select-route r2)
+                    (select-client c1 from r1)
+                    (select-client c2 from r2)
+                    (swap-clients c1 c2)))
+            ;; here we create the neighborhood tree
+            (neigh (build-neighborhood-tree code s1)))
+       ;; here we test if indexer functions are ok
+       (nth-ops-classic-indexer-test neigh)))
+    #+END_SRC
+
+    Example 2: Customize indexer function
+   #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+   (with-basic-solution (s1 ((1 2 3)
+                             (4 5)
+                             (6 7 8)))
+
+     (let* (;; here you define the neighborhood criteria
+            (code `((select-route r1)
+                    (select-route r2)
+                    (select-client c1 from r1)
+                    (select-client c2 from r2)
+                    (swap-clients c1 c2)))
+            ;; here we create the neighborhood tree
+            (neigh (build-neighborhood-tree code s1)))
+       ;; this line has to be added to use the customize indexer
+       (prepare-neighborhood-for-exploration neigh)
+       ;; here we test if indexer functions are ok
+       (nth-ops-customize-indexer-test neigh)))
+    #+END_SRC
+
+* Some functions for compatibility between :vrp and :neigh systems
+   There are some differences in the way that the :neigh system works with some features of the :vrp system. Firstly, the kind of solutions, in the :neigh system solutions are an abstraction of a /vrp-solution/ which is called a /counting-solution/. Since, for counting purposes a /vrp-solution/ contains irrelevant information, such as what client is placed in a given route. Finally, the operations performed over a solution in the :neigh system are represented by a coordinate (that are defined here, PONER EL LINK), not by an operation in the first place.
+
+** From vrp solution to counting solution
+    First of all, it's neccessary to create a function which transforms a solution for the vrp problem into a solution for counting. Since our system will take as arguments a /vrp-problem/, a /vrp-solution/ and a /neighborhood-criterion/.
+    
+    #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+      (with-basic-solution (s1 ((1 2 3)
+				(4 5)
+				(6 7 8)))
+	;; code here
+	;; here you define the counting solution by transforming the vrp basic solution
+	(let* ((count-sol (transform-to-counting-solution s1)))
+	  ;; here we return the counting solution
+	  count-sol))
+    #+END_SRC
+
+** From coordinate-list to neighborhood operations
+    Second of all, it's neccessary to create a function that transforms a coordinate list computed by the :neigh system into a list of neighborhood operations, to be used in the :vrp system.
+
+    Example 1: Using the classic indexer.
+    #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+    (with-basic-solution (s1 ((1 2 3)
+                              (4 5)
+                              (6 7 8)))
+      ;; code here
+      (let* ((code `((select-route r1)
+                     (select-route r2)
+                     (select-client c1 from r1)
+                     (select-client c2 from r2)
+                     (swap-clients c1 c2)))
+             ;; here you build the neighborhood tree
+             (neighborhood-tree (build-neighborhood-tree code s1)))
+        ;; here we compute the total number of neighbor solutions
+        (from-coordinates-to-operations (from-index-to-coord-list neighborhood-tree 1))))
+    #+END_SRC
+   
+    #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+      (with-basic-solution (s1 ((1 2 3 4 5)
+				(4 5 7 9)
+				(6 7 8)))
+	;; code here
+	(let* ((code '((select-route r1)
+		       (select-route r2)
+		       (select-subroute c1 from r1)
+		       (select-subroute c2 from r2)
+		       (insert-subroute c1 into r2)
+		       (insert-subroute c2 into r1)))
+	       ;; here you build the neighborhood tree
+	       (neighborhood-tree (build-neighborhood-tree code s1)))
+	  ;; here we compute the total number of neighbor solutions
+	  (from-coordinates-to-operations (from-index-to-coord-list neighborhood-tree 6000))))
+    #+END_SRC
+
+    Example 2: Using the customize indexer, to use the customize indexer one line has to be added to the previous code.
+    #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+      (with-basic-solution (s1 ((1 2 3)
+				(4 5)
+				(6 7 8)))
+	;; code here
+	(let* ((code `((select-route r1)
+		       (select-route r2)
+		       (select-client c1 from r1)
+		       (select-client c2 from r2)
+		       (swap-clients c1 c2)))
+	       ;; here you build the neighborhood tree
+	       (neighborhood-tree (build-neighborhood-tree code s1)))
+	  ;; this line has to be added to use the customize indexer
+	  (prepare-neighborhood-for-exploration neighborhood-tree)
+	  ;; here we compute the total number of neighbor solutions
+	  (from-coordinates-to-operations (from-index-to-coord-list neighborhood-tree 1))))
+    #+END_SRC
+
+    Example 3: Using the customize indexer.
+    #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+      (with-basic-solution (s1 ((1 2 3 4 5)
+				(4 5 7 9)
+				(6 7 8)))
+	;; code here
+	(let* ((code '((select-route r1)
+		       (select-route r2)
+		       (select-subroute c1 from r1)
+		       (select-subroute c2 from r2)
+		       (insert-subroute c1 into r2)
+		       (insert-subroute c2 into r1)))
+	       ;; here you build the neighborhood tree
+	       (neighborhood-tree (build-neighborhood-tree code s1)))
+	  ;; this line has to be added to use the customize indexer
+	  (prepare-neighborhood-for-exploration neighborhood-tree)
+	  ;; here we compute the total number of neighbor solutions
+	  (from-coordinates-to-operations (from-index-to-coord-list neighborhood-tree 6000))))
+    #+END_SRC
+   
+* Explore a neighborhood and avoiding repetition
+   Once the neighborhood is partially constructed, and a fundamental property for its analysis is computed as the cardinality, we can think in a further processing like exploring this neighborhood. In order to do this, we must decide if this exploration will be a /shallow/ one, in which the neighborhood is considered as a set of neighbor solutions or a /deep/ one, in which the neighborhood is divided into set of solutions that shares some properties called /region/.
+
+   Note: Remember that for a /shallow/ exploration, either the classic or the customize indexer can be used, whereas for a /deep/ exploration the only possible option is the customize indexer function.
+
+   Note: Every exploration strategy is defined in the :neigh system with the name =...-search=, but we encourage the use of its variant =...-exploration= since it provides a common interface for all strategies. Moreover, it worth mentioning that those generators are wrappers for the =...-search= ones, they just return the value gathered from the intern generator or /nil/ if total was reached.
+
+** Introduction to the exhaustuve exploration
+    The function =exhaustive-search= is mainly recommended for internal use of the neigh system.  There is a function =exhaustive-exploration= that receives the neighborhood or region and as an option the total number of neighbors desired, if this parameter is not provided it is assumed as the set cardinality.
+    
+    Example 1: With the classic indexer function, since we explore all solutions in the neighborhood.
+    #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+    (with-basic-solution (s1 ((1 2 3)
+                              (4 5)
+                              (6 7 8)))
+
+      (let* (;; here you define the neighborhood criteria
+             (code `((select-route r1)
+                     (select-route r2)
+                     (select-client c1 from r1)
+                     (select-client c2 from r2)
+                     (swap-clients c1 c2)))
+             ;; here we create the neighborhood tree
+             (neigh (build-neighborhood-tree code s1))
+             ;; here we crete the exhaustive generator
+             (sol-generator (exhaustive-exploration neigh))
+             ;; the current neighbor-solution
+             (current-sol (funcall sol-generator)))
+        ;; print all solutions in the neighborhhod
+        (loop while (not (null current-sol))
+           do (print current-sol)
+             (setf current-sol (funcall sol-generator)))))
+    #+END_SRC
+    
+    Example 2: With the customize indexer function, even though we explore only 10 solutions in 
+    the neighborhood.
+    #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+    (with-basic-solution (s1 ((1 2 3)
+                              (4 5)
+                              (6 7 8)))
+
+      (let* (;; here you define the neighborhood criteria
+             (code `((select-route r1)
+                     (select-route r2)
+                     (select-client c1 from r1)
+                     (select-client c2 from r2)
+                     (swap-clients c1 c2)))
+             ;; here we create the neighborhood tree
+             (neigh (build-neighborhood-tree code s1))
+             ;; here we crete the exhaustive generator
+             (sol-generator (exhaustive-exploration neigh 10)))
+        ;; this line has to be added to use the customize indexer
+        (prepare-neighborhood-for-exploration neigh)
+        ;; print all solutions in the neighborhood
+        (loop while t
+           doing
+             (let ((cur-sol (funcall sol-generator)))
+               (when (null cur-sol)
+                 (return))
+               (format t "~A~%" cur-sol)))))
+    #+END_SRC
+
+    Example 3: With the customize indexer function, because we are exploring a given region in the neighborhood.
+    #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+    (with-basic-solution (s1 ((1 2 3)
+                              (4 5)
+                              (6 7 8)))
+
+      (let* (;; here you define the neighborhood criteria
+             (code `((select-route r1)
+                     (select-route r2)
+                     (select-client c1 from r1)
+                     (select-client c2 from r2)
+                     (swap-clients c1 c2)))
+             ;; here we create the neighborhood tree
+             (neigh (build-neighborhood-tree code s1)))
+
+        ;; this line has to be added to use the customize indexer
+        (prepare-neighborhood-for-exploration neigh)
+        (let* (;; here we get the first regions in the neighborhood
+               (first-reg (first (region-list neigh)))
+               ;; here we crete the exhaustive generator
+               (sol-generator (exhaustive-exploration first-reg 10)))
+
+          ;; print all solutions in the neighborhood
+          (loop while t
+             doing
+               (let ((cur-sol (funcall sol-generator)))
+                 (when (null cur-sol)
+                   (return))
+                 (format t "~A~%" cur-sol))))))
+    #+END_SRC
+
+** Introduction to the uniform exploration
+    The function =uniform-search= is mainly recommended for internal use of the neigh system, there is a function =uniform-exploration= that receives the neighborhood of region and as an option the total number of neighbors desired, if this parameter is not provided it is assumed as the set cardinality.
+    
+*** Example 1: With the classic indexer function, since we explore all solutions in the neighborhood.
+     #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+       (with-basic-solution (s1 ((1 2 3)
+				 (4 5)
+				 (6 7 8)))
+
+	 (let* (;; here you define the neighborhood criteria
+	        (code `((select-route r1)
+		        (select-route r2)
+		        (select-client c1 from r1)
+		        (select-client c2 from r2)
+		        (swap-clients c1 c2)))
+	        ;; here we create the neighborhood tree
+	        (neigh (build-neighborhood-tree code s1))
+	        ;; here we crete the exhaustive generator
+	        (sol-generator (uniform-exploration neigh))
+	        ;; the current neighbor-solution
+	        (current-sol (funcall sol-generator)))
+	   ;; print all solutions in the neighborhhod
+	   (loop while (not (null current-sol))
+	      do (print current-sol)
+	        (setf current-sol (funcall sol-generator)))))
+     #+END_SRC
+
+*** Example 2: With the customize indexer function, even though we explore 10 solutions in the neighborhood.
+     #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+      (with-basic-solution (s1 ((1 2 3)
+			        (4 5)
+			        (6 7 8)))
+
+        (let* (;; here you define the neighborhood criteria
+	       (code `((select-route r1)
+		       (select-route r2)
+		       (select-client c1 from r1)
+		       (select-client c2 from r2)
+		       (swap-clients c1 c2)))
+	       ;; here we create the neighborhood tree
+	       (neigh (build-neighborhood-tree code s1))
+	       ;; here we crete the exhaustive generator
+	       (sol-generator (uniform-exploration neigh 10)))
+	  ;; this line has to be added to use the customize indexer
+	  (prepare-neighborhood-for-exploration neigh)
+	  ;; print all solutions in the neighborhood
+	  (loop while t
+	     doing
+	       (let ((cur-sol (funcall sol-generator)))
+		 (when (null cur-sol)
+		   (return))
+		 (format t "~A~%" cur-sol)))))
+     #+END_SRC
+
+*** Example 3: With the customize indexer function, because we are exploring a given region in the neighborhood.
+     #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+     (with-basic-solution (s1 ((1 2 3)
+                               (4 5)
+                               (6 7 8)))
+
+       (let* (;; here you define the neighborhood criteria
+              (code `((select-route r1)
+                      (select-route r2)
+                      (select-client c1 from r1)
+                      (select-client c2 from r2)
+                      (swap-clients c1 c2)))
+              ;; here we create the neighborhood tree
+              (neigh (build-neighborhood-tree code s1)))
+
+         ;; this line has to be added to use the customize indexer
+         (prepare-neighborhood-for-exploration neigh)
+         (let* (;; here we get the first regions in the neighborhood
+                (first-reg (first (region-list neigh)))
+                ;; here we crete the exhaustive generator
+                (sol-generator (uniform-exploration first-reg 10)))
+
+           (format t "region-list: ~a~%" (region-list neigh))
+
+           ;; print all solutions in the neighborhood
+           (loop while t
+              doing
+                (let ((cur-sol (funcall sol-generator)))
+                  (when (null cur-sol)
+                    (return))
+                  (format t "~A~%" cur-sol))))))
+     #+END_SRC
+
+** Introduction to the combinatorial exploration
+    Is important to explain the notion of =region=. A =region= is a set of neighborhood solutions, that shares the same values for a given set of components in the coordinate list, it's completely accurate to say that those components in the coordinate list are fixed for a given =region= and the rest are free, and these are the ones that provides variability to the =region=.
+    
+    The function =combinatorial-search= is used to create a representative sample of the neighborhhod.  By representative I mean that between two consecutive solutions of any region, there is always a solution of the other regions that are not exhausted. However, the function =combinatorial-exploration= was created to provide a common inteface between exploration strategies over a neighborhood, and is the preferred option to interact with the neigh system.
+
+    Note: It worth mentioning that both functions returns two values: the generated solution and the identifier of the region where it belongs. However, the second value can be discarded when the solution is the only important thing for the user's job. This is the only generator function that returns two values.
+    
+    Example 1: With the customize indexer function, since we are exploring in the regions.
+    #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+      (with-basic-solution (s1 ((1 2 3)
+				(4 5)
+				(6 7 8)))
+	(let* (;; here you define the neighborhood criteria
+	       (code `((select-route r1)
+		       (select-route r2)
+		       (select-client c1 from r1)
+		       (select-client c2 from r2)
+		       (swap-clients c1 c2)))
+	       ;; here we create the neighborhood tree
+	       (neigh (build-neighborhood-tree code s1))
+	       ;; here we crete the combinatorial sample generator
+	       (sol-generator (combinatorial-exploration neigh)))
+	  ;; this line has to be added to use the customize indexer
+	  (prepare-neighborhood-for-exploration neigh)
+	  ;; print all solutions in the neighborhhod
+	  (loop while t
+	     doing
+	       (multiple-value-bind (cur-sol cur-region) (funcall sol-generator)
+		 (when (not cur-sol)
+		   (return))
+		 (format t "~A : ~A~%" cur-region cur-sol)))))
+    #+END_SRC
+
+    Example 2: With the customize indexer function, since we are exploring in the regions.
+    #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+      (with-basic-solution (s1 ((1 2 3)
+				(4 5)
+				(6 7 8)))
+	(let* (;; here you define the neighborhood criteria
+	       (code `((select-route r1)
+		       (select-route r2)
+		       (select-subroute c1 from r1)
+		       (select-subroute c2 from r2)
+		       (insert-subroute c1 into r2)
+		       (insert-subroute c2 into r1)))
+	       ;; here we create the neighborhood tree
+	       (neigh (build-neighborhood-tree code s1))
+	       ;; here we crete the combinatorial sample generator
+	       (sol-generator (combinatorial-exploration neigh 100)))
+	  ;; this line has to be added to use the customize indexer
+	  (prepare-neighborhood-for-exploration neigh)
+	  ;; print all solutions in the neighborhhod
+	  (loop while t
+	     doing
+	       (multiple-value-bind (cur-sol cur-region) (funcall sol-generator)
+		 (when (not cur-sol)
+		   (return))
+		 (format t "~A : ~A~%" cur-region cur-sol)))))
+    #+END_SRC
+
+** Introduction to the sequential exploration
+    In this section I'll explain how to perform a sequential search over a neighborhood.  The idea is to explore some regions in some order, for that reason this function takes as a parameter the neighborhood and a list with the region's identifiers.
+    
+    Note: this type of search has a lot in common with the combinatorial strategy and these two strategies can be generealised as one in which the regions are explored in some order and in every exploration step in a region has to explore a certain quantity of solutions. In the combinatorial case the ids list is '(1 2 ... number-of-regions) and the quantity is 1, while in the sequencial case the list is given and the quantity varies on each regions since it is the number of solutions that have not been analyzed in those regions.
+    
+    The function =sequential-exploration= was created to provide a common interface between exploration strategies over a neighborhood, and is the preferred option to interact with the neigh system.
+    
+    Example 1: With the customize indexer function
+    #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+      (with-basic-solution (s1 ((1 2 3)
+				(4 5)
+				(6 7 8)))
+
+	(let* (;; here you define the neighborhood criteria
+	       (code `((select-route r1)
+		       (select-route r2)
+		       (select-client c1 from r1)
+		       (select-client c2 from r2)
+		       (swap-clients c1 c2)))
+	       ;; here we create the neighborhood tree
+	       (neigh (build-neighborhood-tree code s1))
+	       ;; here we crete the combinatorial sample generator
+	       sol-generator
+	       ;; the current neighbor-solution
+	       current-sol)
+	  ;; this line has to be added to use the customize indexer
+	  (prepare-neighborhood-for-exploration neigh)
+	  ;; here we define that generator and the current solution
+	  (setf sol-generator (sequential-exploration neigh '(1 2 3 4 5 6 7 8 9) 20)
+		current-sol (funcall sol-generator))
+
+	  ;; print all solutions in the neighborhhod
+	  (loop while (not (null current-sol))
+	     do
+	       (format t "~a~%" current-sol)
+	       (setf current-sol (funcall sol-generator)))))
+    #+END_SRC
+
+    Example 2: With the customize indexer function
+    #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+      (with-basic-solution (s1 ((1 2 3)
+				(4 5)
+				(6 7 8)))
+
+	(let* (;; here you define the neighborhood criteria
+	       (code `((select-route r1)
+		       (select-route r2)
+		       (select-subroute c1 from r1)
+		       (select-subroute c2 from r2)
+		       (insert-subroute c1 into r2)
+		       (insert-subroute c2 into r1)))
+	       ;; here we create the neighborhood tree
+	       (neigh (build-neighborhood-tree code s1))
+	       ;; here we crete the combinatorial sample generator
+	       sol-generator
+	       ;; the current neighbor-solution
+	       current-sol)
+	  ;; this line has to be added to use the customize indexer
+	  (prepare-neighborhood-for-exploration neigh)
+	  ;; here we define that generator and the current solution
+	  (setf sol-generator (sequential-exploration neigh '(1 2 3 4 5 6 7 8 9) 100)
+		current-sol (funcall sol-generator))
+
+	  ;; print all solutions in the neighborhhod
+	  (loop while (not (null current-sol))
+	     do
+	       (format t "~a~%" current-sol)
+	       (setf current-sol (funcall sol-generator)))))
+    #+END_SRC
+
+    Example 3: In this example a combinatorial search of the neighborhood is performed first and then a sequential search is made.
+    #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+      (with-basic-solution (s1 ((1 2 3)
+				(4 5)
+				(6 7 8)))
+	(let* (;; here we define the neighborhood criteria
+	       (code `((select-route r1)
+		       (select-route r2)
+		       (select-subroute c1 from r1)
+		       (select-subroute c2 from r2)
+		       (insert-subroute c1 into r2)
+		       (insert-subroute c2 into r1)))
+	       ;; here we create the neighborhood tree
+	       (neigh (build-neighborhood-tree code s1))
+	       ;; here we crete the combinatorial sample generator
+	       (sol-generator (combinatorial-exploration neigh 200))
+	       ;; define the non-exhausted region list
+	       non-exhausted-regions)
+	  ;; this line has to be added to use the customize indexer
+	  (prepare-neighborhood-for-exploration neigh)
+
+	  (format t "Combinatorial exploration:~%")
+	  ;; print all solutions in the neighborhhod
+	  (loop while t
+	     doing
+	       (let ((cur-sol (funcall sol-generator)))
+		 (when (null cur-sol)
+		   (return))
+		 (format t "~A ~a~%" (from-coord-list-to-index neigh cur-sol) cur-sol)))
+
+	  (format t "Sequential exploration:~%")
+
+	  (loop for i from 1 to (number-of-regions neigh)
+	     for reg in (region-list neigh)
+	     doing
+	       (when (not (is-exhausted-p reg))
+		 (push i non-exhausted-regions)))
+
+	  (setf sol-generator (sequential-exploration neigh (reverse non-exhausted-regions)))
+
+	  ;; print all solutions in the neighborhhod
+	  (loop while t
+	     doing
+	       (let ((cur-sol (funcall sol-generator)))
+		 (when (null cur-sol)
+		   (return))
+		 (format t "~A ~a~%" (from-coord-list-to-index neigh cur-sol) cur-sol)))))
+    #+END_SRC
+
+** Avoiding repetition in a neighborhood or region exploration
+    One fundamental issue exploring given neighborhhod is not repeat any previously analysed solution. In that sense, our neighborhoods and regions instances store their state, this is the minimum information needed to know if they are exhausted or what solutions have been processed.
+    
+**** Neighborhood exploration
+     In this section I'll check that after we explore some solutions in the neighborhood with a given strategy, if another strategy is used any solution is repeated.
+
+     Example 1: In this example first an uniform exploration is performed and then an exhaustive exploration.
+     #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+       (with-basic-solution (s1 ((1 2 3)
+				 (4 5)
+				 (6 7 8)))
+
+	 (let* (;; here you define the neighborhood criteria
+		(code `((select-route r1)
+			(select-route r2)
+			(select-client c1 from r1)
+			(select-client c2 from r2)
+			(swap-clients c1 c2)))
+		;; here we create the neighborhood tree
+		(neigh (build-neighborhood-tree code s1))
+		;; first strategy
+		(sol-generator (uniform-exploration neigh))
+		;; the current neighbor-solution
+		current-sol)
+	   ;; this line has to be added to use the customize indexer
+	   (prepare-neighborhood-for-exploration neigh)
+	   (format t "Uniform-exploration:~%")
+	   ;; print all solutions in the neighborhhod
+	   (loop for i from 1 to 20
+	      do
+		(setf current-sol (funcall sol-generator))
+		(format t "~a ~A~%" (from-coord-list-to-index neigh current-sol) current-sol))
+	   ;; second strategy
+	   (format t "Exhaustive-exploration:~%")
+	   (setf sol-generator (exhaustive-exploration neigh))
+	   (setf current-sol (funcall sol-generator))
+	   ;; print all solutions in the neighborhhod
+	   (loop while (not (null current-sol))
+	      do
+		(format t "~a ~A~%" (from-coord-list-to-index neigh current-sol) current-sol)
+		(setf current-sol (funcall sol-generator)))))
+     #+END_SRC
+
+    Example 2: In this example first an exhaustive exploration is performed and then an uniform exploration.
+    #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+      (with-basic-solution (s1 ((1 2 3)
+				(4 5)
+				(6 7 8)))
+
+	(let* (;; here you define the neighborhood criteria
+	       (code `((select-route r1)
+		       (select-route r2)
+		       (select-subroute c1 from r1)
+		       (select-subroute c2 from r2)
+		       (insert-subroute c1 into r2)
+		       (insert-subroute c2 into r1)))
+	       ;; here we create the neighborhood tree
+	       (neigh (build-neighborhood-tree code s1))
+	       ;; first strategy
+	       (sol-generator (exhaustive-exploration neigh))
+	       ;; the current neighbor-solution
+	       current-sol)
+	  ;; this line has to be added to use the customize indexer
+	  (prepare-neighborhood-for-exploration neigh)
+	  (format t "Exhaustive-exploration:~%")
+	  ;; print all solutions in the neighborhhod
+	  (loop for i from 1 to 20
+	     do
+	       (setf current-sol (funcall sol-generator))
+	       (format t "~a ~A~%" (from-coord-list-to-index neigh current-sol) current-sol))
+	  ;; second strategy
+	  (format t "Uniform-exploration:~%")
+	  (setf sol-generator (uniform-exploration neigh))
+	  (setf current-sol (funcall sol-generator))
+	  ;; print all solutions in the neighborhhod
+	  (loop while (not (null current-sol))
+	     do
+	       (format t "~a ~A~%" (from-coord-list-to-index neigh current-sol) current-sol)
+	       (setf current-sol (funcall sol-generator)))))
+    #+END_SRC    
+    
+**** Region exploration
+     In this section I'll check that after we explore some solutions in a region with a given strategy, if any solution is repeated when another strategy is used.
+
+     Example 1: In this example first an uniform exploration is performed and then an exhaustive exploration.
+     #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+       (with-basic-solution (s1 ((1 2 3)
+				 (4 5)
+				 (6 7 8)))
+
+	 (let* (;; here you define the neighborhood criteria
+		(code `((select-route r1)
+			(select-route r2)
+			(select-subroute c1 from r1)
+			(select-subroute c2 from r2)
+			(insert-subroute c1 into r2)
+			(insert-subroute c2 into r1)))
+		;; here we create the neighborhood tree
+		(neigh (build-neighborhood-tree code s1))
+		;; here we define a region
+		region
+		;; here we define the solution generator
+		sol-generator
+		;; the current neighbor-solution
+		current-sol)
+	   ;; this line has to be added to use the customize indexer
+	   (prepare-neighborhood-for-exploration neigh)
+	   (setf
+	    ;; here we select a region
+	    region (third (region-list neigh))
+	    ;; first strategy
+	    sol-generator (uniform-exploration region))
+
+	   (format t "Cardinality: ~A  Range: ~A~%" (cardinality region)
+		   (index-range region))
+
+	   (format t "Uniform-exploration:~%")
+	   ;; print all solutions in the neighborhhod
+	   (loop for i from 1 to 3
+	      do
+		(setf current-sol (funcall sol-generator))
+		(format t "~a ~A~%" (from-coord-list-to-index neigh current-sol) current-sol))
+	   ;; second strategy
+	   (format t "Exhaustive-exploration:~%")
+	   (setf sol-generator (exhaustive-exploration region))
+	   (setf current-sol (funcall sol-generator))
+	   ;; print all solutions in the neighborhhod
+	   (loop while (not (null current-sol))
+	      do
+		(format t "~a ~A~%" (from-coord-list-to-index neigh current-sol) current-sol)
+		(setf current-sol (funcall sol-generator)))))
+     #+END_SRC
+
+     Example 2: In this example first an exhaustive exploration is performed and then an uniform exploration.
+     #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+       (with-basic-solution (s1 ((1 2 3)
+				 (4 5)
+				 (6 7 8)))
+
+	 (let* (;; here you define the neighborhood criteria
+		(code `((select-route r1)
+			(select-route r2)
+			(select-client c1 from r1)
+			(select-client c2 from r2)
+			(swap-clients c1 c2)))
+		;; here we create the neighborhood tree
+		(neigh (build-neighborhood-tree code s1))
+		;; here we define a region
+		region
+		;; here we define the solution generator
+		sol-generator
+		;; the current neighbor-solution
+		current-sol)
+	   ;; this line has to be added to use the customize indexer
+	   (prepare-neighborhood-for-exploration neigh)
+	   (setf
+	    ;; here we select a region
+	    region (third (region-list neigh))
+	    ;; first strategy
+	    sol-generator (exhaustive-exploration region))
+
+	   (format t "Cardinality: ~A  Range: ~A~%" (cardinality region)
+		   (index-range region))
+
+	   (format t "Exhaustive-exploration:~%")
+	   ;; print all solutions in the neighborhhod
+	   (loop for i from 1 to 3
+	      do
+		(setf current-sol (funcall sol-generator))
+		(format t "~a ~A~%" (from-coord-list-to-index neigh current-sol) current-sol))
+	   ;; second strategy
+	   (format t "Uniform-exploration:~%")
+	   (setf sol-generator (uniform-exploration region))
+	   (setf current-sol (funcall sol-generator))
+	   ;; print all solutions in the neighborhhod
+	   (loop while (not (null current-sol))
+	      do
+		(format t "~a ~A~%" (from-coord-list-to-index neigh current-sol) current-sol)
+		(setf current-sol (funcall sol-generator)))))
+     #+END_SRC
+    
+* Going further and interact with the existing :vrp system
+   Until this moment, we have been only using the neigh system functionalities. It's time to interact with the :vrp system by exploring the neighborhood for a given problem, solution and criterion, and compute the delta cost.
+
+** Code
+    
+    #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+    (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                        (5 0 6 7 2 4)  ;1
+                                        (1 8 0 3 9 1)  ;2
+                                        (4 5 1 0 5 7)  ;3
+                                        (4 5 1 5 0 6)  ;4
+                                        (1 5 7 6 9 0)) ;5
+                                        ;0 1 2 3 4 5 
+                           :demands '(10 10 15 40 20)
+                           :capacity 40)
+      (with-basic-cvrp-solution (s1 ((2 4 5) (3) (1)) p1)
+        ;; code here
+        (let* (
+               ;; here you define the neighborhood criteria
+               (code `((select-route r1)
+                       (select-route r2)
+                       (select-client c1 from r1)
+                       (select-client c2 from r2)
+                       (swap-clients c1 c2)))
+               ;; here we create the neighborhood tree
+               (neigh (build-neighborhood-tree code s1))
+               ;; here we crete the exahustive generator
+               (sol-generator (exhaustive-exploration neigh))
+               ;; the current neighbor-solution
+               (current-sol (funcall sol-generator))
+
+               ;; :vrp system stuff
+               (wc (basic-working-copy s1))
+               (current-delta-cost 0)
+               (action (delta-cvrp-action)))
+          ;; this is the line added to be able
+          ;; to compute the delta-cost.
+          (initialize-action-for-delta-cost-computation wc p1 action)
+
+          (bformat t "Testing rraac with the :neigh system.")
+
+          (loop while (not (null current-sol))
+             do
+                (setf current-delta-cost
+                      (delta-cost (from-coordinates-to-operations current-sol)
+                                  wc                   ;; the working-copy
+                                  p1                   ;; the problem
+                                  action               ;; the action
+                                  ))
+               (print (from-coordinates-to-operations current-sol))
+               (print current-delta-cost)
+               (setf current-sol (funcall sol-generator))))))
+   #+END_SRC
+   
+** Test
+    
+    #+BEGIN_SRC lisp
+    (with-cvrp-problem (p1 :distances `((0 2 3 4 5 6)  ;0
+                                        (5 0 6 7 2 4)  ;1
+                                        (1 8 0 3 9 1)  ;2
+                                        (4 5 1 0 5 7)  ;3
+                                        (4 5 1 5 0 6)  ;4
+                                        (1 5 7 6 9 0)) ;5
+                                        ;0 1 2 3 4 5 
+                           :demands '(10 10 15 40 20)
+                           :capacity 40)
+      (with-basic-cvrp-solution (s1 ((2 4 5) (3) (1)) p1)
+        ;; code here
+        (let* ((wc (basic-working-copy s1))
+               (ops-list nil)
+               (current-delta-cost 0)
+               (action (delta-cvrp-action)))
+
+          (prepare-solution-for-neighborhood-exploration wc)
+          ;; this is the line added to be able
+          ;; to compute the delta-cost.
+          (initialize-action-for-delta-cost-computation wc p1 action)
+
+          (bformat t "Testing rraac with the :vrp macros.")
+
+          (doselect-route (r1 wc)
+            (doselect-route (r2 wc)
+              (doselect-client (c1 r1 wc)
+                (doselect-client (c2 r2 wc)
+                  (doswap-clients (c1 c2 wc)
+
+                    (setf current-delta-cost (delta-cost (reverse vrp::ops-list)
+                                                         wc ;; the working-copy
+                                                         p1 ;; the problem
+                                                         action ;; the action
+                                                         ))
+                    (print (reverse ops-list))
+                    (print current-delta-cost)))))))))
+   #+END_SRC
+   
+* Adding new neighborhood operations to the system: swap-subroutes and reverse-subroute
+   In this section I'll explain how to add new operations to the neigh system. In this tutorial we'll follow the steps to add a select subroute and an insert subroute operation to the neigh system, which weren't in it at the first place.
+
+** General introduction
+   In order to add a new operation to the neigh system, there are some classes and methods that should be defined for that operation.  To what extend, I'll explain how to add a new operation by detailing the steps that should be followed and linking to the code block that was defined for that operation:
+   
+   1. First of all, in the file =neigh-classes.org= a new class should be
+      defined for this new operation to be used in the neighborhood criterion.
+      
+      [[file:neigh-classes.org::*Select subroute operation][Select subroute operation]]
+      [[file:neigh-classes.org::*Insert subroute operation][Insert subroute operation]]
+
+      
+   2. Moreover, in the same .org file, a new class should be defined to 
+      represent a node for that operation in the /neighborhood-tree/.
+      
+      [[file:neigh-classes.org::*e-node][Select subroute operation]]
+      [[file:neigh-classes.org::*f-node][Insert subroute operation]]
+
+
+   3. In the section where the neighborhood criterion is defined in =neigh-suite.org=,
+      a new method should be defined to create instances of this new operation.
+      
+      [[file:neigh-suite.org::*Select-subroute%20(e-operation)][Select subroute operation]]
+      [[file:neigh-suite.org::*Insert-subroute%20(f-operation)][Insert subroute operation]]
+      
+   4. In =neigh-cardinality.org=, a new method for this operation should be defined for
+      this new operation to compute the neighborhood cardinality and, build the /neighborhood-tree/.
+
+      [[file:neigh-cardinality.org::*Select%20subroute%20operation][Select subroute operation]]
+      [[file:neigh-cardinality.org::*Insert%20subroute%20operation][Insert subroute operation]]
+
+   5. In the section where the coordinate list is defined in =neigh-suite.org=, a new section
+      has to be added to define what a coordinate is for the new operation.
+
+      [[file:neigh-suite.org::*Select-subroute (e-operation)][Select subroute operation]]
+      [[file:neigh-suite.org::*Insert-subroute%20(f-operation)][Insert subroute operation]]
+
+
+   6. In =neigh-indexer.org=, a new methods have to be defined for both the /classical indexer/ and
+      the /custom indexer/:
+      
+      Lets first explain the /classical indexer/, where a new method has to be defined for:
+      - The nth-neighbor function:
+	[[file:neigh-indexer.org::*E-node][Select subroute operation]]
+	[[file:neigh-indexer.org::*F-node][Insert subroute operation]]
+	
+      - The ops-neighbor method:
+	[[file:neigh-indexer.org::*E-node][Select subroute operation]]
+	[[file:neigh-indexer.org::*F-node][Insert subroute operation]]
+	
+      Lets then explain the /custom indexer/, where in the subsection /Branch indexer/ a new method
+      has to be defined for:
+      - The nth-branch-neighbor function:
+	[[file:neigh-indexer.org::*E-node][Select subroute operation]]
+	[[file:neigh-indexer.org::*F-node][Insert subroute operation]]
+	
+      - The ops-branch-neighbor function:
+	[[file:neigh-indexer.org::*E-node][Select subroute operation]]
+	[[file:neigh-indexer.org::*F-node][Insert subroute operation]]
+
+	
+   7. In addition, in the =neigh-indexer.org= a new method has to be defined for the function
+      /from-coordinate-to-level/. This function is used to compute a factor-level representation
+      of a given coordinate list in a wrapper function, and it defines if a given coordinates
+      represents a factor and its level.
+
+      [[file:neigh-indexer.org::*'E-coordinate][Select route operation]]
+      [[file:neigh-indexer.org::*'F-coordinate][Insert route operation]]      
+	
+     
+   8. In =neigh-exploration.org=, in section /Some functions for customize exploration/ a new method
+      has to be defined in order to compute the regions cardinalities.
+
+      [[file:neigh-exploration.org::*E-node][Select subroute operation]]
+      [[file:neigh-exploration.org::*F-node][Insert subroute operation]]
+
+
+    9. In the section /Compatibility with the VRP system/ of =neigh-suite.org=, a new method should be defined
+       to build the neighborhood operation from the coordinate that corresponds to this node.
+       
+       [[file:neigh-suite.org::*'E-coordinate][Select subroute operation]]
+       [[file:neigh-suite.org::*'F-coordinate][Insert subroute operation]]
+
+     
+    10. In addition, a new method has to be defined in the =neigh-suite.org= file to compute delta position
+	that an operation produces for a position.
+
+	[[file:neigh-suite.org::*'E-coordinate][Select route operation]]
+	[[file:neigh-suite.org::*'F-coordinate][Insert route operation]]
+
+** Testing added operations
+   In this section we'll define some code to test some functionalities of the neigh system,
+   that involves using the /select-subroute operation/ and /insert-subroute operation/.
+*** Reverse subroute operation
+**** Description
+    This operation takes as its argument the identifier of a 
+    select subroute operation and, inserts all the clients of
+    that subroute in the same route and position, but in a 
+    reverse order.
+    
+**** Computing the neighborhood cardinality
+***** Code
+      
+      #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+	(with-basic-solution (s1 ((1 2 3 4 5)
+				  (6 7 8 9)
+				  (10 11 12)))
+
+	  (let* (;; here you define the neighborhood criteria
+		 (code `((select-route r1)
+			 (select-subroute z1 from r1)
+			 (reverse-subroute z1)
+			 (insert-subroute z1 into r1))))
+	    ;; here you build the neighborhood tree and then get the total number
+	    ;; of neighbor solutions from its root node
+	    (cardinality (build-neighborhood-tree code s1))))
+     #+END_SRC
+
+     #+RESULTS:
+     
+***** Test
+      #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+	(with-basic-solution (s1 ((1 2 3 4 5) 
+				  (6 7 8 9)
+				  (10 11 12)))
+	  (let* ((wc (basic-working-copy s1))
+		 (ops-list nil)
+		 (total 0))
+
+	    (prepare-solution-for-neighborhood-exploration wc)
+
+	    (doselect-route (r1 wc)
+	      (doselect-subroute (z1 r1 wc)
+		(doreverse-subroute (z1 wc)
+		  (doinsert-subroute (z1 r1 wc)
+		    (incf total)))))
+	    total))
+      #+END_SRC
+
+      #+RESULTS:
+
+**** Exhaustive exploration
+***** Code
+      
+      #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+	(with-basic-solution (s1 ((1 2 3 4 5)
+				  (6 7 8 9)
+				  (10 11 12)))
+	  (let* (;; here you define the neighborhood criteria
+		 (code `((select-route r1)
+			 (select-subroute z1 from r1)
+			 (reverse-subroute z1)
+			 (insert-subroute z1 into r1)))
+		 ;; here we create the neighborhood tree
+		 (neigh (build-neighborhood-tree code s1))
+		 ;; here we crete the exhaustive generator
+		 (sol-generator (exhaustive-exploration neigh)))
+	    ;; this line has to be added to use the customize indexer
+	    (prepare-neighborhood-for-exploration neigh)
+	    ;; print all solutions in the neighborhhod
+	    (loop while t
+	       doing
+		 (let ((cur-sol (funcall sol-generator)))
+		   (when (null cur-sol)
+		     (return))
+		   (format t "~A~%" cur-sol)))))
+      #+END_SRC
+
+***** Test
+
+      #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+	(with-basic-solution (s1 ((1 2 3 4 5) 
+				  (6 7 8 9)
+				  (10 11 12)))
+	  (let* ((wc (basic-working-copy s1))
+		 (ops-list nil)
+		 (total 0))
+
+	    (prepare-solution-for-neighborhood-exploration wc)
+
+	    (doselect-route (r1 wc)
+	      (doselect-subroute (z1 r1 wc)
+		(doreverse-subroute (z1 wc)
+		  (doinsert-subroute (z1 r1 wc)
+		    (incf total)
+		    (print (reverse ops-list))))))
+	    total))
+      #+END_SRC
+
+**** Combinatorial exploration
+***** Code
+      
+      #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+	(with-basic-solution (s1 ((1 2 3 4 5)
+				  (6 7 8 9)
+				  (10 11 12)))
+	  (let* (;; here you define the neighborhood criteria
+		 (code `((select-route r1)
+			 (select-subroute z1 from r1)
+			 (reverse-subroute z1)
+			 (insert-subroute z1 into r1)))
+		 ;; here we create the neighborhood tree
+		 (neigh (build-neighborhood-tree code s1))
+		 ;; here we crete the exhaustive generator
+		 (sol-generator (combinatorial-exploration neigh)))
+	    ;; this line has to be added to use the customize indexer
+	    (prepare-neighborhood-for-exploration neigh)
+	    ;; print all solutions in the neighborhhod
+	    (loop while t
+	       doing
+		 (let ((cur-sol (funcall sol-generator)))
+		   (when (null cur-sol)
+		     (return))
+		   (format t "~A~%" cur-sol)))))
+      #+END_SRC
+
+***** Test
+
+      #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+	(with-basic-solution (s1 ((1 2 3 4 5) 
+				  (6 7 8 9)
+				  (10 11 12)))
+	  (let* ((wc (basic-working-copy s1))
+		 (ops-list nil)
+		 (total 0))
+
+	    (prepare-solution-for-neighborhood-exploration wc)
+
+	    (doselect-route (r1 wc)
+	      (doselect-subroute (z1 r1 wc)
+		(doreverse-subroute (z1 wc)
+		  (doinsert-subroute (z1 r1 wc)
+		    (incf total)
+		    (print (reverse ops-list))))))
+	    total))
+      #+END_SRC
+
+**** Computing delta cost
+***** Code
+      
+      #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+	(with-cvrp-problem (p1 :distances `((0 2 3 4 5 6 3 4 7 8 3 2 5)  ;0
+					    (5 0 6 7 2 4 6 7 8 3 2 5 8)  ;1
+					    (1 8 0 3 9 1 2 1 4 7 9 4 2)  ;2
+					    (4 5 1 0 5 7 3 8 5 3 1 7 9)  ;3
+					    (4 5 1 5 0 6 3 9 7 4 1 6 7)  ;4
+					    (1 5 7 6 9 0 9 3 7 5 1 8 4)  ;5
+					    (3 2 3 4 5 6 0 4 7 8 3 2 5)  ;6
+					    (5 7 6 7 2 4 6 0 8 3 2 5 8)  ;7
+					    (1 8 4 3 9 1 2 1 0 7 9 4 2)  ;8
+					    (4 5 1 3 5 7 3 8 5 0 1 7 9)  ;9
+					    (4 5 1 5 1 6 3 9 7 4 0 6 7)  ;10
+					    (1 5 7 6 9 8 9 3 7 5 1 0 4)  ;11
+					    (1 8 2 3 9 1 2 1 4 7 9 4 0)) ;12
+					    ;0 1 2 3 4 5 6 7 8 9 10 11 12 
+			       :demands '(10 10 15 40 20 15 25 35 30 10 20 40)
+			       :capacity 40)
+	  (with-basic-cvrp-solution (s1 ((1 2 3 4 5)
+					 (6 7 8 9)
+					 (10 11 12))
+					p1)
+	    ;; code here
+	    (let* (
+		   ;; :neigh system stuff
+		   ;; here you define the neighborhood criteria
+		   (code `((select-route r1)
+			   (select-subroute z1 from r1)
+			   (reverse-subroute z1)
+			   (insert-subroute z1 into r1)))
+		   ;; here we create the neighborhood tree
+		   (neigh (build-neighborhood-tree code s1))
+		   ;; here we crete the exahustive generator
+		   (sol-generator (exhaustive-exploration neigh))
+
+		   ;; :vrp system stuff
+		   (wc (basic-working-copy s1))
+		   (current-delta-cost 0)
+		   (action (delta-cvrp-action)))
+	      ;; this line has to be added to use the customize indexer
+	      (prepare-neighborhood-for-exploration neigh)
+
+	      (prepare-solution-for-neighborhood-exploration wc)
+	      ;; this is the line added to be able
+	      ;; to compute the delta-cost.
+	      (initialize-action-for-delta-cost-computation wc p1 action)
+
+	      (bformat t "Testing rehf with the :neigh system.")
+
+	      (loop while t
+		 do
+		   (let ((current-sol (funcall sol-generator)))
+		     (when (null current-sol)
+		       (return))
+		     (setf current-delta-cost (delta-cost (from-coordinates-to-operations current-sol)
+							  wc ;; the working-copy
+							  p1 ;; the problem
+							  action ;; the action
+							  ))
+		     (print (from-coordinates-to-operations current-sol))
+		     (print current-delta-cost)
+		     (setf current-sol (funcall sol-generator)))))))
+     #+END_SRC
+
+***** Test
+   
+      #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+	(with-cvrp-problem (p1 :distances `((0 2 3 4 5 6 3 4 7 8 3 2 5)  ;0
+					    (5 0 6 7 2 4 6 7 8 3 2 5 8)  ;1
+					    (1 8 0 3 9 1 2 1 4 7 9 4 2)  ;2
+					    (4 5 1 0 5 7 3 8 5 3 1 7 9)  ;3
+					    (4 5 1 5 0 6 3 9 7 4 1 6 7)  ;4
+					    (1 5 7 6 9 0 9 3 7 5 1 8 4)  ;5
+					    (3 2 3 4 5 6 0 4 7 8 3 2 5)  ;6
+					    (5 7 6 7 2 4 6 0 8 3 2 5 8)  ;7
+					    (1 8 4 3 9 1 2 1 0 7 9 4 2)  ;8
+					    (4 5 1 3 5 7 3 8 5 0 1 7 9)  ;9
+					    (4 5 1 5 1 6 3 9 7 4 0 6 7)  ;10
+					    (1 5 7 6 9 8 9 3 7 5 1 0 4)  ;11
+					    (1 8 2 3 9 1 2 1 4 7 9 4 0)) ;12
+					    ;0 1 2 3 4 5 6 7 8 9 10 11 12 
+			       :demands '(10 10 15 40 20 15 25 35 30 10 20 40)
+			       :capacity 40)
+	  (with-basic-cvrp-solution (s1 ((1 2 3 4 5)
+					 (6 7 8 9)
+					 (10 11 12))
+					p1)
+	    ;; code here
+	    (let* (
+		   ;; :vrp system stuff
+		   (wc (basic-working-copy s1))
+		   (ops-list nil)
+		   (current-delta-cost 0)
+		   (action (delta-cvrp-action)))
+
+	      (prepare-solution-for-neighborhood-exploration wc)
+	      ;; this is the line added to be able
+	      ;; to compute the delta-cost.
+	      (initialize-action-for-delta-cost-computation wc p1 action)
+
+	      (bformat t "Testing rehf with the :neigh system.")
+
+	      (doselect-route (r1 wc)
+		(doselect-subroute (z1 r1 wc)
+		  (doreverse-subroute (z1 wc)
+		    (doinsert-subroute (z1 r1 wc)
+		      (setf current-delta-cost (delta-cost (reverse ops-list)
+							   wc ;; the working-copy
+							   p1 ;; the problem
+							   action ;; the action
+							   ))
+		      (print (reverse ops-list))
+		      (print current-delta-cost))))))))
+     #+END_SRC
+
+     #+RESULTS:
+     #+begin_example
+     ======================================
+      Testing rehf with the :neigh system.
+     ======================================
+
+
+     (<op:ss 1 1 1 0> <op:a 1 1 0> <op:rs 0> <op:b 1 1 0>) 
+     0 
+     (<op:ss 1 1 1 0> <op:a 1 1 0> <op:rs 0> <op:b 1 2 0>) 
+     7 
+     (<op:ss 1 1 1 0> <op:a 1 1 0> <op:rs 0> <op:b 1 3 0>) 
+     -3 
+     (<op:ss 1 1 1 0> <op:a 1 1 0> <op:rs 0> <op:b 1 4 0>) 
+     -2 
+     (<op:ss 1 1 1 0> <op:a 1 1 0> <op:rs 0> <op:b 1 5 0>) 
+     4 
+     (<op:ss 1 2 1 0> <op:a 1 2 0> <op:rs 0> <op:b 1 1 0>) 
+     7 
+     (<op:ss 1 2 1 0> <op:a 1 2 0> <op:rs 0> <op:b 1 2 0>) 
+     0 
+     (<op:ss 1 2 1 0> <op:a 1 2 0> <op:rs 0> <op:b 1 3 0>) 
+     3 
+     (<op:ss 1 2 1 0> <op:a 1 2 0> <op:rs 0> <op:b 1 4 0>) 
+     -6 
+     (<op:ss 1 2 1 0> <op:a 1 2 0> <op:rs 0> <op:b 1 5 0>) 
+     5 
+     (<op:ss 1 3 1 0> <op:a 1 3 0> <op:rs 0> <op:b 1 1 0>) 
+     8 
+     (<op:ss 1 3 1 0> <op:a 1 3 0> <op:rs 0> <op:b 1 2 0>) 
+     3 
+     (<op:ss 1 3 1 0> <op:a 1 3 0> <op:rs 0> <op:b 1 3 0>) 
+     0 
+     (<op:ss 1 3 1 0> <op:a 1 3 0> <op:rs 0> <op:b 1 4 0>) 
+     7 
+     (<op:ss 1 3 1 0> <op:a 1 3 0> <op:rs 0> <op:b 1 5 0>) 
+     10 
+     (<op:ss 1 4 1 0> <op:a 1 4 0> <op:rs 0> <op:b 1 1 0>) 
+     4 
+     (<op:ss 1 4 1 0> <op:a 1 4 0> <op:rs 0> <op:b 1 2 0>) 
+     -7 
+     (<op:ss 1 4 1 0> <op:a 1 4 0> <op:rs 0> <op:b 1 3 0>) 
+     7 
+     (<op:ss 1 4 1 0> <op:a 1 4 0> <op:rs 0> <op:b 1 4 0>) 
+     0 
+     (<op:ss 1 4 1 0> <op:a 1 4 0> <op:rs 0> <op:b 1 5 0>) 
+     8 
+     (<op:ss 1 5 1 0> <op:a 1 5 0> <op:rs 0> <op:b 1 1 0>) 
+     6 
+     (<op:ss 1 5 1 0> <op:a 1 5 0> <op:rs 0> <op:b 1 2 0>) 
+     2 
+     (<op:ss 1 5 1 0> <op:a 1 5 0> <op:rs 0> <op:b 1 3 0>) 
+     1 
+     (<op:ss 1 5 1 0> <op:a 1 5 0> <op:rs 0> <op:b 1 4 0>) 
+     8 
+     (<op:ss 1 5 1 0> <op:a 1 5 0> <op:rs 0> <op:b 1 5 0>) 
+     0 
+     (<op:ss 1 1 2 0> <op:a 1 1 0> <op:a 1 1 1> <op:rs 0> <op:b 1 1 0> <op:b 1 1 1>) 
+     7 
+     (<op:ss 1 1 2 0> <op:a 1 1 0> <op:a 1 1 1> <op:rs 0> <op:b 1 2 0> <op:b 1 2 1>) 
+     -1 
+     (<op:ss 1 1 2 0> <op:a 1 1 0> <op:a 1 1 1> <op:rs 0> <op:b 1 3 0> <op:b 1 3 1>) 
+     0 
+     (<op:ss 1 1 2 0> <op:a 1 1 0> <op:a 1 1 1> <op:rs 0> <op:b 1 4 0> <op:b 1 4 1>) 
+     12 
+     (<op:ss 1 2 2 0> <op:a 1 2 0> <op:a 1 2 1> <op:rs 0> <op:b 1 1 0> <op:b 1 1 1>) 
+     -1 
+     (<op:ss 1 2 2 0> <op:a 1 2 0> <op:a 1 2 1> <op:rs 0> <op:b 1 2 0> <op:b 1 2 1>) 
+     3 
+     (<op:ss 1 2 2 0> <op:a 1 2 0> <op:a 1 2 1> <op:rs 0> <op:b 1 3 0> <op:b 1 3 1>) 
+     -11 
+     (<op:ss 1 2 2 0> <op:a 1 2 0> <op:a 1 2 1> <op:rs 0> <op:b 1 4 0> <op:b 1 4 1>) 
+     -5 
+     (<op:ss 1 3 2 0> <op:a 1 3 0> <op:a 1 3 1> <op:rs 0> <op:b 1 1 0> <op:b 1 1 1>) 
+     0 
+     (<op:ss 1 3 2 0> <op:a 1 3 0> <op:a 1 3 1> <op:rs 0> <op:b 1 2 0> <op:b 1 2 1>) 
+     -11 
+     (<op:ss 1 3 2 0> <op:a 1 3 0> <op:a 1 3 1> <op:rs 0> <op:b 1 3 0> <op:b 1 3 1>) 
+     7 
+     (<op:ss 1 3 2 0> <op:a 1 3 0> <op:a 1 3 1> <op:rs 0> <op:b 1 4 0> <op:b 1 4 1>) 
+     4 
+     (<op:ss 1 4 2 0> <op:a 1 4 0> <op:a 1 4 1> <op:rs 0> <op:b 1 1 0> <op:b 1 1 1>) 
+     10 
+     (<op:ss 1 4 2 0> <op:a 1 4 0> <op:a 1 4 1> <op:rs 0> <op:b 1 2 0> <op:b 1 2 1>) 
+     0 
+     (<op:ss 1 4 2 0> <op:a 1 4 0> <op:a 1 4 1> <op:rs 0> <op:b 1 3 0> <op:b 1 3 1>) 
+     4 
+     (<op:ss 1 4 2 0> <op:a 1 4 0> <op:a 1 4 1> <op:rs 0> <op:b 1 4 0> <op:b 1 4 1>) 
+     8 
+     (<op:ss 1 1 3 0> <op:a 1 1 0> <op:a 1 1 1> <op:a 1 1 2> <op:rs 0> <op:b 1 1 0>
+      <op:b 1 1 1> <op:b 1 1 2>) 
+     -1 
+     (<op:ss 1 1 3 0> <op:a 1 1 0> <op:a 1 1 1> <op:a 1 1 2> <op:rs 0> <op:b 1 2 0>
+      <op:b 1 2 1> <op:b 1 2 2>) 
+     1 
+     (<op:ss 1 1 3 0> <op:a 1 1 0> <op:a 1 1 1> <op:a 1 1 2> <op:rs 0> <op:b 1 3 0>
+      <op:b 1 3 1> <op:b 1 3 2>) 
+     8 
+     (<op:ss 1 2 3 0> <op:a 1 2 0> <op:a 1 2 1> <op:a 1 2 2> <op:rs 0> <op:b 1 1 0>
+      <op:b 1 1 1> <op:b 1 1 2>) 
+     1 
+     (<op:ss 1 2 3 0> <op:a 1 2 0> <op:a 1 2 1> <op:a 1 2 2> <op:rs 0> <op:b 1 2 0>
+      <op:b 1 2 1> <op:b 1 2 2>) 
+     -11 
+     (<op:ss 1 2 3 0> <op:a 1 2 0> <op:a 1 2 1> <op:a 1 2 2> <op:rs 0> <op:b 1 3 0>
+      <op:b 1 3 1> <op:b 1 3 2>) 
+     -1 
+     (<op:ss 1 3 3 0> <op:a 1 3 0> <op:a 1 3 1> <op:a 1 3 2> <op:rs 0> <op:b 1 1 0>
+      <op:b 1 1 1> <op:b 1 1 2>) 
+     9 
+     (<op:ss 1 3 3 0> <op:a 1 3 0> <op:a 1 3 1> <op:a 1 3 2> <op:rs 0> <op:b 1 2 0>
+      <op:b 1 2 1> <op:b 1 2 2>) 
+     -1 
+     (<op:ss 1 3 3 0> <op:a 1 3 0> <op:a 1 3 1> <op:a 1 3 2> <op:rs 0> <op:b 1 3 0>
+      <op:b 1 3 1> <op:b 1 3 2>) 
+     4 
+     (<op:ss 1 1 4 0> <op:a 1 1 0> <op:a 1 1 1> <op:a 1 1 2> <op:a 1 1 3> <op:rs 0>
+      <op:b 1 1 0> <op:b 1 1 1> <op:b 1 1 2> <op:b 1 1 3>) 
+     1 
+     (<op:ss 1 1 4 0> <op:a 1 1 0> <op:a 1 1 1> <op:a 1 1 2> <op:a 1 1 3> <op:rs 0>
+      <op:b 1 2 0> <op:b 1 2 1> <op:b 1 2 2> <op:b 1 2 3>) 
+     11 
+     (<op:ss 1 2 4 0> <op:a 1 2 0> <op:a 1 2 1> <op:a 1 2 2> <op:a 1 2 3> <op:rs 0>
+      <op:b 1 1 0> <op:b 1 1 1> <op:b 1 1 2> <op:b 1 1 3>) 
+     11 
+     (<op:ss 1 2 4 0> <op:a 1 2 0> <op:a 1 2 1> <op:a 1 2 2> <op:a 1 2 3> <op:rs 0>
+      <op:b 1 2 0> <op:b 1 2 1> <op:b 1 2 2> <op:b 1 2 3>) 
+     -1 
+     (<op:ss 1 1 5 0> <op:a 1 1 0> <op:a 1 1 1> <op:a 1 1 2> <op:a 1 1 3>
+      <op:a 1 1 4> <op:rs 0> <op:b 1 1 0> <op:b 1 1 1> <op:b 1 1 2> <op:b 1 1 3>
+      <op:b 1 1 4>) 
+     11 
+     (<op:ss 2 1 1 0> <op:a 2 1 0> <op:rs 0> <op:b 2 1 0>) 
+     0 
+     (<op:ss 2 1 1 0> <op:a 2 1 0> <op:rs 0> <op:b 2 2 0>) 
+     2 
+     (<op:ss 2 1 1 0> <op:a 2 1 0> <op:rs 0> <op:b 2 3 0>) 
+     0 
+     (<op:ss 2 1 1 0> <op:a 2 1 0> <op:rs 0> <op:b 2 4 0>) 
+     -1 
+     (<op:ss 2 2 1 0> <op:a 2 2 0> <op:rs 0> <op:b 2 1 0>) 
+     2 
+     (<op:ss 2 2 1 0> <op:a 2 2 0> <op:rs 0> <op:b 2 2 0>) 
+     0 
+     (<op:ss 2 2 1 0> <op:a 2 2 0> <op:rs 0> <op:b 2 3 0>) 
+     -8 
+     (<op:ss 2 2 1 0> <op:a 2 2 0> <op:rs 0> <op:b 2 4 0>) 
+     4 
+     (<op:ss 2 3 1 0> <op:a 2 3 0> <op:rs 0> <op:b 2 1 0>) 
+     -6 
+     (<op:ss 2 3 1 0> <op:a 2 3 0> <op:rs 0> <op:b 2 2 0>) 
+     -8 
+     (<op:ss 2 3 1 0> <op:a 2 3 0> <op:rs 0> <op:b 2 3 0>) 
+     0 
+     (<op:ss 2 3 1 0> <op:a 2 3 0> <op:rs 0> <op:b 2 4 0>) 
+     -10 
+     (<op:ss 2 4 1 0> <op:a 2 4 0> <op:rs 0> <op:b 2 1 0>) 
+     -2 
+     (<op:ss 2 4 1 0> <op:a 2 4 0> <op:rs 0> <op:b 2 2 0>) 
+     2 
+     (<op:ss 2 4 1 0> <op:a 2 4 0> <op:rs 0> <op:b 2 3 0>) 
+     -10 
+     (<op:ss 2 4 1 0> <op:a 2 4 0> <op:rs 0> <op:b 2 4 0>) 
+     0 
+     (<op:ss 2 1 2 0> <op:a 2 1 0> <op:a 2 1 1> <op:rs 0> <op:b 2 1 0> <op:b 2 1 1>) 
+     2 
+     (<op:ss 2 1 2 0> <op:a 2 1 0> <op:a 2 1 1> <op:rs 0> <op:b 2 2 0> <op:b 2 2 1>) 
+     0 
+     (<op:ss 2 1 2 0> <op:a 2 1 0> <op:a 2 1 1> <op:rs 0> <op:b 2 3 0> <op:b 2 3 1>) 
+     5 
+     (<op:ss 2 2 2 0> <op:a 2 2 0> <op:a 2 2 1> <op:rs 0> <op:b 2 1 0> <op:b 2 1 1>) 
+     0 
+     (<op:ss 2 2 2 0> <op:a 2 2 0> <op:a 2 2 1> <op:rs 0> <op:b 2 2 0> <op:b 2 2 1>) 
+     -8 
+     (<op:ss 2 2 2 0> <op:a 2 2 0> <op:a 2 2 1> <op:rs 0> <op:b 2 3 0> <op:b 2 3 1>) 
+     -4 
+     (<op:ss 2 3 2 0> <op:a 2 3 0> <op:a 2 3 1> <op:rs 0> <op:b 2 1 0> <op:b 2 1 1>) 
+     -2 
+     (<op:ss 2 3 2 0> <op:a 2 3 0> <op:a 2 3 1> <op:rs 0> <op:b 2 2 0> <op:b 2 2 1>) 
+     -4 
+     (<op:ss 2 3 2 0> <op:a 2 3 0> <op:a 2 3 1> <op:rs 0> <op:b 2 3 0> <op:b 2 3 1>) 
+     -10 
+     (<op:ss 2 1 3 0> <op:a 2 1 0> <op:a 2 1 1> <op:a 2 1 2> <op:rs 0> <op:b 2 1 0>
+      <op:b 2 1 1> <op:b 2 1 2>) 
+     0 
+     (<op:ss 2 1 3 0> <op:a 2 1 0> <op:a 2 1 1> <op:a 2 1 2> <op:rs 0> <op:b 2 2 0>
+      <op:b 2 2 1> <op:b 2 2 2>) 
+     -3 
+     (<op:ss 2 2 3 0> <op:a 2 2 0> <op:a 2 2 1> <op:a 2 2 2> <op:rs 0> <op:b 2 1 0>
+      <op:b 2 1 1> <op:b 2 1 2>) 
+     -3 
+     (<op:ss 2 2 3 0> <op:a 2 2 0> <op:a 2 2 1> <op:a 2 2 2> <op:rs 0> <op:b 2 2 0>
+      <op:b 2 2 1> <op:b 2 2 2>) 
+     -4 
+     (<op:ss 2 1 4 0> <op:a 2 1 0> <op:a 2 1 1> <op:a 2 1 2> <op:a 2 1 3> <op:rs 0>
+      <op:b 2 1 0> <op:b 2 1 1> <op:b 2 1 2> <op:b 2 1 3>) 
+     -3 
+     (<op:ss 3 1 1 0> <op:a 3 1 0> <op:rs 0> <op:b 3 1 0>) 
+     0 
+     (<op:ss 3 1 1 0> <op:a 3 1 0> <op:rs 0> <op:b 3 2 0>) 
+     -3 
+     (<op:ss 3 1 1 0> <op:a 3 1 0> <op:rs 0> <op:b 3 3 0>) 
+     5 
+     (<op:ss 3 2 1 0> <op:a 3 2 0> <op:rs 0> <op:b 3 1 0>) 
+     -3 
+     (<op:ss 3 2 1 0> <op:a 3 2 0> <op:rs 0> <op:b 3 2 0>) 
+     0 
+     (<op:ss 3 2 1 0> <op:a 3 2 0> <op:rs 0> <op:b 3 3 0>) 
+     1 
+     (<op:ss 3 3 1 0> <op:a 3 3 0> <op:rs 0> <op:b 3 1 0>) 
+     7 
+     (<op:ss 3 3 1 0> <op:a 3 3 0> <op:rs 0> <op:b 3 2 0>) 
+     1 
+     (<op:ss 3 3 1 0> <op:a 3 3 0> <op:rs 0> <op:b 3 3 0>) 
+     0 
+     (<op:ss 3 1 2 0> <op:a 3 1 0> <op:a 3 1 1> <op:rs 0> <op:b 3 1 0> <op:b 3 1 1>) 
+     -3 
+     (<op:ss 3 1 2 0> <op:a 3 1 0> <op:a 3 1 1> <op:rs 0> <op:b 3 2 0> <op:b 3 2 1>) 
+     0 
+     (<op:ss 3 2 2 0> <op:a 3 2 0> <op:a 3 2 1> <op:rs 0> <op:b 3 1 0> <op:b 3 1 1>) 
+     0 
+     (<op:ss 3 2 2 0> <op:a 3 2 0> <op:a 3 2 1> <op:rs 0> <op:b 3 2 0> <op:b 3 2 1>) 
+     1 
+     (<op:ss 3 1 3 0> <op:a 3 1 0> <op:a 3 1 1> <op:a 3 1 2> <op:rs 0> <op:b 3 1 0>
+      <op:b 3 1 1> <op:b 3 1 2>) 
+     0 
+     #+end_example
+
+*** Swap subroutes operation
+**** Description
+    This operation takes as its arguments both the select
+    subroute operations indentifiers and, interchange both
+    subroutes.
+
+**** Computing the neighborhood cardinality
+***** Code
+      
+      #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+	(with-basic-solution (s1 ((1 2 3 4 5)
+				  (6 7 8 9)
+				  (10 11 12)))
+	  (let* (;; here you define the neighborhood criteria
+		 (code `((select-route r1)
+			 (select-subroute z1 from r1)
+			 (select-route r2)
+			 (select-subroute z2 from r2)
+			 (swap-subroutes z1 z2))))
+	    ;; here you build the neighborhood tree and then get the total number
+	    ;; of neighbor solutions from its root node
+	    (cardinality (build-neighborhood-tree code s1))))
+     #+END_SRC
+     
+***** Test
+
+      #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+	(with-basic-solution (s1 ((1 2 3 4 5) 
+				  (6 7 8 9)
+				  (10 11 12)))
+	  (let* ((wc (basic-working-copy s1))
+		 (ops-list nil)
+		 (total 0))
+    
+	    (prepare-solution-for-neighborhood-exploration wc)
+    
+	    (doselect-route (r1 wc)
+	      (doselect-subroute (z1 r1 wc)
+		(doselect-route (r2 wc)
+		  (doselect-subroute (z2 r2 wc)
+		    (doswap-subroutes (z1 z2 wc)
+	      
+		      (incf total))))))
+	    total))
+      #+END_SRC
+**** Exhaustive exploration
+***** Code
+      
+      #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+	(with-basic-solution (s1 ((1 2 3 4 5)
+				  (6 7 8 9)
+				  (10 11 12)))
+	  (let* (;; here you define the neighborhood criteria
+		 (code `((select-route r1)
+			 (select-subroute z1 from r1)
+			 (select-route r2)
+			 (select-subroute z2 from r2)
+			 (swap-subroutes z1 z2)))
+		 ;; here we create the neighborhood tree
+		 (neigh (build-neighborhood-tree code s1))
+		 ;; here we crete the exhaustive generator
+		 (sol-generator (exhaustive-exploration neigh)))
+	    ;; this line has to be added to use the customize indexer
+	    (prepare-neighborhood-for-exploration neigh)
+	    ;; print all solutions in the neighborhhod
+	    (loop while t
+	       doing
+		 (let ((cur-sol (funcall sol-generator)))
+		   (when (null cur-sol)
+		     (return))
+		   (format t "~A~%" cur-sol)))))
+      #+END_SRC
+
+***** Test
+
+      #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+	(with-basic-solution (s1 ((1 2 3 4 5) 
+				  (6 7 8 9)
+				  (10 11 12)))
+	  (let* ((wc (basic-working-copy s1))
+		 (ops-list nil)
+		 (total 0))
+
+	    (prepare-solution-for-neighborhood-exploration wc)
+
+	    (doselect-route (r1 wc)
+	      (doselect-subroute (z1 r1 wc)
+		(doselect-route (r2 wc)
+		  (doselect-subroute (z2 r2 wc)
+		    (doswap-subroutes (z1 z2 wc)	      
+		      (incf total)
+		      (print (reverse ops-list)))))))
+	    total))
+      #+END_SRC
+
+**** Combinatorial exploration
+***** Code
+      
+      #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+	(with-basic-solution (s1 ((1 2 3 4 5)
+				  (6 7 8 9)
+				  (10 11 12)))
+	  (let* (;; here you define the neighborhood criteria
+		 (code `((select-route r1)
+			 (select-subroute z1 from r1)
+			 (select-route r2)
+			 (select-subroute z2 from r2)
+			 (swap-subroutes z1 z2)))
+		 ;; here we create the neighborhood tree
+		 (neigh (build-neighborhood-tree code s1))
+		 ;; here we crete the exhaustive generator
+		 (sol-generator (combinatorial-exploration neigh)))
+	    ;; this line has to be added to use the customize indexer
+	    (prepare-neighborhood-for-exploration neigh)
+	    ;; print all solutions in the neighborhhod
+	    (loop while t
+	       doing
+		 (let ((cur-sol (funcall sol-generator)))
+		   (when (null cur-sol)
+		     (return))
+		   (format t "~A~%" cur-sol)))))
+      #+END_SRC
+
+***** Test
+
+      #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+	(with-basic-solution (s1 ((1 2 3 4 5) 
+				  (6 7 8 9)
+				  (10 11 12)))
+	  (let* ((wc (basic-working-copy s1))
+		 (ops-list nil)
+		 (total 0))
+
+	    (prepare-solution-for-neighborhood-exploration wc)
+
+	    (doselect-route (r1 wc)
+	      (doselect-subroute (z1 r1 wc)
+		(doselect-route (r2 wc)
+		  (doselect-subroute (z2 r2 wc)
+		    (doswap-subroutes (z1 z2 wc)	      
+		      (incf total)
+		      (print (reverse ops-list)))))))
+	    total))
+      #+END_SRC
+
+**** Computing delta cost
+***** Code
+      
+      #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+	(with-cvrp-problem (p1 :distances `((0 2 3 4 5 6 3 4 7 8 3 2 5)  ;0
+					    (5 0 6 7 2 4 6 7 8 3 2 5 8)  ;1
+					    (1 8 0 3 9 1 2 1 4 7 9 4 2)  ;2
+					    (4 5 1 0 5 7 3 8 5 3 1 7 9)  ;3
+					    (4 5 1 5 0 6 3 9 7 4 1 6 7)  ;4
+					    (1 5 7 6 9 0 9 3 7 5 1 8 4)  ;5
+					    (3 2 3 4 5 6 0 4 7 8 3 2 5)  ;6
+					    (5 7 6 7 2 4 6 0 8 3 2 5 8)  ;7
+					    (1 8 4 3 9 1 2 1 0 7 9 4 2)  ;8
+					    (4 5 1 3 5 7 3 8 5 0 1 7 9)  ;9
+					    (4 5 1 5 1 6 3 9 7 4 0 6 7)  ;10
+					    (1 5 7 6 9 8 9 3 7 5 1 0 4)  ;11
+					    (1 8 2 3 9 1 2 1 4 7 9 4 0)) ;12
+					    ;0 1 2 3 4 5 6 7 8 9 10 11 12 
+			       :demands '(10 10 15 40 20 15 25 35 30 10 20 40)
+			       :capacity 40)
+	  (with-basic-cvrp-solution (s1 ((1 2 3 4 5)
+					 (6 7 8 9)
+					 (10 11 12))
+					p1)
+	    ;; code here
+	    (let* (
+		   ;; :neigh system stuff
+		   ;; here you define the neighborhood criteria
+		   (code `((select-route r1)
+			   (select-subroute z1 from r1)
+			   (select-route r2)
+			   (select-subroute z2 from r2)
+			   (swap-subroutes z1 z2)))	   
+		   ;; here we create the neighborhood tree
+		   (neigh (build-neighborhood-tree code s1))
+		   ;; here we crete the exahustive generator
+		   (sol-generator (exhaustive-exploration neigh))
+
+		   ;; :vrp system stuff
+		   (wc (basic-working-copy s1))
+		   (current-delta-cost 0)
+		   (action (delta-cvrp-action)))
+	      ;; this line has to be added to use the customize indexer
+	      (prepare-neighborhood-for-exploration neigh)
+
+	      (prepare-solution-for-neighborhood-exploration wc)
+	      ;; this is the line added to be able
+	      ;; to compute the delta-cost.
+	      (initialize-action-for-delta-cost-computation wc p1 action)
+
+	      (bformat t "Testing rehf with the :neigh system.")
+
+	      (loop while t
+		 do
+		   (let ((current-sol (funcall sol-generator)))
+		     (when (null current-sol)
+		       (return))
+		     (setf current-delta-cost (delta-cost (from-coordinates-to-operations current-sol)
+							  wc ;; the working-copy
+							  p1 ;; the problem
+							  action ;; the action
+							  ))
+		     (print (from-coordinates-to-operations current-sol))
+		     (print current-delta-cost)
+		     (setf current-sol (funcall sol-generator)))))))
+     #+END_SRC
+
+***** Test
+
+      #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+	(with-cvrp-problem (p1 :distances `((0 2 3 4 5 6 3 4 7 8 3 2 5)  ;0
+					    (5 0 6 7 2 4 6 7 8 3 2 5 8)  ;1
+					    (1 8 0 3 9 1 2 1 4 7 9 4 2)  ;2
+					    (4 5 1 0 5 7 3 8 5 3 1 7 9)  ;3
+					    (4 5 1 5 0 6 3 9 7 4 1 6 7)  ;4
+					    (1 5 7 6 9 0 9 3 7 5 1 8 4)  ;5
+					    (3 2 3 4 5 6 0 4 7 8 3 2 5)  ;6
+					    (5 7 6 7 2 4 6 0 8 3 2 5 8)  ;7
+					    (1 8 4 3 9 1 2 1 0 7 9 4 2)  ;8
+					    (4 5 1 3 5 7 3 8 5 0 1 7 9)  ;9
+					    (4 5 1 5 1 6 3 9 7 4 0 6 7)  ;10
+					    (1 5 7 6 9 8 9 3 7 5 1 0 4)  ;11
+					    (1 8 2 3 9 1 2 1 4 7 9 4 0)) ;12
+					    ;0 1 2 3 4 5 6 7 8 9 10 11 12 
+			       :demands '(10 10 15 40 20 15 25 35 30 10 20 40)
+			       :capacity 40)
+	  (with-basic-cvrp-solution (s1 ((1 2 3 4 5)
+					 (6 7 8 9)
+					 (10 11 12))
+					p1)
+	    ;; code here
+	    (let* (
+		   ;; :vrp system stuff
+		   (wc (basic-working-copy s1))
+		   (ops-list nil)
+		   (current-delta-cost 0)
+		   (action (delta-cvrp-action)))
+
+	      (prepare-solution-for-neighborhood-exploration wc)
+	      ;; this is the line added to be able
+	      ;; to compute the delta-cost.
+	      (initialize-action-for-delta-cost-computation wc p1 action)
+
+	      (bformat t "Testing rehf with the :neigh system.")
+
+	      (doselect-route (r1 wc)
+		(doselect-subroute (z1 r1 wc)
+		  (doselect-route (r2 wc)
+		    (doselect-subroute (z2 r2 wc)
+		      (doswap-subroutes (z1 z2 wc)
+		
+			(setf current-delta-cost (delta-cost (reverse ops-list)
+							     wc ;; the working-copy
+							     p1 ;; the problem
+							     action ;; the action
+							     ))
+			(print (reverse ops-list))
+			(print current-delta-cost)))))))))
+     #+END_SRC
+
+* Computing cardinality for all emno neighborhoods
+  The next code code compute the number of solutions on every neighborhood generated for 
+  data in emno event.
+
+   #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+     (loop for code in *emno-neighborhood-criteria*
+	doing
+	  (loop for i from 1 to 3
+	     doing
+	       (loop for j from 1 to 10
+		  doing
+		    (let* ((solution (nth (1- j) (nth (1- i) *emno-problem-solutions*)))
+			   (neighborhood (build-neighborhood-tree code solution)))
+		      (format t "Cardinality: ~A~%" (cardinality neighborhood))))))
+    #+END_SRC
+
+* Generate neighborhood clients:routes => regions
+  The next code defines a way to compute the number of regions in a neighborhood of the VRP.
+  It is also printed the number of clients and routes for the given problem. It Worth mentioning
+  that for this type of analysis it is always used the customize indexer since a processing in
+  the regions is performed.
+
+   #+BEGIN_SRC lisp
+     (loop for code in *emno-neighborhood-criteria*
+	doing
+	  (loop for i from 1 to 3
+	     doing
+	       (loop for j from 1 to 10
+		  doing
+		    (let* ((problem (nth (1- i) *emno-problems*))
+			   (solution (nth (1- j) (nth (1- i) *emno-problem-solutions*)))
+			   (neigh (build-neighborhood-tree code solution)))
+		      (prepare-neighborhood-for-exploration neigh)
+		      (format t "~A:~A => ~A~%"
+			      (length (clients problem))
+			      (length (routes solution))
+			      (number-of-regions neigh))))))
+   #+END_SRC
+
+* Performing a two phase exploration in a VRP neighborhood
+  In this section I'll define some example of how to use the two-phase
+  generator. For this we'll use a fixed example and other bigger defined
+  in the file =neigh-data.lisp=.
+  
+
+   Example 1: a tiny example with a defined problem and solution
+    #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+      (with-cvrp-problem (problem :distances `((0 2 3 4 5 6)  ;0
+					       (5 0 6 7 2 4)  ;1
+					       (1 8 0 3 9 1)  ;2
+					       (4 5 1 0 5 7)  ;3
+					       (4 5 1 5 0 6)  ;4
+					       (1 5 7 6 9 0)) ;5
+					      ;0 1 2 3 4 5 
+				  :demands '(10 10 15 40 20)
+				  :capacity 40)
+	(with-basic-cvrp-solution (solution ((2 4 5) (3) (1)) problem)
+	  ;; code here
+	  (let* (
+		 ;; here you define the neighborhood criteria
+		 (code `((select-route r1)
+			 (select-route r2)
+			 (select-client c1 from r1)
+			 (select-client c2 from r2)
+			 (swap-clients c1 c2)))
+		 ;; here we create the neighborhood
+		 (neighborhood (build-neighborhood-tree code solution problem))
+		 ;; here we define the two phase exploration generator
+		 (two-phase-gen (exploration-exploitation-algorithm neighborhood)))
+	    ;; this line has to be added to use the customize indexer
+	    (prepare-neighborhood-for-exploration neighborhood)
+	    ;; print all solutions in the neighborhood
+	    (loop while t
+	       doing
+		 (multiple-value-bind (cur-sol cur-cost) (funcall two-phase-gen)
+		   (when (not cur-sol)
+		     (return))
+		   (format t "~A : ~A~%" cur-sol cur-cost))))))
+   #+END_SRC
+
+   #+RESULTS:
+   #+begin_example
+   (<op:a 1 1 0> <op:a 1 1 1> <op:b 1 1 0> <op:b 1 1 1>) : -11
+   (<op:a 1 1 0> <op:a 2 1 1> <op:b 2 1 0> <op:b 1 1 1>) : 4993
+   (<op:a 1 1 0> <op:a 3 1 1> <op:b 3 1 0> <op:b 1 1 1>) : -11
+   (<op:a 2 1 0> <op:a 1 2 1> <op:b 1 2 0> <op:b 2 1 1>) : -25004
+   (<op:a 2 1 0> <op:a 3 1 1> <op:b 3 1 0> <op:b 2 1 1>) : 0
+   (<op:a 3 1 0> <op:a 1 1 1> <op:b 1 1 0> <op:b 3 1 1>) : -11
+   (<op:a 3 1 0> <op:a 2 1 1> <op:b 2 1 0> <op:b 3 1 1>) : 0
+   (<op:a 1 3 0> <op:a 1 1 1> <op:b 1 2 1> <op:b 1 1 0>) : -2
+   (<op:a 1 2 0> <op:a 2 1 1> <op:b 2 1 0> <op:b 1 2 1>) : -25004
+   (<op:a 1 3 0> <op:a 3 1 1> <op:b 3 1 0> <op:b 1 3 1>) : -9997
+   (<op:a 2 1 0> <op:a 1 1 1> <op:b 1 1 0> <op:b 2 1 1>) : 4993
+   (<op:a 3 1 0> <op:a 1 3 1> <op:b 1 3 0> <op:b 3 1 1>) : -9997
+   (<op:a 1 1 0> <op:a 1 2 1> <op:b 1 2 0> <op:b 1 1 1>) : -2
+   (<op:a 1 3 0> <op:a 2 1 1> <op:b 2 1 0> <op:b 1 3 1>) : -4999
+   (<op:a 1 2 0> <op:a 3 1 1> <op:b 3 1 0> <op:b 1 2 1>) : -30001
+   (<op:a 2 1 0> <op:a 1 3 1> <op:b 1 3 0> <op:b 2 1 1>) : -4999
+   (<op:a 3 1 0> <op:a 1 2 1> <op:b 1 2 0> <op:b 3 1 1>) : -30001
+   (<op:a 1 3 0> <op:a 1 2 1> <op:b 1 2 1> <op:b 1 2 0>) : -2
+   (<op:a 1 2 0> <op:a 1 2 1> <op:b 1 2 0> <op:b 1 2 1>) : -2
+   (<op:a 1 2 0> <op:a 1 1 1> <op:b 1 1 1> <op:b 1 1 0>) : -11
+   #+end_example
+
+   Example2: a bigger example with problem, solution and code defined in =neigh-data.lisp= file.
+   #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+     (let* (
+	    ;; here we define the problem
+	    (problem (first *emno-problems*))
+	    ;; here we define the solution
+	    (solution (first (first *emno-problem-solutions*)))
+	    ;; here we define the criterion
+	    (code (first *emno-neighborhood-criteria*))
+	    ;; here we create the neighborhood
+	    (neighborhood (build-neighborhood-tree code solution problem))
+	    ;; here we define the two phase exploration generator
+	    (two-phase-gen (exploration-exploitation-algorithm neighborhood)))
+       ;; this line has to be added to use the customize indexer
+       (prepare-neighborhood-for-exploration neighborhood)
+       ;; print all solutions in the neighborhood
+       (loop while t
+	  doing
+	    (multiple-value-bind (cur-sol cur-cost) (funcall two-phase-gen)
+	      (when (not cur-sol)
+		(return))
+	      (format t "~A : ~A~%" cur-sol cur-cost))))
+   #+END_SRC
+
+* Compare the number of better neighbors reached by the proposed algorithm and an uniform exploration
+  In this section we run the two-phase exploration exploitation algorithm with an uniform exploration of a neighborhood by counting the number of improvements found by each algorithm.
+
+   Exploration-exploitation algorithm:
+   #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+     (let* (
+	    ;; here we define the problem
+	    (problem a-n80-k10-problem))
+       ;; here we define the solution
+       (with-basic-cvrp-solution (solution ((5 6 37 2 1)
+					    (62 23 11 10 7 40)
+					    (21 18 48 52 17 31 66)
+					    (13 29 27 20 41 25 33 46 15 64 53)
+					    (77 30 24 34 79 28 63 71)
+					    (76 50 32 4 22 45)
+					    (14 8 16 61 57 75 26 35 65 56 55 51)
+					    (42 3 70 67 58 38 49)
+					    (73 72 54 9 69 47 19 43 68 78 74)
+					    (39 60 59 44 12 36))
+					   a-n80-k10-problem)
+	 (let* (
+		;; here we define the criterion
+		(code (first *emno-neighborhood-criteria*))
+		;; here we create the neighborhood
+		(neighborhood (build-neighborhood-tree code solution problem))
+		;; here we define the two phase exploration generator
+		(two-phase-gen (exploration-exploitation-algorithm neighborhood))
+		;; here we define the number of improvements reached
+		(number-of-better-neighbors 0))
+	   ;; this line has to be added to use the customize indexer
+	   (prepare-neighborhood-for-exploration neighborhood)
+	   ;; print all solutions in the neighborhood
+	   (loop while t
+	      doing
+		(multiple-value-bind (cur-sol cur-cost) (funcall two-phase-gen)
+		  (when (not cur-sol)
+		    (return))
+		  (when (< cur-cost 0)
+		    (incf number-of-better-neighbors))))
+	   number-of-better-neighbors)))
+   #+END_SRC
+
+   Uniform exploration:
+   #+BEGIN_SRC lisp +n -r :results output :exports both.lisp
+     (let* (
+	    ;; here we define the problem
+	    (problem a-n80-k10-problem))
+	    ;; here we define the solution
+	    (with-basic-cvrp-solution (solution ((5 6 37 2 1)
+						 (62 23 11 10 7 40)
+						 (21 18 48 52 17 31 66)
+						 (13 29 27 20 41 25 33 46 15 64 53)
+						 (77 30 24 34 79 28 63 71)
+						 (76 50 32 4 22 45)
+						 (14 8 16 61 57 75 26 35 65 56 55 51)
+						 (42 3 70 67 58 38 49)
+						 (73 72 54 9 69 47 19 43 68 78 74)
+						 (39 60 59 44 12 36))
+						a-n80-k10-problem)
+	      (let* (
+		     ;; here we define the criterion
+		     (code (first *emno-neighborhood-criteria*))
+		     ;; here we create the neighborhood
+		     (neighborhood (build-neighborhood-tree code solution problem))
+		     ;; here we define the two phase exploration generator
+		     (uni-gen (uniform-exploration neighborhood (* *linear-constant-in-total-to-explore*
+								   (expt (length (clients problem)) 2))))
+		     ;; here we define the number of improvements reached
+		     (number-of-better-neighbors 0)
+		     ;; :vrp system stuff
+		      (work-cop (basic-working-copy solution))
+		      (action (delta-cvrp-action))
+		     )
+
+		(prepare-solution-for-neighborhood-exploration work-cop)
+		;; this is the line added to be able
+		;; to compute the delta-cost.
+		(initialize-action-for-delta-cost-computation work-cop problem action)
+		;; this line has to be added to use the customize indexer
+		(prepare-neighborhood-for-exploration neighborhood)
+		;; print all solutions in the neighborhood
+		(loop while t
+		   doing
+		     (let ((cur-sol  (funcall uni-gen)))
+		       (when (not cur-sol)
+			 (return))
+		       (let* (
+			      ;; here we compute the operation list for this coordinates
+			      (current-ops-list (from-coordinates-to-operations cur-sol))
+			      ;; here we compute the delta cost for this operations
+			      (current-delta-cost (delta-cost current-ops-list ;; the operation list
+							      work-cop         ;; the working copy
+							      problem          ;; the problem
+							      action           ;; the action
+							      ))) 
+			 (when (< current-delta-cost 0)
+			   (incf number-of-better-neighbors)))))
+		number-of-better-neighbors)))
+   #+END_SRC

@@ -1,0 +1,774 @@
+#+TITLE: Neighborhood Exploration
+#+AUTHOR: Hector F. Masso#+EMAIL: h.masson1911@gmail.com
+
+
+
+* Description
+  In this file, I'm going to introduce the code for explore the neighborhood
+  produced by applying the neighbothood criterion to the given solution of the VRP.
+  All these types of exploration use the /neighborhood-tree/.
+  The src blocks will be tangled to ../src/neigh-exploration.lisp.
+
+
+* Add the package to the tangled files
+  #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-exploration.lisp 
+    (in-package :vrp)
+  #+END_SRC
+
+
+* Functions for random number generation in an interval
+  In this section I'll define some functions to generate numbers in an interval or 
+  elements of a list without repetitiom and following an uniform distribution.
+
+** Generate a random number in the interval [start;end]
+   This functions returns an integer random number in the interval [start;end].
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-exploration.lisp 
+     (defun random-from-range (start end)
+       (+ start (random (1+ (- end start)))))
+   #+END_SRC
+
+** Generate an uniform random variation from the interval [start;end]
+   This function returns a number generator, when /funcall/ is used over it returns the
+   next number or /nil/ if it ran out of numbers.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-exploration.lisp 
+     (defun random-sample-from-range (start end &optional mapper position)
+       (let ((mapp (if (null mapper) (make-hash-table) mapper))
+	     (index 0)
+	     (pos (if (null position) 0 position))
+	     (total (1+ (- end start))))
+	 #'(lambda ()
+	     (if (>= pos total)
+		 nil
+		 (progn
+		   ;; get a random-number in the interval [(start+pos);end]
+		   (setf index (random-from-range (+ start pos) end))
+		   ;; get the content in the index-th position of the list
+		   (multiple-value-bind (content in-use) (gethash index mapp)
+		     ;; get the content in the actual[(start+pos)-th] position of the list
+		     (multiple-value-bind (pos-content pos-in-use) (gethash (+ start pos) mapp)
+		       ;; if the actual position is in use:
+		       (if pos-in-use
+			   ;; then we have to set the index-th content equal to the content of the actual position
+			   (setf (gethash index mapp) pos-content)
+			   ;; else we have to set the index-th conent equal to (start+pos)
+			   (setf (gethash index mapp) (+ start pos))))
+		     ;; here lets increment the position
+		     (incf pos)
+		     ;; return the next number
+		     (if in-use
+			 content
+			 index)))))))
+   #+END_SRC
+
+** Generate an uniform random variation from a list
+   This function takes a list of elements and creates a generator that returns the list's 
+   elements with an uniform distribution or /nil/, if it has computed all the list's elements.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-exploration.lisp 
+     (defun uniform-generator-from-list (elements-list)
+       (let ((generator (random-sample-from-range 1 (length elements-list)))
+	     (value nil))
+	 #'(lambda ()
+	     (setf value (funcall generator))
+	     (if (null value)
+		 nil
+		 (nth (1- value) elements-list)))))
+   #+END_SRC
+
+* Classic exploration strategies
+  In this section some classical strategies to explore a given set of neighbor solutions
+  are defined. This strategies don't assume any property about that neighborhood.
+
+** Exhaustive exploration
+   In this section I'll define a function to explore the neighborhood in an exhaustive way.
+   This function builds a generator, that returns a coordinate list for each neighbor solution
+   in the interval [1;neigh-cardinality] or /nil/ if all solutions have been explored.
+  
+   Note: I am assuming that first-index <= last-index.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-exploration.lisp 
+     (defmethod exhaustive-search ((obj neighborhood-tree))
+       (let* ((mapper (solution-mapper (search-state obj)))
+	      (first-index 1)
+	      (last-index (cardinality obj))
+	      (index (+ first-index (number-of-analysed-solutions (search-state obj)))))
+
+	 #'(lambda ()
+	     (if (> index last-index)
+		 nil
+		 ;; get the content in the index-th position of the list
+		 (multiple-value-bind (content in-use) (gethash index mapper)
+		   (incf (number-of-analysed-solutions (search-state obj)))
+		   (if in-use
+		       ;; then we are going to return the content-th solution
+		       (prog1
+			   (from-index-to-coord-list obj content)
+			 (incf index))
+		       ;; else we are going to return the index-th solution
+		       (prog1
+			   (from-index-to-coord-list obj index)
+			 (incf index))))))))
+
+     (defmethod exhaustive-search ((obj neighborhood-region))
+       (let* ((mapper (solution-mapper (search-state obj)))
+	      (first-index (car (index-range obj)))
+	      (last-index (cdr (index-range obj)))
+	      (index (+ first-index (number-of-analysed-solutions (search-state obj)))))
+
+	 #'(lambda ()
+	     (if (> index last-index)
+		 nil
+		 ;; get the content in the index-th position of the list
+		 (multiple-value-bind (content in-use) (gethash index mapper)
+		   (incf (number-of-analysed-solutions (search-state obj)))
+		   (if in-use
+		       ;; then we are going to return the content-th solution
+		       (prog1
+			   (from-index-to-coord-list (neighborhood obj) content)
+			 (incf index))
+		       ;; else we are going to return the index-th solution
+		       (prog1
+			   (from-index-to-coord-list (neighborhood obj) index)
+			 (incf index))))))))
+   #+END_SRC
+
+** Random exploration
+   In this section I'll define a function to explore the neighborhood in a random way.
+   This function builds a generator, that returns a coordinate list for =n= random neighboors or /nil/ if =n= solutions has been explored.
+  
+   Note: I am assuming that first-index <= last-index.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-exploration.lisp 
+     (defmethod random-search ((obj neighborhood-tree) n)
+       (let* ((mapper (solution-mapper (search-state obj)))
+	      (count 1)
+	      (index (+ 1 (random (cardinality obj)))))
+
+	 #'(lambda ()
+	     (if (> count n)
+		 nil
+		 ;; get the content in the index-th position of the list
+		 (multiple-value-bind (content in-use) (gethash index mapper)
+		   (incf (number-of-analysed-solutions (search-state obj)))
+		   (if in-use
+		       ;; then we are going to return the content-th solution
+		       (prog1
+			   (from-index-to-coord-list obj content)
+			 (setf index (+ 1 (random (cardinality obj))))
+			 (incf count))
+		       ;; else we are going to return the index-th solution
+		       (prog1
+			   (from-index-to-coord-list obj index)
+			 (setf index (+ 1 (random (cardinality obj))))
+			 (incf count))))))))
+
+;;     (defmethod exhaustive-search ((obj neighborhood-region))
+;;       (let* ((mapper (solution-mapper (search-state obj)))
+;;	      (first-index (car (index-range obj)))
+;;	      (last-index (cdr (index-range obj)))
+;;	      (index (+ first-index (number-of-analysed-solutions (search-state obj)))))
+;;
+;;	 #'(lambda ()
+;;	     (if (> index last-index)
+;;		 nil
+;;		 ;; get the content in the index-th position of the list
+;;		 (multiple-value-bind (content in-use) (gethash index mapper)
+;;		   (incf (number-of-analysed-solutions (search-state obj)))
+;;		   (if in-use
+;;		       ;; then we are going to return the content-th solution
+;;		       (prog1
+;;			   (from-index-to-coord-list (neighborhood obj) content)
+;;			 (incf index))
+;;		       ;; else we are going to return the index-th solution
+;;		       (prog1
+;;			   (from-index-to-coord-list (neighborhood obj) index)
+;;			 (incf index))))))))
+   #+END_SRC
+
+
+** Uniform exploration
+   In this section I'll define a function to explore the neighborhood in an uniform way.
+   This function builds a generator, that returns a coordinate list uniformly in the interval
+   [first-index;last-index] or nil if all the neighbor solutions in this interval have been 
+   computed.
+
+   Note: I am assuming that first-index <= last-index.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-exploration.lisp 
+   (defmethod uniform-search ((obj neighborhood-tree))
+     (let ((uniform-number-iterator (random-sample-from-range 1
+                                                              (cardinality obj)
+                                                              (solution-mapper (search-state obj))
+                                                              (number-of-analysed-solutions (search-state obj)))))
+       #'(lambda ()
+           (let ((index (funcall uniform-number-iterator)))
+             (if (null index)
+                 nil
+                 (progn
+                   (incf (number-of-analysed-solutions (search-state obj)))
+                   (from-index-to-coord-list obj index)))))))
+
+   (defmethod uniform-search ((obj neighborhood-region))
+     (let ((uniform-number-iterator (random-sample-from-range (car (index-range obj))
+                                                              (cdr (index-range obj))
+                                                              (solution-mapper (search-state obj))
+                                                              (number-of-analysed-solutions (search-state obj)))))
+       #'(lambda ()
+           (let ((index (funcall uniform-number-iterator)))
+             (if (null index)
+                 nil
+                 (progn
+                   (incf (number-of-analysed-solutions (search-state obj)))
+                   (from-index-to-coord-list (neighborhood obj) index)))))))
+   #+END_SRC
+
+
+* Some functions for customize exploration
+
+** Computing the list of region cardinalities
+   This generic function works as a generator that returns the cardinality for each region or nil
+   if all cardinalities were computed.
+    
+*** Methods
+    These methods compute the total number of solutions in the current region or 
+    branch in the /neighborhood-tree/.
+
+**** Root-node
+
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-exploration.lisp 
+       (defmethod branch-cardinality ((tree root-node)
+				      ops index branch)
+	 (if (null (child tree))
+	     ;; it means that there isn't any branch in the tree
+	     (values tree nil 1 nil)
+	     (if (null index)
+		 ;; it means that we are going down in the tree so we continue traversing for its child
+		 (branch-cardinality (child tree) (cons '* ops) nil branch)
+		 ;; it means that we have processed all branches in the tree
+		 (values tree nil 1 nil nil))))
+     #+END_SRC
+
+**** R-node
+
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-exploration.lisp 
+       (defmethod branch-cardinality ((tree r-node)
+				      ops index branch)
+	 (if (null index)
+	     ;; it means that we are going down in the tree so we continue traversing for the first child
+	     (branch-cardinality (car (first (children tree)))
+				 ops nil (cons (cons 'r 1) branch))
+	     ;; it means that we are going up in the tree so we continue traversing for the next child, 
+	     ;; when we reach the last one we return to this node's parent
+	     (if (< index (length (children tree)))
+		 (branch-cardinality (car (nth index (children tree)))
+				     ops nil (cons (cons 'r (1+ index)) (rest branch)))
+		 (branch-cardinality (parent tree)
+				     ops (at-parent tree) (rest branch)))))
+     #+END_SRC
+
+**** A-node
+
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-exploration.lisp 
+       (defmethod branch-cardinality ((tree a-node)
+				      ops index branch)
+	 (let ((poss (possibilities tree)))
+	   (if (null index)
+	       ;; it means that we are going down in the tree so we push the number of possibilities on
+	       ;; this node to /ops/ and continue traversing down
+	       (branch-cardinality (child tree) (cons poss ops) nil branch)
+	       ;; it means that we are going up in the tree so we continue traversing up
+	       (branch-cardinality (parent tree) (rest ops) (at-parent tree) branch))))
+     #+END_SRC
+
+**** B-node
+
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-exploration.lisp 
+       (defmethod branch-cardinality ((tree b-node)
+				      ops index branch)
+	 (let ((poss (possibilities tree)))
+	   (if (null index)
+	       ;; it means that we are going down in the tree so we push the number of possibilities on this node
+	       ;; to /ops/ and continue traversing down
+	       (branch-cardinality (child tree) (cons poss ops) nil branch)
+	       ;; it means that we are going up in the tree so we continue traversing up
+	       (branch-cardinality (parent tree) (rest ops) (at-parent tree) branch))))
+     #+END_SRC
+
+**** C-node
+
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-exploration.lisp 
+       (defmethod branch-cardinality ((tree c-node)
+				      ops index branch)
+	 (if (null index)
+	     ;; it means that we are going down in the tree so we continue going down
+	     (branch-cardinality (child tree) ops nil branch)
+	     ;; it means that we are going up in the tree so we continue to node's parent
+	     (branch-cardinality (parent tree) ops (at-parent tree) branch)))
+     #+END_SRC
+
+**** E-node
+
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-exploration.lisp 
+       (defmethod branch-cardinality ((tree e-node)
+				      ops index branch)
+	 (if (null index)
+	     ;; it means that we are going down in the tree so we continue traversing for the first child
+	     (let ((poss (cdr (second (first (children tree))))))
+	       (branch-cardinality (car (first (children tree)))
+				   (cons poss ops) nil
+				   (cons (cons 'e 1) branch)))
+	     ;; it means that we are going up in the tree so we continue traversing for the next child,
+	     ;; when we reach the last one we return to this node's parent
+	     (let ((poss (cdr (second (nth index (children tree))))))
+	       (if (< index (length (children tree)))
+		   (branch-cardinality (car (nth index (children tree)))
+				       (cons poss (rest ops)) nil
+				       (cons (cons 'e (1+ index)) (rest branch)))
+		   (branch-cardinality (parent tree)
+				       (rest ops) (at-parent tree)
+				       (rest branch))))))
+     #+END_SRC
+
+**** F-node
+
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-exploration.lisp 
+       (defmethod branch-cardinality ((tree f-node)
+				      ops index branch)
+	 (let ((poss (possibilities tree)))
+	   (if (null index)
+	       ;; it means that we are going down in the tree so we push the number of possibilities on this node
+	       ;; to /ops/ and continue traversing down
+	       (branch-cardinality (child tree) (cons poss ops) nil branch)
+	       ;; it means that we are going up in the tree so we continue traversing up
+	       (branch-cardinality (parent tree) (rest ops) (at-parent tree) branch))))
+     #+END_SRC
+
+**** G-node
+
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-exploration.lisp 
+       (defmethod branch-cardinality ((tree g-node)
+				      ops index branch)
+	 (if (null index)
+	     ;; it means that we are going down in the tree so we continue going down
+	     (branch-cardinality (child tree) ops nil branch)
+	     ;; it means that we are going up in the tree so we continue to node's parent
+	     (branch-cardinality (parent tree) ops (at-parent tree) branch)))
+     #+END_SRC
+
+**** H-node
+
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-exploration.lisp 
+       (defmethod branch-cardinality ((tree h-node)
+				      ops index branch)
+	 (if (null index)
+	     ;; it means that we are going down in the tree so we continue going down
+	     (branch-cardinality (child tree) ops nil branch)
+	     ;; it means that we are going up in the tree so we continue to node's parent
+	     (branch-cardinality (parent tree) ops (at-parent tree) branch)))
+     #+END_SRC
+
+**** Nil-node
+
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-exploration.lisp 
+       (defmethod branch-cardinality ((tree nil-node)
+				      ops index branch)
+	 (if (null index)
+	     ;; it means that we are going down in the tree an we return the current /operaions list/
+	     (values tree ops (at-parent tree) branch)
+	     ;; it means that we are going up in the tree an we return to node's parent
+	     (branch-cardinality (parent tree) ops (at-parent tree) branch)))
+     #+END_SRC
+
+*** Wrapper function
+    This functions works as a wrapper to save the generator's state, and as a index range generator
+    for a given /neighborhood-tree/.
+    
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-exploration.lisp 
+      (defun branch-definitions (tree)
+	(let ((cur-node tree)
+	      cur-branch
+	      cur-ops
+	      going-up)
+	  #'(lambda ()
+	      (setf (values cur-node cur-ops going-up cur-branch)
+		    (branch-cardinality cur-node cur-ops going-up cur-branch))
+	      (if (null cur-ops)
+		  nil
+		  (let (branch-poss 
+			(acc 1))
+		    (loop for i from 0 to (- (length cur-ops) 2)
+		       doing
+			 (setf acc (* acc (nth i cur-ops)))
+			 (push acc branch-poss))
+		    (values (eval (reverse cur-ops))
+			    (reverse cur-branch)
+			    (append branch-poss (list 1))))))))
+    #+END_SRC
+
+** Initialize neighborhhod-tree region-list
+   In this section I'll define a function that prepares a given neighborhood for exploration.
+
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-exploration.lisp 
+      (defun prepare-neighborhood-for-exploration (neighborhood)
+	;; first create a list of basic region list
+	;; then group all that matches a given function
+	;; third from this last list we create the regions.
+
+	(when (null (region-list neighborhood))
+
+	  ;; here we set the correct indexer function for a customize exploration
+	  (setf *from-index-to-coords-indexer-function* 'index-to-coords-customize-indexer
+		,*from-coords-to-indexer-indexer-function* 'coords-to-index-customize-indexer)
+
+	  (let* (;; here we create the branch cardinalities generator
+		 (region-card-gen (branch-definitions (tree neighborhood)))
+		 ;; create a list to store the regions
+		 region-list
+		 ;; create a list to store the basic regions
+		 basic-region-list
+		 ;; create a hash to group the basic regions
+		 (basic-region-groups (make-hash-table :test #'equal))
+		 ;; save the group keys to iterate later
+		 groups-keys
+		 ;; some data for basic regions and regions
+		 (cur-id 1)
+		 (cur-index 1)
+		 ;; average route length
+		 (avg-route (truncate (/ (num-clients (counting-solution neighborhood))
+					 (length (routes (counting-solution neighborhood))))))
+		 (subr-class-len (length *subroute-length-classifications*))
+		 )      
+	    ;; here we fit the subroute classification parameters for the current problem
+	    (setf *subroute-length-upper-bounds*
+		  (append
+		   '(1)
+		   (loop for i from 1 to (1- subr-class-len)
+		      collect
+			(ceiling (* (/ avg-route subr-class-len) i)))))
+	    ;; here we create the basic regions
+	    (loop while t
+	       doing
+		 (multiple-value-bind (cur-branch-card cur-branch-info cur-branch-poss) (funcall region-card-gen)
+		   (when (not cur-branch-card)
+		     (return))
+		   (push (make-instance 'neighborhood-basic-region
+					:info cur-branch-info
+					:subtree-sols cur-branch-poss
+					:cardinality cur-branch-card)
+			 basic-region-list)))
+	    ;; here we group basic regions using some function
+	    (loop for basic-reg in basic-region-list
+	       doing
+		 (let (;; here we compute the regions key for this basic region
+		       (key (from-branch-info-to-region-tuple (info basic-reg))))
+		   ;; if not a hash key yet store it
+		   (when (null (gethash key basic-region-groups))
+		     (push key groups-keys))
+		   ;; add basic region to the current region
+		   (push basic-reg
+			 (gethash key basic-region-groups))))
+	    ;; here we sort the keys in increasing order
+	    (setf groups-keys (sort groups-keys #'comp-less-lsts))
+	    ;; and store that order for this neighborhood
+	    (setf (region-keys neighborhood) groups-keys)
+	    ;; here we iterate over the region keys and build each region
+	    (loop for key in groups-keys
+	       doing
+		 (let (;; here we create the current region
+		       (cur-region (make-instance 'neighborhood-region
+						  :number-id cur-id
+						  :neighborhood neighborhood))
+		       )
+		   (push cur-index (region-indexes neighborhood))
+		   ;; here we iterate over the basic regions of this region
+		   (loop for basic-reg in (gethash key basic-region-groups)
+		      doing
+			(setf (first-index basic-reg) cur-index)
+			;; here we add the index and keys for this basic region
+			(push cur-index (basic-indexes cur-region))
+			(push (from-branch-info-to-branch-tuple (info basic-reg))
+			      (basic-keys cur-region))
+			;; here we update some variables
+			(incf (cardinality cur-region) (cardinality basic-reg))
+			(incf cur-index (cardinality basic-reg))
+			;; here we add the basic region to the current region
+			(push basic-reg (basic-region-list cur-region))
+			)
+		   (setf
+		    ;; here we reverse the order of indexes, keys and basic regions for this region
+		    (basic-indexes cur-region) (reverse (basic-indexes cur-region))
+		    (basic-keys cur-region) (reverse (basic-keys cur-region))	      
+		    (basic-region-list cur-region) (reverse (basic-region-list cur-region))
+		    ;; here we set the index range for the current region
+		    (index-range cur-region) (cons (first-index (first (basic-region-list cur-region)))
+						   (+ (first-index (first (basic-region-list cur-region)))
+						      (1- (cardinality cur-region)))))
+		   ;; here we add the current region to the region list
+		   (push cur-region region-list)
+		   )
+		 (incf cur-id)
+		 )
+	    (setf
+	     ;; here we set some neighborhood properties
+	     (region-indexes neighborhood) (reverse (region-indexes neighborhood))
+	     (region-list neighborhood) (reverse region-list)
+	     (number-of-regions neighborhood) (length region-list)))))
+    #+END_SRC
+
+** Print the information of each region in a given neighborhood
+
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-exploration.lisp 
+      (defun print-region (region)
+	(format t "~%Region: ~A Range: ~A - ~A Cardinality: ~A~%"
+		(number-id region)
+		(car (index-range region))
+		(cdr (index-range region))
+		(cardinality region))
+	(loop for b-reg in (basic-region-list region)
+	   doing
+	     (format t "Index: ~A Info: ~A Cardinality: ~A~%"
+		     (first-index b-reg)
+		     (info b-reg)
+		     (cardinality b-reg))))
+    #+END_SRC
+
+
+    
+* Combinatorial exploration
+  In this section I'll write some code to explore the meighborhood in a combinatorial way.
+  By combinatorial I mean, with solutions belonging to each =region=.
+  As an abstraction, the neighborhood is divided in regions, where each region is determined
+  for the values that some operation take in the solution.
+
+  Operations that determine a =region=:
+  - select-route: the route number value
+  - select-subroute: the length of the selected subroute determines a classification with
+    is defined in the configuration file.
+
+  Note: In order to use this strategy regions should be continuous interval of neighbor solutions,
+  while the classical indexer don't ensure this probperty the custome indexer does, for this reason
+  this is the correct option to use.
+
+** Description
+   By using the correct indexer each =region=, is a continuos interval of neighbor solutions. 
+   In that sense, a possible solution would be determine for each region its index range in the 
+   neighborhood and then create some generators in those ranges.
+
+** Combinatorial search
+   This function makes a combinatorial generator of the neighborhood. At this
+   moment when a region is entirely exahusted it doesn't returns any solutions
+   of this particular region. In fact, those regions are not of interest for 
+   future analysis because they were completely explored in the combinatorial
+   search.
+   
+   Note: save for each region a list of visited index, this would be used in the
+   intensification phase to avoid repetition.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-exploration.lisp 
+     (defun combinatorial-search (neighborhood)
+
+       (let ((cur-region-id 1)
+	     (region-generator-list nil)
+	     (reversed-list nil)
+	     (available-regions t)
+	     (cur-index 0))
+	 #'(lambda ()
+	     (if (> cur-region-id (number-of-regions neighborhood))
+		 ;; here we iterate over the region's generators previously
+		 ;; built till we find one that still has unvisited solutions
+		 ;; or all were exhausted.
+		 ;; this means that all regions were exhausted
+		 ;; if branch
+		 (if available-regions
+		     ;; if branch
+		     (progn
+		       ;; this list should be reversed once before start using it
+		       (when (not reversed-list)
+			 (setf reversed-list t
+			       region-generator-list (reverse region-generator-list)))
+		       (labels ((next-value (step)
+				  (if (>= step (length region-generator-list))
+				      ;; if branch
+				      (values nil (setf available-regions nil))
+				      ;; else branch
+				      (let* ((index (mod (+ cur-index step)
+							 (length region-generator-list)))
+					     (value (funcall (nth index region-generator-list))))
+					(if value
+					    ;; if branch
+					    (progn
+					      (setf cur-index (mod (+ 1 index) (length region-generator-list)))
+					      (values value (1+ index)))
+					    ;; else branch
+					    (next-value (1+ step)))))))
+			 (next-value 0)))
+		     ;; else branch
+		     (values nil nil))
+		 ;; else branch
+		 (let* ((cur-region (nth (1- cur-region-id) (region-list neighborhood)))
+			(cur-region-gen (funcall *exploration-strategy-for-combinatorial-search*
+						 cur-region))
+			(cur-value (funcall cur-region-gen)))
+		   ;; here we are building the region's generators on demand.
+		   (push cur-region-gen region-generator-list)
+		   (progn
+		     (incf cur-region-id)
+		     (values cur-value (1- cur-region-id))))))))
+   #+END_SRC
+
+   
+
+
+
+* Sequential exploration
+  In this section I'll define a function that explores the neighborhhod in a 
+  given order of its regions. The exploration strategy with which these regions
+  are explored is defined by the parameter =*intesification-strategy*= defined
+  in the configuration file.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-exploration.lisp
+     (defun sequential-search (neighborhood regions-ids-list)
+       (if (null regions-ids-list)
+	   ;; if branch
+	   #'(lambda ()
+	       nil)
+	   ;; else branch
+	   (let* (
+		  ;; current region
+		  (cur-region (nth (1- (first regions-ids-list))
+				   (region-list neighborhood)))
+		  ;; generator for the current region
+		  (cur-region-gen (funcall *exploration-strategy-for-intensification-phase*
+					   cur-region))
+		  ;; current solution
+		  (cur-solution (funcall cur-region-gen))
+		  )
+
+	     ;; remove cur-region from regions-ids-list
+	     (pop regions-ids-list)
+
+	     #'(lambda ()
+		 (if (null cur-solution)
+		     ;; if branch
+		     (if (null regions-ids-list)
+			 ;; if branch
+			 nil
+			 ;; else branch
+			 (progn
+			   ;; here we move on to the next region
+			   (setf cur-region (nth (1- (first regions-ids-list))
+						 (region-list neighborhood))
+				 cur-region-gen (funcall *exploration-strategy-for-intensification-phase*
+							 cur-region))
+
+			   ;; remove cur-region from regions-ids-list
+			   (pop regions-ids-list)
+
+			   (prog1
+			       (funcall cur-region-gen)
+			     (setf cur-solution (funcall cur-region-gen)))))
+		     ;; else branch
+		     (prog1
+			 cur-solution
+		       (setf cur-solution (funcall cur-region-gen))))))))
+   #+END_SRC
+
+
+
+* Some functions for a customize neighborhood
+** Compute the number of regions
+   In this section I'll define how to compute the number of regions for a given 
+   neighborhood.
+
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-exploration.lisp 
+      (defun get-number-of-regions  (neighborhood)
+	;; just return the number of regions
+	(number-of-regions neighborhood))
+    #+END_SRC
+
+** Determine if a set of solutions are exhausted
+   In this section I'll define a method to determine if all the solutions of a given
+   neighborhood or region were analyzed.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-exploration.lisp 
+     (defmethod is-exhausted-p ((obj neighborhood-tree))
+       (if (< (number-of-analysed-solutions (search-state obj))
+	      (cardinality obj))
+	   nil t))
+
+     (defmethod is-exhausted-p ((obj neighborhood-region))
+       (if (< (number-of-analysed-solutions (search-state obj))
+	      (cardinality obj))
+	   nil t))
+   #+END_SRC
+
+** Exploring the neighborhood
+**** Macro for common interface
+     In this section I'll define a macro that provides a common interface
+     for exploration and reduces a few line of code in the exploration
+     functions.
+     
+     #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-exploration.lisp 
+       (defmacro exploration-interface (generator total)
+	 `(let ((N ,total))
+	    #'(lambda ()
+		(if (> N 0)
+		    (progn
+		      (decf N)
+		      (funcall ,generator))
+		    nil))))
+     #+END_SRC
+
+
+**** Exhaustive exploration
+
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-exploration.lisp 
+      (defun exhaustive-exploration (obj &optional total)
+	(if (null total)
+	    (exhaustive-search obj)
+	    (let* ((gen (exhaustive-search obj)))
+	      (exploration-interface gen total))))
+    #+END_SRC
+
+
+**** Random exploration
+
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-exploration.lisp 
+      (defun random-exploration (obj n &optional total)
+	(if (null total)
+	    (random-search obj n)
+	    (let* ((gen (random-search obj n)))
+	      (exploration-interface gen total))))
+    #+END_SRC
+
+**** Uniform exploration
+
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-exploration.lisp 
+      (defun uniform-exploration (obj &optional total)
+	(if (null total)
+	    (uniform-search obj)
+	    (let* ((gen (uniform-search obj)))
+	      (exploration-interface gen total))))
+    #+END_SRC
+
+**** Cominatorial exploration
+
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-exploration.lisp 
+      (defun combinatorial-exploration (neigh &optional total)
+	(if (null total)
+	    (combinatorial-search neigh)
+	    (let ((gen (combinatorial-search neigh)))
+	      (exploration-interface gen total))))
+    #+END_SRC
+
+**** Sequential exploration
+
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-exploration.lisp 
+      (defun sequential-exploration (neigh regions-ids-list &optional total)
+	(if (null total)
+	    (sequential-search neigh regions-ids-list)
+	    (let ((gen (sequential-search neigh regions-ids-list)))
+	      (exploration-interface gen total))))
+    #+END_SRC

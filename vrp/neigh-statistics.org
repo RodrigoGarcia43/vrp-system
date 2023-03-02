@@ -1,0 +1,38 @@
+#+TITLE: Neighborhood Statistic Techniques
+#+AUTHOR: Hector F. Masson
+#+EMAIL: h.masson1911@gmail.com
+
+
+
+* Description
+  In this file, I'm going to define some statistical techniques that will be
+  used to identify the most promising regions in the neighborhood.
+  The src blocks will be tangled to ../src/neigh-statistics.lisp.
+
+
+* Add the package to the tangled files
+  #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-statistics.lisp
+    (in-package :vrp)
+  #+END_SRC
+
+
+
+* Mean technique
+
+  #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/neigh-statistics.lisp
+    (defun mean-technique (neighborhood result-table region-id-list file-name)
+      ;; the next line of code is added in order to avoid a warning
+      ;; message since file-name parameter is not used in the function
+      (declare (ignore file-name))
+      ;; (format t "Mean technique~%")
+      (mapcar #'(lambda (tuple) (cdr tuple))
+	      (sort
+	       (loop for id in region-id-list
+		  collect
+		    (let* ((key (nth (1- id) (region-keys neighborhood)))
+			   (lst (gethash key result-table)))
+		      (cons (/ (apply #'+ lst) (length lst))			  
+			    id)))
+	       #'< :key #'car)))
+  #+END_SRC
+
