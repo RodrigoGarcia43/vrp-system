@@ -231,83 +231,83 @@ Debug inside VNS.  Iteration 14, criterion 0, cost: 1352
 Debug inside VNS.  Iteration 15, criterion 0, cost: 1342
 Debug inside VNS.  Iteration 16, criterion 0, cost: 1338
 Debug inside VNS.  Iteration 17, criterion 0, cost: 1336
-Debug inside VNS.  Iteration 18, criterion 0Best solution found.
+Debug inside VNS.  Iteration 18, criterion 0.   Best solution found.
 Debug inside VNS.  Iteration 19, criterion 1, cost: 1196
 Debug inside VNS.  Iteration 20, criterion 0, cost: 1187
-Debug inside VNS.  Iteration 21, criterion 0Best solution found.
+Debug inside VNS.  Iteration 21, criterion 0.   Best solution found.
 Debug inside VNS.  Iteration 22, criterion 1, cost: 1092
-Debug inside VNS.  Iteration 23, criterion 0Best solution found.
+Debug inside VNS.  Iteration 23, criterion 0.   Best solution found.
 Debug inside VNS.  Iteration 24, criterion 1, cost: 1052
-Debug inside VNS.  Iteration 25, criterion 0Best solution found.
+Debug inside VNS.  Iteration 25, criterion 0.   Best solution found.
 Debug inside VNS.  Iteration 26, criterion 1, cost: 1013
 Debug inside VNS.  Iteration 27, criterion 0, cost: 1007
-Debug inside VNS.  Iteration 28, criterion 0Best solution found.
+Debug inside VNS.  Iteration 28, criterion 0.   Best solution found.
 Debug inside VNS.  Iteration 29, criterion 1, cost: 974
-Debug inside VNS.  Iteration 30, criterion 0Best solution found.
+Debug inside VNS.  Iteration 30, criterion 0.   Best solution found.
 Debug inside VNS.  Iteration 31, criterion 1, cost: 950
-Debug inside VNS.  Iteration 32, criterion 0Best solution found.
+Debug inside VNS.  Iteration 32, criterion 0.   Best solution found.
 Debug inside VNS.  Iteration 33, criterion 1, cost: 922
-Debug inside VNS.  Iteration 34, criterion 0Best solution found.
+Debug inside VNS.  Iteration 34, criterion 0.   Best solution found.
 Debug inside VNS.  Iteration 35, criterion 1, cost: 898
-Debug inside VNS.  Iteration 36, criterion 0Best solution found.
+Debug inside VNS.  Iteration 36, criterion 0.   Best solution found.
 Debug inside VNS.  Iteration 37, criterion 1, cost: 867
-Debug inside VNS.  Iteration 38, criterion 0Best solution found.
+Debug inside VNS.  Iteration 38, criterion 0.   Best solution found.
 Debug inside VNS.  Iteration 39, criterion 1, cost: 858
-Debug inside VNS.  Iteration 40, criterion 0Best solution found.
+Debug inside VNS.  Iteration 40, criterion 0.   Best solution found.
 Debug inside VNS.  Iteration 41, criterion 1, cost: 848
-Debug inside VNS.  Iteration 42, criterion 0Best solution found.
+Debug inside VNS.  Iteration 42, criterion 0.   Best solution found.
 Debug inside VNS.  Iteration 43, criterion 1, cost: 823
-Debug inside VNS.  Iteration 44, criterion 0Best solution found.
+Debug inside VNS.  Iteration 44, criterion 0.   Best solution found.
 Debug inside VNS.  Iteration 45, criterion 1, cost: 815
-Debug inside VNS.  Iteration 46, criterion 0Best solution found.
+Debug inside VNS.  Iteration 46, criterion 0.   Best solution found.
 Debug inside VNS.  Iteration 47, criterion 1, cost: 800
 Debug inside VNS.  Iteration 48, criterion 0, cost: 795
-Debug inside VNS.  Iteration 49, criterion 0Best solution found.
+Debug inside VNS.  Iteration 49, criterion 0.   Best solution found.
 Debug inside VNS.  Iteration 50, criterion 1, cost: 782
-Debug inside VNS.  Iteration 51, criterion 0Best solution found.
+Debug inside VNS.  Iteration 51, criterion 0.   Best solution found.
 Debug inside VNS.  Iteration 52, criterion 1, cost: 772
-Debug inside VNS.  Iteration 53, criterion 0Best solution found.
+Debug inside VNS.  Iteration 53, criterion 0.   Best solution found.
 Debug inside VNS.  Iteration 54, criterion 1, cost: 757
-Debug inside VNS.  Iteration 55, criterion 0Best solution found.
+Debug inside VNS.  Iteration 55, criterion 0.   Best solution found.
 Debug inside VNS.  Iteration 56, criterion 1, cost: 756
-Debug inside VNS.  Iteration 57, criterion 0Best solution found.
+Debug inside VNS.  Iteration 57, criterion 0.   Best solution found.
 Debug inside VNS.  Iteration 58, criterion 1, cost: 754
-Debug inside VNS.  Iteration 59, criterion 0Best solution found.
+Debug inside VNS.  Iteration 59, criterion 0.   Best solution found.
 Debug inside VNS.  Iteration 60, criterion 1, cost: 747
-Debug inside VNS.  Iteration 61, criterion 0Best solution found.
+Debug inside VNS.  Iteration 61, criterion 0.   Best solution found.
 Debug inside VNS.  Iteration 62, criterion 1, cost: 744
-Debug inside VNS.  Iteration 63, criterion 0Best solution found.
+Debug inside VNS.  Iteration 63, criterion 0.   Best solution found.
 Debug inside VNS.  Iteration 64, criterion 1, cost: 739
-Debug inside VNS.  Iteration 65, criterion 0Best solution found.
-Debug inside VNS.  Iteration 66, criterion 1Best solution found.
+Debug inside VNS.  Iteration 65, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 66, criterion 1.   Best solution found.
 Debug inside VNS.  Iteration 67, criterion 2, cost: 734
-Debug inside VNS.  Iteration 68, criterion 0Best solution found.
-Debug inside VNS.  Iteration 69, criterion 1Best solution found.
-Debug inside VNS.  Iteration 70, criterion 2Best solution found.
-Debug inside VNS.  Iteration 71, criterion 3Best solution found.
-Debug inside VNS.  Iteration 72, criterion 4Best solution found.
+Debug inside VNS.  Iteration 68, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 69, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 70, criterion 2.   Best solution found.
+Debug inside VNS.  Iteration 71, criterion 3.   Best solution found.
+Debug inside VNS.  Iteration 72, criterion 4.   Best solution found.
 Debug inside VNS.  Iteration 73, criterion 5, cost: 716
-Debug inside VNS.  Iteration 74, criterion 0Best solution found.
+Debug inside VNS.  Iteration 74, criterion 0.   Best solution found.
 Debug inside VNS.  Iteration 75, criterion 1, cost: 707
-Debug inside VNS.  Iteration 76, criterion 0Best solution found.
-Debug inside VNS.  Iteration 77, criterion 1Best solution found.
+Debug inside VNS.  Iteration 76, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 77, criterion 1.   Best solution found.
 Debug inside VNS.  Iteration 78, criterion 2, cost: 700
 Debug inside VNS.  Iteration 79, criterion 0, cost: 697
-Debug inside VNS.  Iteration 80, criterion 0Best solution found.
+Debug inside VNS.  Iteration 80, criterion 0.   Best solution found.
 Debug inside VNS.  Iteration 81, criterion 1, cost: 690
-Debug inside VNS.  Iteration 82, criterion 0Best solution found.
-Debug inside VNS.  Iteration 83, criterion 1Best solution found.
-Debug inside VNS.  Iteration 84, criterion 2Best solution found.
-Debug inside VNS.  Iteration 85, criterion 3Best solution found.
-Debug inside VNS.  Iteration 86, criterion 4Best solution found.
+Debug inside VNS.  Iteration 82, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 83, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 84, criterion 2.   Best solution found.
+Debug inside VNS.  Iteration 85, criterion 3.   Best solution found.
+Debug inside VNS.  Iteration 86, criterion 4.   Best solution found.
 Debug inside VNS.  Iteration 87, criterion 5, cost: 683
 Debug inside VNS.  Iteration 88, criterion 0, cost: 677
-Debug inside VNS.  Iteration 89, criterion 0Best solution found.
-Debug inside VNS.  Iteration 90, criterion 1Best solution found.
-Debug inside VNS.  Iteration 91, criterion 2Best solution found.
-Debug inside VNS.  Iteration 92, criterion 3Best solution found.
-Debug inside VNS.  Iteration 93, criterion 4Best solution found.
-Debug inside VNS.  Iteration 94, criterion 5Best solution found.
+Debug inside VNS.  Iteration 89, criterion 0.   Best solution found.
+Debug inside VNS.  Iteration 90, criterion 1.   Best solution found.
+Debug inside VNS.  Iteration 91, criterion 2.   Best solution found.
+Debug inside VNS.  Iteration 92, criterion 3.   Best solution found.
+Debug inside VNS.  Iteration 93, criterion 4.   Best solution found.
+Debug inside VNS.  Iteration 94, criterion 5.   Best solution found.
 (S1: (677)
 routes:
   <r5: <cv:1. 0/100> (<d:0>: (<c15: 18> <c16: 10> <c3: 14> <c9: 18> <c17: 24>))>
@@ -323,7 +323,7 @@ routes:
  95 T)
 #+end_example
 
-Now, let's restrict the problem. The new problem will penalize solutions with routes that cost 185 or more (185 is the cost of the larger route of the solution found int the previous code).
+Now, let's restrict the problem. The new problem will penalize solutions with routes that cost 185 or more (185 is the cost of the larger route of the solution found in the previous code).
 
 
 #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/eval-classes.lisp
