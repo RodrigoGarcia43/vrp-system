@@ -1019,7 +1019,7 @@ The following elements are syntactic sugar, to make the code more natural to rea
 		      "src/vrp-neighborhood-exploration-macros.lisp"
 		      "src/vrp-neighborhood-simulation.lisp"
 		      "src/vrp-neighborhood-operations.lisp"
-		      "src/vrp-delta-cost.lisp"
+		      ;;"src/vrp-delta-cost.lisp"
 		      ;;		      "src/vrp-search-strategies.lisp"
 
 		      "src/neigh-configuration.lisp"
@@ -1033,7 +1033,7 @@ The following elements are syntactic sugar, to make the code more natural to rea
 		      "src/neigh-compatibility.lisp"
 		      "src/neigh-exploration.lisp"
 		      "src/neigh-exploration-heuristics.lisp"
-		      "src/neigh-strategies.lisp"
+		      ;; "src/neigh-strategies.lisp"
 
 		      "src/neigh-statistics.lisp"
 
@@ -1043,7 +1043,7 @@ The following elements are syntactic sugar, to make the code more natural to rea
 
 		      "src/prefabs-classes.lisp"
 		      "src/prefabs-functions.lisp"
-		      "src/prefabs-tutorials.lisp"
+		      ;;"src/prefabs-tutorials.lisp"
 
 		      "src/vrp-criteria.lisp"
 		      "src/vrp-algorithms.lisp"
@@ -1056,7 +1056,7 @@ The following elements are syntactic sugar, to make the code more natural to rea
 		      "data/vrp-data-f-n135-k7.lisp"
 
 		      "data/neigh-data.lisp"
-		      "src/neigh-algorithms.lisp"
+		      ;;"src/neigh-algorithms.lisp"
 ))
        (format t "Loading ~a...~%" f)
        (load f))
@@ -1383,7 +1383,16 @@ for fn, fo in dests.items():
 **** code
     #+BEGIN_SRC emacs-lisp :results none :exports code :tangle ../vrp-emacs-utils.el
       (defvar vrp-tangle-list
-	`("vrp-suite.org"
+	`(
+	  "eval-classes.org"
+	  "eval-graph-builder.org"
+	  "eval-methods.org"
+	  "eval-testing.org"
+	  "generator-classes.org"
+	  "generator-functions.org"
+	  "generator.tutorials.org"
+
+	  "vrp-suite.org"
 	  "vrp-classes.org"
 	  "vrp-moments.org"
 	  "vrp-data.org"
@@ -1395,18 +1404,19 @@ for fn, fo in dests.items():
 	  "vrp-criteria.org"
 	  "vrp-algorithms.org"
 
+	  "neigh-cardinality.org"
 	  "neigh-class-macros.org"
 	  "neigh-classes.org"
-	  "neigh-criterion.org"
 	  "neigh-compatibility.org"
-	  "neigh-cardinality.org"
-	  "neigh-indexer.org"
-	  "neigh-exploration.org"
-	  "neigh-statistics.org"
-	  "neigh-exploration-heuristics.org"
+	  "neigh-criterion.org"
 	  "neigh-data.org"
-	  "neigh-search-strategies.org"
-	  "neigh-algorithms.org")
+	  "neigh-exploration-heuristics.org"
+	  "neigh-exploration.org"
+	  "neigh-indexer.org"
+	  ;; "neigh-search-strategies.org"
+	  "neigh-statistics.org"
+	  "neigh-suite.org"
+	  )
 	"A list with all the files that should be tangled.")
     #+END_SRC
      

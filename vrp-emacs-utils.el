@@ -191,7 +191,16 @@ Return a list whose CAR is the tangled file name."
         (kill-buffer to-be-removed)))))
 
 (defvar vrp-tangle-list
-  `("vrp-suite.org"
+  `(
+    "eval-classes.org"
+    "eval-graph-builder.org"
+    "eval-methods.org"
+    "eval-testing.org"
+    "generator-classes.org"
+    "generator-functions.org"
+    "generator.tutorials.org"
+
+    "vrp-suite.org"
     "vrp-classes.org"
     "vrp-moments.org"
     "vrp-data.org"
@@ -203,18 +212,19 @@ Return a list whose CAR is the tangled file name."
     "vrp-criteria.org"
     "vrp-algorithms.org"
 
+    "neigh-cardinality.org"
     "neigh-class-macros.org"
     "neigh-classes.org"
-    "neigh-criterion.org"
     "neigh-compatibility.org"
-    "neigh-cardinality.org"
-    "neigh-indexer.org"
-    "neigh-exploration.org"
-    "neigh-statistics.org"
-    "neigh-exploration-heuristics.org"
+    "neigh-criterion.org"
     "neigh-data.org"
-    "neigh-search-strategies.org"
-    "neigh-algorithms.org")
+    "neigh-exploration-heuristics.org"
+    "neigh-exploration.org"
+    "neigh-indexer.org"
+    ;; "neigh-search-strategies.org"
+    "neigh-statistics.org"
+    "neigh-suite.org"
+    )
   "A list with all the files that should be tangled.")
 
 (defun vrp-tangle-all-files ()

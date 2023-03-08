@@ -194,23 +194,26 @@
   nil)
 
 (defmethod generate-code-inside-loop :after
-    (description
-     strategy
-     (other-strategies use-eval-graph)
-     (where-to-store-it basic-neighborhood-strategy-blueprint))
+		    (description
+		     strategy
+		     (other-strategies use-eval-graph)
+		     (where-to-store-it basic-neighborhood-strategy-blueprint))
 
 
 
-  (push `(setf ops-list (from-coordinates-to-operations current-solution))
-	(code-inside-the-loop where-to-store-it))
-  (push `(do-suite-operations graph ops-list) 
-	(code-inside-the-loop where-to-store-it))
-  (push `(setf current-cost (output-value (output graph)))
-	(code-inside-the-loop where-to-store-it))
-  (push `(undo-suite-operations graph ops-list)
-	(code-inside-the-loop where-to-store-it))
-  (push `(setf current-solution (funcall sol-generator))
-	(code-inside-the-loop where-to-store-it)))
+		  (push `(setf ops-list (from-coordinates-to-operations current-solution))
+			(code-inside-the-loop where-to-store-it))
+;		  (push `(format t "~a ~%" ops-list)
+;			(code-inside-the-loop where-to-store-it))
+	  
+		  (push `(do-suite-operations graph ops-list) 
+			(code-inside-the-loop where-to-store-it))
+		  (push `(setf current-cost (output-value (output graph)))
+			(code-inside-the-loop where-to-store-it))
+		  (push `(undo-suite-operations graph ops-list)
+			(code-inside-the-loop where-to-store-it))
+		  (push `(setf current-solution (funcall sol-generator))
+			(code-inside-the-loop where-to-store-it)))
 
 (defmethod generate-code-inside-loop :after
     (description

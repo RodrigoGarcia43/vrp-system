@@ -5548,8 +5548,6 @@
 * VRP-system VNS 
 ** description
    This is an algorithm that receives a problem, a list with several criteria prefabs and an evaluation graph. It gets the best neighbor according to the current criterion and, if the best-neighbor found with that criterion is better than the current one, repeat the process.  When we find a solution that is a local minimum to that criterion, we change the criterion.  If it is a local minimum to all the criteria we have, then we assume that it is a solution for the problem.
-
-   
 ** code
    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/vrp-algorithms.lisp
    ;; Variable Neighboorhood Search
