@@ -261,6 +261,62 @@
       ;; it means that we are going up in the tree an we return to node's parent
       (branch-cardinality (parent tree) ops (at-parent tree) branch)))
 
+(defmethod branch-cardinality ((tree v-node)
+                               ops index branch)
+  (let ((poss (possibilities tree)))
+    (if (null index)
+        ;; it means that we are going down in the tree so we push the number of possibilities on
+        ;; this node to /ops/ and continue traversing down
+        (branch-cardinality (child tree) (cons poss ops) nil branch)
+        ;; it means that we are going up in the tree so we continue traversing up
+        (branch-cardinality (parent tree) (rest ops) (at-parent tree) branch))))
+
+(defmethod branch-cardinality ((tree z-node)
+                               ops index branch)
+  (let ((poss (possibilities tree)))
+    (if (null index)
+        ;; it means that we are going down in the tree so we push the number of possibilities on
+        ;; this node to /ops/ and continue traversing down
+        (branch-cardinality (child tree) (cons poss ops) nil branch)
+        ;; it means that we are going up in the tree so we continue traversing up
+        (branch-cardinality (parent tree) (rest ops) (at-parent tree) branch))))
+
+(defmethod branch-cardinality ((tree t-node)
+			       ops index branch)
+  (if (null index)
+      ;; it means that we are going down in the tree so we continue going down
+      (branch-cardinality (child tree) ops nil branch)
+      ;; it means that we are going up in the tree so we continue to node's parent
+      (branch-cardinality (parent tree) ops (at-parent tree) branch)))
+	  
+(defmethod branch-cardinality ((tree d-node)
+                               ops index branch)
+  (let ((poss (possibilities tree)))
+    (if (null index)
+        ;; it means that we are going down in the tree so we push the number of possibilities on
+        ;; this node to /ops/ and continue traversing down
+        (branch-cardinality (child tree) (cons poss ops) nil branch)
+        ;; it means that we are going up in the tree so we continue traversing up
+        (branch-cardinality (parent tree) (rest ops) (at-parent tree) branch))))
+
+(defmethod branch-cardinality ((tree x-node)
+                               ops index branch)
+  (let ((poss (possibilities tree)))
+    (if (null index)
+        ;; it means that we are going down in the tree so we push the number of possibilities on
+        ;; this node to /ops/ and continue traversing down
+        (branch-cardinality (child tree) (cons poss ops) nil branch)
+        ;; it means that we are going up in the tree so we continue traversing up
+        (branch-cardinality (parent tree) (rest ops) (at-parent tree) branch))))
+
+(defmethod branch-cardinality ((tree s-node)
+			       ops index branch)
+  (if (null index)
+      ;; it means that we are going down in the tree so we continue going down
+      (branch-cardinality (child tree) ops nil branch)
+      ;; it means that we are going up in the tree so we continue to node's parent
+      (branch-cardinality (parent tree) ops (at-parent tree) branch)))
+	  
 (defun branch-definitions (tree)
   (let ((cur-node tree)
 	cur-branch

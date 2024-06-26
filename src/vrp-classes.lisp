@@ -252,6 +252,32 @@
   :slots-for-obj= (id routes cost)
   :slots-for-clone (id routes cost))
 
+(def-vrp-class has-heterogeneous-fleet ()
+  ((fleet))
+  :documentation "Represents that solutions may  have one or more depots."
+  ;; no constructor because it as an abstract class
+  ;; no print-object because it as an abstract class
+  ;; no obj= or clone because it as an abstract class
+  )
+
+(def-vrp-class mdvrp-solution (basic-solution
+                               has-multi-depots)
+  ()
+  :documentation "A md-solution, includes not only the routes and clients, but also different depots."
+  :constructor (mdvrp-solution (&key id routes depots (cost 0)))
+  :print-object-string ("S~a: (~a)~%~{  ~a~%~} ~%~{  ~a~%~} " id cost routes depots)
+  :slots-for-obj= (id routes depots cost)
+  :slots-for-clone (id routes depots cost))
+  
+(def-vrp-class hfvrp-solution (basic-solution
+                               has-heterogeneous-fleet)
+  ()
+  :documentation "A md-solution, includes not only the routes and clients, but also different depots."
+  :constructor (hfvrp-solution (&key id routes fleet (cost 0)))
+  :print-object-string ("S~a: (~a)~%~{  ~a~%~} ~%~{  ~a~%~} " id cost routes fleet)
+  :slots-for-obj= (id routes fleet cost)
+  :slots-for-clone (id routes fleet cost))
+
 (def-vrp-class basic-cvrp-solution
     (basic-solution
      has-infinite-fleet)
@@ -978,6 +1004,50 @@
                  :depot depot
                  :vehicle vehicle)))
 
+(defun make-hfvrp-solution-from-list (sol-id routes depots)
+  (let* ((actual-routes (loop for sublist in routes
+                              for id from 1
+                              collecting (let ((vehicle-id (car sublist))
+                                              (clients (cdr sublist)))
+                                           (make-basic-route-from-list
+                                            id clients vehicle-id 0))))
+         (depots-list (loop for d in depots
+                        collecting (basic-depot d))))
+    ;; return the solution
+    (hfvrp-solution :id sol-id :routes actual-routes :fleet depots-list)))
+
+(defmacro with-hfvrp-solution ((solution-name
+                                routes
+                                fleet
+                                &optional (id 1))
+                               &body body)
+
+  `(let* ((,solution-name (make-hfvrp-solution-from-list
+                           ,id ',routes ',fleet)))
+     ,@body))
+     
+(defun make-mdvrp-solution-from-list (sol-id routes depots)
+  (let* ((actual-routes (loop for sublist in routes
+                              for id from 1
+                              collecting (let ((depot-id (car sublist))
+                                              (clients (cdr sublist)))
+                                           (make-basic-route-from-list
+                                            id clients id depot-id))))
+         (depots-list (loop for d in depots
+                        collecting (basic-depot d))))
+    ;; return the solution
+    (mdvrp-solution :id sol-id :routes actual-routes :depots depots-list)))
+
+(defmacro with-mdvrp-solution ((solution-name
+                                routes
+                                depots
+                                &optional (id 1))
+                               &body body)
+
+  `(let* ((,solution-name (make-mdvrp-solution-from-list
+                           ,id ',routes ',depots)))
+     ,@body))
+     
 ;;; make-basic-solution-from-list function
 (defun make-basic-solution-from-list (sol-id routes)
   "This functions receives a list that represent a basic solution.  The elements of the list are list with numbers.  The numbers represent the id of the clients in the route.  For example:

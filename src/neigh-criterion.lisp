@@ -102,6 +102,82 @@
 	  (operation-id result) (incf (getf operations-id (first element) -1)))
     result))
 
+(defmethod create-neigh-operation-from ((symbol (eql 'select-vehicle))
+                                        element)
+  ;; ('select-vehicle d from rj)
+  (declare (special operations-id))
+  (let (result)
+    (setf result (new-v-operation)
+          ;; here we save the vehicle and route symbol
+          (vehicle-symbol result) (second element)
+          (route-symbol result) (fourth element)
+          ;; get the operation identifier
+          (operation-id result) (incf (getf operations-id (first element) -1)))
+    result))
+
+(defmethod create-neigh-operation-from ((symbol (eql 'select-vehicle-from-list))
+                                        element)
+  ;; (selecy vehicle fron infinite-list)
+  (declare (special operations-id))
+  (let (result)
+    (setf result (new-z-operation)
+          ;; here we save the depot
+          (vehicle-symbol result) (second element)
+          ;; get the operation identifier
+          (operation-id result) (incf (getf operations-id (first element) -1)))
+    result))
+
+(defmethod create-neigh-operation-from ((symbol (eql 'swap-vehicles))
+                                        element)
+  ;; (swap-vehicles vi vj)
+  (declare (special operations-id))
+  (let (result)
+    (setf result (new-t-operation)
+          ;; here we save the vehicle1 and vehicle2 symbols
+          (vehicle-1-symbol result) (second element)
+          (vehicle-2-symbol result) (third element)
+          ;; get the operation identifier
+          (operation-id result) (incf (getf operations-id (first element) -1)))
+    result))
+
+(defmethod create-neigh-operation-from ((symbol (eql 'select-depot))
+                                        element)
+  ;; ('select-depot d from rj)
+  (declare (special operations-id))
+  (let (result)
+    (setf result (new-d-operation)
+          ;; here we save the depot and route symbol
+          (depot-symbol result) (second element)
+          (route-symbol result) (fourth element)
+          ;; get the operation identifier
+          (operation-id result) (incf (getf operations-id (first element) -1)))
+    result))
+
+(defmethod create-neigh-operation-from ((symbol (eql 'select-non-selected-depot))
+                                        element)
+  ;; ('select-son-selected-depot d from non-selected-depots)
+  (declare (special operations-id))
+  (let (result)
+    (setf result (new-x-operation)
+          ;; here we save the depot
+          (depot-symbol result) (second element)
+          ;; get the operation identifier
+          (operation-id result) (incf (getf operations-id (first element) -1)))
+    result))
+
+(defmethod create-neigh-operation-from ((symbol (eql 'swap-depots))
+                                        element)
+  ;; (swap-depots di dj)
+  (declare (special operations-id))
+  (let (result)
+    (setf result (new-s-operation)
+          ;; here we save the depot1 and depot2 symbols
+          (depot-1-symbol result) (second element)
+          (depot-2-symbol result) (third element)
+          ;; get the operation identifier
+          (operation-id result) (incf (getf operations-id (first element) -1)))
+    result))
+    
 (defun create-operation-instances-from (list)
   (let* (operations-id
 	 route-ops

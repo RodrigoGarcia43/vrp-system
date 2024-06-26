@@ -6,6 +6,60 @@
     (make-instance `counting-basic-solution :routes route-list
 					    :num-clients (apply #'+ route-list))))
 
+(defmethod transform-to-counting-solution ((vrp-sol hfvrp-solution))
+  (let* ((counting-solution (make-counting-solution-from vrp-sol)))
+    ;; let's initialize it
+    (initialize-counting-solution-from counting-solution vrp-sol)
+    ;; return the counting-solution
+    counting-solution))
+
+(defmethod transform-to-counting-solution ((vrp-sol mdvrp-solution))
+  (let* ((counting-solution (make-counting-solution-from vrp-sol)))
+    ;; let's initialize it
+    (initialize-counting-solution-from counting-solution vrp-sol)
+    ;; return the counting-solution
+    counting-solution))
+
+(defmethod make-counting-solution-from ((vrp-solution hfvrp-solution))
+  "Returns an instance of counting-basic-solution"
+  (make-instance `counting-hfvrp-solution))
+
+(defmethod make-counting-solution-from ((vrp-solution mdvrp-solution))
+  "Returns an instance of counting-basic-solution"
+  (make-instance `counting-mdvrp-solution))
+
+(defmethod initialize-counting-solution-from
+    (counting-solution mdvrp-solution)
+  "Just return nil"
+  nil)
+
+(defmethod initialize-counting-solution-from
+    (counting-solution hfvrp-solution)
+  "Just return nil"
+  nil)
+
+(defmethod initialize-counting-solution-from :after
+    ((count-sol counting-hfvrp-solution)
+     (vrp-solution hfvrp-solution))
+  "Initalizes the slots in the counting-basic-solution"
+  (let ((route-list (loop for r in (routes vrp-solution)
+                            collecting (length (clients r))))
+        (vehicles-count (length (fleet vrp-solution))))
+    (setf (routes count-sol) route-list
+          (num-clients count-sol) (apply #'+ route-list)
+          (num-vehicles count-sol) vehicles-count)))
+
+(defmethod initialize-counting-solution-from :after
+    ((count-sol counting-mdvrp-solution)
+     (vrp-solution mdvrp-solution))
+  "Initalizes the slots in the counting-basic-solution"
+  (let ((route-list (loop for r in (routes vrp-solution)
+                            collecting (length (clients r))))
+        (depot-count (length (depots vrp-solution))))
+    (setf (routes count-sol) route-list
+          (num-clients count-sol) (apply #'+ route-list)
+          (num-depots count-sol) depot-count)))
+
 (defmethod compute-delta-position ((symbol (eql 'r))
 				   coordinate
 				   route position)
