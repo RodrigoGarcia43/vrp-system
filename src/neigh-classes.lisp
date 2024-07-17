@@ -8,6 +8,22 @@
   :print-object-string ("<counting-basic-solution ~a, ~a>" num-clients routes)
   :slots-for-obj= (num-clients routes))
 
+(def-vrp-class counting-hfvrp-solution (counting-basic-solution)
+  ((num-vehicles))
+
+  :documentation "A basic solution for counting."
+  :constructor (new-counting-basic-solution)
+  :print-object-string ("<counting-basic-solution ~a, ~a, ~a>" num-clients routes num-vehicles)
+  :slots-for-obj= (num-clients routes num-vehicles))
+
+(def-vrp-class counting-mdvrp-solution (counting-basic-solution)
+  ((num-depots))
+
+  :documentation "A basic solution for counting."
+  :constructor (new-counting-basic-solution)
+  :print-object-string ("<counting-basic-solution ~a, ~a, ~a>" num-clients routes num-depots)
+  :slots-for-obj= (num-clients routes num-depots))
+
 (def-vrp-class counting-op-init ()
 	   ()		
 
@@ -71,6 +87,48 @@
  :constructor (new-h-operation)
  :print-object-string ("<h-op id: ~a, subroute: ~a>" operation-id subroute-symbol)
  :slots-for-obj= (operation-id subroute-symbol))
+
+(def-vrp-class counting-op-select-vehicle ()
+  ((operation-id) (route-symbol) (vehicle-symbol))
+  :documentation "A class to represent the select-vehicle operation."
+  :constructor (new-v-operation)
+  :print-object-string ("<v-op id: ~a, route: ~a, vehicle: ~a>" operation-id route-symbol vehicle-symbol)
+  :slots-for-obj= (operation-id route-symbol vehicle-symbol))
+
+(def-vrp-class counting-op-select-vehicle-from-list (); seleccionar deposito de la lista de disponibles
+  ((operation-id) (vehicle-symbol))
+  :documentation "A class to represent the sselect-vehicle-from-list operation."
+  :constructor (new-z-operation)
+  :print-object-string ("<z-op id: ~a, route: ~a, vehicle: ~a>" operation-id vehicle-symbol)
+  :slots-for-obj= (operation-id vehicle-symbol))
+
+(def-vrp-class counting-op-swap-vehicles ()
+ ((operation-id) (vehicle-1-symbol) (vehicle-2-symbol))
+ :documentation "A class to represent the swap-vehicles operation."
+ :constructor (new-t-operation)
+ :print-object-string ("<t-op id: ~a, vehicle 1: ~a, vehicle 2: ~a>" operation-id vehicle-1-symbol vehicle-2-symbol)
+ :slots-for-obj= (operation-id vehicle-1-symbol vehicle-2-symbol))
+
+(def-vrp-class counting-op-select-depot ()
+  ((operation-id) (route-symbol) (depot-symbol))
+  :documentation "A class to represent the select-depot operation."
+  :constructor (new-d-operation)
+  :print-object-string ("<d-op id: ~a, route: ~a, depot: ~a>" operation-id route-symbol depot-symbol)
+  :slots-for-obj= (operation-id route-symbol depot-symbol))
+
+(def-vrp-class counting-op-select-non-selected-depot (); seleccionar deposito de la lista de disponibles
+  ((operation-id) (depot-symbol))
+  :documentation "A  class to represent the select-non-selected-depot operation."
+  :constructor (new-x-operation)
+  :print-object-string ("<a-op id: ~a, route: ~a, depot: ~a>" operation-id depot-symbol)
+  :slots-for-obj= (operation-id depot-symbol))
+
+(def-vrp-class counting-op-swap-depots ()
+ ((operation-id) (depot-1-symbol) (depot-2-symbol))
+ :documentation "A class to represent the swap-depots operation."
+ :constructor (new-s-operation)
+ :print-object-string ("<s-op id: ~a, depot 1: ~a, depot 2: ~a>" operation-id depot-1-symbol depot-2-symbol)
+ :slots-for-obj= (operation-id depot-1-symbol depot-2-symbol))
 
 (def-vrp-class root-node ()
   ((node-id) (total) (child)) 
@@ -218,6 +276,112 @@
   :slots-for-obj= (node-id total parent at-parent select-op-id child)
   :slots-for-clone (node-id total parent at-parent select-op-id child))
 
+(def-vrp-class v-node ()
+  ((node-id  :initarg :node-id
+	     :initform 0)
+   (total :initform 0)
+   (parent :initarg :parent
+	   :initform nil)
+   (at-parent :initarg :at-parent
+	      :initform 1)
+   (route-number :initarg :route-number)
+   (possibilities :initarg :possibilities
+          :initform 0)
+   (child   :initform nil))  
+  :documentation "A class to represent a select-vehicle operation in the neighborhood-tree."
+  :constructor (new-v-node)
+  :print-object-string ("<v-node id: ~a, count: ~a, parent: ~a, at-parent: ~a>" node-id total parent at-parent)
+  :slots-for-obj= (node-id total parent at-parent route-number possibilities child)
+  :slots-for-clone (node-id total parent at-parent route-number possibilities child))
+
+(def-vrp-class z-node ()
+  ((node-id  :initarg :node-id
+	     :initform 0)
+   (total :initform 0)
+   (parent :initarg :parent
+	   :initform nil)
+   (at-parent :initarg :at-parent
+	      :initform 1)
+   (num-vehicles :initarg :num-vehicles)
+   (possibilities :initarg :possibilities
+          :initform 0)
+   (child   :initform nil))  
+  :documentation "A class to represent a counting-op-select-vehicle-from-list operation in the neighborhood-tree."
+  :constructor (new-z-node)
+  :print-object-string ("<z-node id: ~a, count: ~a, parent: ~a, at-parent: ~a>" node-id total parent at-parent)
+  :slots-for-obj= (node-id total parent at-parent num-vehicles possibilities child)
+  :slots-for-clone (node-id total parent at-parent num-vehicles possibilities child))
+
+(def-vrp-class t-node ()
+  ((node-id  :initarg :node-id
+	     :initform 0)
+   (total :initform 0)
+   (parent :initarg :parent
+	   :initform nil)
+   (at-parent :initarg :at-parent
+	      :initform 1)
+   (select-op1-id :initarg :select-op1-id)
+   (select-op2-id :initarg :select-op2-id)
+   (child   :initform nil)) 
+  :documentation "A class to represent a swap-vehicles operation in the neighberhood-tree."
+  :constructor (new-t-node)
+  :print-object-string ("<t-node id: ~a, count: ~a, parent: ~a, at-parent: ~a>" node-id total parent at-parent)
+  :slots-for-obj= (node-id total parent at-parent select-op1-id select-op2-id child)
+  :slots-for-clone (node-id total parent at-parent select-op1-id select-op2-id child))
+  
+(def-vrp-class d-node ()
+  ((node-id  :initarg :node-id
+	     :initform 0)
+   (total :initform 0)
+   (parent :initarg :parent
+	   :initform nil)
+   (at-parent :initarg :at-parent
+	      :initform 1)
+   (route-number :initarg :route-number)
+   (possibilities :initarg :possibilities
+          :initform 0)
+   (child   :initform nil))  
+  :documentation "A class to represent a select-depot operation in the neighborhood-tree."
+  :constructor (new-d-node)
+  :print-object-string ("<d-node id: ~a, count: ~a, parent: ~a, at-parent: ~a>" node-id total parent at-parent)
+  :slots-for-obj= (node-id total parent at-parent route-number possibilities child)
+  :slots-for-clone (node-id total parent at-parent route-number possibilities child))
+
+(def-vrp-class x-node ()
+  ((node-id  :initarg :node-id
+	     :initform 0)
+   (total :initform 0)
+   (parent :initarg :parent
+	   :initform nil)
+   (at-parent :initarg :at-parent
+	      :initform 1)
+   (num-depots :initarg :num-depots)
+   (possibilities :initarg :possibilities
+          :initform 0)
+   (child   :initform nil))  
+  :documentation "A class to represent a select-non-selected-depot operation in the neighborhood-tree."
+  :constructor (new-x-node)
+  :print-object-string ("<x-node id: ~a, count: ~a, parent: ~a, at-parent: ~a>" node-id total parent at-parent)
+  :slots-for-obj= (node-id total parent at-parent num-depots possibilities child)
+  :slots-for-clone (node-id total parent at-parent num-depots possibilities child))
+
+(def-vrp-class s-node ()
+  ((node-id  :initarg :node-id
+	     :initform 0)
+   (total :initform 0)
+   (parent :initarg :parent
+	   :initform nil)
+   (at-parent :initarg :at-parent
+	      :initform 1)
+   (select-op1-id :initarg :select-op1-id)
+   (select-op2-id :initarg :select-op2-id)
+   (child   :initform nil)) 
+  :documentation "A class to represent a swap-depots operation in the neighberhood-tree."
+  :constructor (new-s-node)
+  :print-object-string ("<s-node id: ~a, count: ~a, parent: ~a, at-parent: ~a>" node-id total parent at-parent)
+  :slots-for-obj= (node-id total parent at-parent select-op1-id select-op2-id child)
+  :slots-for-clone (node-id total parent at-parent select-op1-id select-op2-id child))
+  
 (def-vrp-class nil-node ()
   ((total :initform 0
 	  :initarg :total-count)

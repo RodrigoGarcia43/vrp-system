@@ -1,0 +1,295 @@
+#+TITLE: Neighborhood Tutorials with depots and vehicles operations.
+#+AUTHOR: Lázaro A. Castro Arango
+
+
+* Description
+ In this file we'll write all the tutorial explaining the neigh system for news operations with depots and vehicles.
+
+ ** New operations
+ select-vehicle: represent the swap-vehicles operation.
+ select-vehicle-from-list: represent the select-vehicle-from-list operation.
+ swap-vehicles: represent the select-vehicle operation.
+ select-depot: represent the select-vehicle operation.                                  
+ select-non-selected-depot: represent the select-vehicle-from-list operation.
+ swap-depots: represent the swap-vehicles operation.
+
+ *** important
+ In this tutorial, we will use MDVRP as an example to see how to deal with different types of exploration. 
+ You can use these operations in the VRP variant you need, just by defining the characteristics of your problem
+ using classes and inheriting from the necessary ones in the system.
+
+* How to load the system (vrp) with emacs
+   Here we'll assume that the user is using emacs.  
+   1. Clone the git repo in the folder =vrp= to the working directory
+      For the rest of the tutorial, we assume that the name of the working directory is tmp/vrp.
+
+   2. We should have one in the working directory: vrp-emacs-utils.el. Let's load it.
+      =M-x load-file /tmp/vrp/vrp-emacs-utils.el=
+
+   3. From emacs fire up slime (=M-x slime=)
+
+   4. In Slime, change the current directory to the working directory
+       (this can be done by typing =,= in the REPL and then =cd= <RETURN>, and navigate to the working directory)
+
+   5. In slime load the file src/vrp-load-files
+      #+BEGIN_SRC lisp +n -r :results none :exports code 
+      (load "src/vrp-load-files.lisp")
+      #+END_SRC
+
+   6. Change to the package vrp
+      #+BEGIN_SRC lisp +n -r :results none :exports code 
+      (in-package :vrp)
+      #+END_SRC
+      
+      From here on, we are ready to work with the system, and that's what we'll do in the following tutorials.
+
+* Count the number of neighbor solutions for rrxxsaac
+   The neighborhood tree class stores the cardinality of the neighborhood that it represents. Then, use the function =build-neighborhood-tree= to construct the neighborhood and access to the cardinality attribute.
+
+   #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-tutorials.lisp 
+   (with-mdvrp-solution (s1 ((1 1 2 3)
+					 (2 4 5)
+					 (3 6 7 8))
+                     (1 2 3))
+		 ;; code here
+		 (let* ((code `((select-route r1)
+				   (select-route r2)
+           (select-non-selected-depot d1)
+           (select-non-selected-depot d2)
+           (swap-depots d1 d2)
+				   (select-client c1 from r1)
+				   (select-client c2 from r2)
+				   (swap-clients c1 c2)))
+			;; here you build the neighborhood tree
+			(neighborhood-tree (build-neighborhood-tree code s1)))
+		   ;; here we compute the total number of neighbor solutions
+    
+		   (setf card (cardinality neighborhood-tree))
+		   (format t "cardinality ~a" card)))
+   #+END_SRC
+
+** Exhaustuve exploration
+    The function =exhaustive-search= is mainly recommended for internal use of the neigh system.  There is a function =exhaustive-exploration= that receives the neighborhood or region and as an option the total number of neighbors desired, if this parameter is not provided it is assumed as the set cardinality.
+    
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-tutorials.lisp 
+    (with-mdvrp-solution (s1 ((1 1 2 3)
+                              (2 4 5)
+                              (3 6 7 8))
+                              (1 2 3))
+
+      (let* ((code `((select-route r1)
+             (select-route r2)
+             (select-non-selected-depot d1)
+             (select-non-selected-depot d2)
+             (swap-depots d1 d2)
+             (select-client c1 from r1)
+             (select-client c2 from r2)
+             (swap-clients c1 c2)))
+             ;;here we create the neighborhood tree
+             (neigh (build-neighborhood-tree code s1))
+             ;;here we crete the exhaustive generator
+             (sol-generator (exhaustive-exploration neigh))
+             ;;the current neighbor-solution
+             (current-sol (funcall sol-generator)))
+        ;;print all solutions in the neighborhhod
+        (loop while (not (null current-sol))
+           do (print current-sol)
+             (setf current-sol (funcall sol-generator)))))
+    #+END_SRC
+
+    With the customize indexer function, because we are exploring a given region in the neighborhood.
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-tutorials.lisp 
+    (with-mdvrp-solution (s1 ((1 1 2 3)
+                               (2 4 5)
+                               (3 6 7 8))
+                               (1 2 3))
+    (let* (;; here you define the neighborhood criteria
+           (code `((select-route r1)
+           (select-route r2)
+           (select-non-selected-depot d1)
+           (select-non-selected-depot d2)
+           (swap-depots d1 d2)
+           (select-client c1 from r1)
+           (select-client c2 from r2)
+           (swap-clients c1 c2)))
+           ;; here we create the neighborhood tree
+           (neigh (build-neighborhood-tree code s1)))
+      ;; this line has to be added to use the customize indexer
+      (prepare-neighborhood-for-exploration neigh)
+      (let* (;; here we get the first regions in the neighborhood
+             (first-reg (first (region-list neigh)))
+             ;; here we crete the exhaustive generator
+             (sol-generator (exhaustive-exploration first-reg 10)))
+        ;; print all solutions in the neighborhood
+        (loop while t
+           doing
+             (let ((cur-sol (funcall sol-generator)))
+               (when (null cur-sol)
+                 (return))
+               (format t "~A~%" cur-sol))))))
+    #+END_SRC
+
+** Uniform exploration
+    The function =uniform-search= is mainly recommended for internal use of the neigh system, there is a function =uniform-exploration= that receives the neighborhood of region and as an option the total number of neighbors desired, if this parameter is not provided it is assumed as the set cardinality.
+
+    *** Example: With the classic indexer function, since we explore all solutions in the neighborhood.
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-tutorials.lisp
+    (with-mdvrp-solution (s1 ((1 1 2 3)
+				 (2 4 5)
+				 (3 6 7 8))
+                 (1 2 3))
+
+	 (let* (;; here you define the neighborhood criteria
+	        (code `((select-route r1)
+		    (select-route r2)
+            (select-non-selected-depot d1)
+            (select-non-selected-depot d2)
+            (swap-depots d1 d2)
+		    (select-client c1 from r1)
+		    (select-client c2 from r2)
+		    (swap-clients c1 c2)))
+	        ;; here we create the neighborhood tree
+	        (neigh (build-neighborhood-tree code s1))
+	        ;; here we crete the exhaustive generator
+	        (sol-generator (uniform-exploration neigh))
+	        ;; the current neighbor-solution
+	        (current-sol (funcall sol-generator)))
+	   ;; print all solutions in the neighborhhod
+	   (loop while (not (null current-sol))
+	      do (print current-sol)
+	        (setf current-sol (funcall sol-generator)))))
+    #+END_SRC
+
+    *** Example : With the customize indexer function, even though we explore 10 solutions in the neighborhood.
+
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-tutorials.lisp
+    (with-mdvrp-solution (s1 ((1 1 2 3)
+                               (2 4 5)
+                               (3 6 7 8))
+                               (1 2 3))
+
+        (let* (;; here you define the neighborhood criteria
+	       (code `((select-route r1)
+		   (select-route r2)
+           (select-non-selected-depot d1)
+           (select-non-selected-depot d2)
+           (swap-depots d1 d2)
+		   (select-client c1 from r1)
+		   (select-client c2 from r2)
+		   (swap-clients c1 c2)))
+	       ;; here we create the neighborhood tree
+	       (neigh (build-neighborhood-tree code s1))
+	       ;; here we crete the exhaustive generator
+	       (sol-generator (uniform-exploration neigh 10)))
+	  ;; this line has to be added to use the customize indexer
+	  (prepare-neighborhood-for-exploration neigh)
+	  ;; print all solutions in the neighborhood
+	  (loop while t
+	     doing
+	       (let ((cur-sol (funcall sol-generator)))
+		 (when (null cur-sol)
+		   (return))
+		 (format t "~A~%" cur-sol)))))
+    #+END_SRC
+
+** Combinatorial exploration
+    Is important to explain the notion of =region=. A =region= is a set of neighborhood solutions, that shares the same values for a given set of components in the coordinate list, it's completely accurate to say that those components in the coordinate list are fixed for a given =region= and the rest are free, and these are the ones that provides variability to the =region=.
+    Note: It worth mentioning that both functions returns two values: the generated solution and the identifier of the region where it belongs. However, the second value can be discarded when the solution is the only important thing for the user's job. This is the only generator function that returns two values.
+    
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-tutorials.lisp
+    (with-mdvrp-solution (s1 ((1 1 2 3)
+                               (2 4 5)
+                               (3 6 7 8))
+                               (1 2 3))
+
+        (let* (;; here you define the neighborhood criteria
+	       (code `((select-route r1)
+		   (select-route r2)
+           (select-non-selected-depot d1)
+           (select-non-selected-depot d2)
+           (swap-depots d1 d2)
+		   (select-client c1 from r1)
+		   (select-client c2 from r2)
+		   (swap-clients c1 c2)))
+	       ;; here we create the neighborhood tree
+	       (neigh (build-neighborhood-tree code s1))
+	       ;; here we crete the exhaustive generator
+	       (sol-generator (uniform-exploration neigh 10)))
+	  ;; this line has to be added to use the customize indexer
+	  (prepare-neighborhood-for-exploration neigh)
+	  ;; print all solutions in the neighborhood
+	  (loop while t
+	     doing
+	       (let ((cur-sol (funcall sol-generator)))
+		 (when (null cur-sol)
+		   (return))
+		 (format t "~A~%" cur-sol)))))
+    #+END_SRC
+
+    With the customize indexer function, since we are exploring in the regions.
+
+    #+BEGIN_SRC lisp +n -r :results none :exports code :tangle ../src/prefabs-tutorials.lisp
+    (with-mdvrp-solution (s1 ((1 1 2 3)
+                          (2 4 5)
+                          (3 6 7 8))
+                          (1 2 3))
+
+	(let* (;; here you define the neighborhood criteria
+	       (code `((select-route r1)
+		   (select-route r2)
+		   (select-non-selected-depot d1)
+           (select-non-selected-depot d2)
+           (swap-depots d1 d2)
+ 		   (select-client c1 from r1)
+ 		   (select-client c2 from r2)
+ 		   (swap-clients c1 c2)))
+	       ;; here we create the neighborhood tree
+	       (neigh (build-neighborhood-tree code s1))
+	       ;; here we crete the combinatorial sample generator
+	       (sol-generator (combinatorial-exploration neigh 100)))
+	  ;; this line has to be added to use the customize indexer
+	  (prepare-neighborhood-for-exploration neigh)
+	  ;; print all solutions in the neighborhhod
+	  (loop while t
+	     doing
+	       (multiple-value-bind (cur-sol cur-region) (funcall sol-generator)
+		 (when (not cur-sol)
+		   (return))
+		 (format t "~A : ~A~%" cur-region cur-sol)))))
+    #+END_SRC
+
+** Introduction to the sequential exploration
+    In this section I'll explain how to perform a sequential search over a neighborhood.  The idea is to explore some regions in some order, for that reason this function takes as a parameter the neighborhood and a list with the region's identifiers.
+    
+    Example 1: With the customize indexer function
+    (with-mdvrp-solution (s1 ((1 1 2 3)
+                           (2 4 5)
+                           (3 6 7 8))
+                           (1 2 3))
+
+	(let* (;; here you define the neighborhood criteria
+	       (code `((select-route r1)
+		   (select-route r2)
+           (select-non-selected-depot d1)
+           (select-non-selected-depot d2)
+           (swap-depots d1 d2)
+		   (select-client c1 from r1)
+		   (select-client c2 from r2)
+		   (swap-clients c1 c2)))
+	       ;; here we create the neighborhood tree
+	       (neigh (build-neighborhood-tree code s1))
+	       ;; here we crete the combinatorial sample generator
+	       sol-generator
+	       ;; the current neighbor-solution
+	       current-sol)
+	  ;; this line has to be added to use the customize indexer
+	  (prepare-neighborhood-for-exploration neigh)
+	  ;; here we define that generator and the current solution
+	  (setf sol-generator (sequential-exploration neigh '(1 2 3 4 5 6 7 8 9) 20)
+		current-sol (funcall sol-generator))
+
+	  ;; print all solutions in the neighborhhod
+	  (loop while (not (null current-sol))
+	     do
+	       (format t "~a~%" current-sol)
+	       (setf current-sol (funcall sol-generator)))))

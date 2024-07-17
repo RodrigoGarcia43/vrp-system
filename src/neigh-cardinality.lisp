@@ -345,6 +345,228 @@
 				       :total-count default)))
     tree-nil-node))
 
+(defmethod count-neighbors ((op counting-op-select-vehicle)
+                            (sol counting-hfvrp-solution)
+                            other-ops default)
+  (let* ((result 0)
+         (child nil)
+         ;; here we get the index of the curent route
+         (current-route (get (route-symbol op) 'number))
+         ;; first let's build the tree node
+         (tree-v-node (make-instance 'v-node
+                                     :node-id (operation-id op)
+                                     :route-number current-route)))
+
+
+      ;; now let's save the select operation id for this 
+      ;; and the symbol of its route
+      (setf (get (vehicle-symbol op) 'select-op-id) (operation-id op)
+            (get (vehicle-symbol op) 'route-symbol) (route-symbol op))
+
+
+      ;; here we should compute everything else
+      (setf child (count-neighbors (first other-ops)
+                                   sol
+                                   (rest other-ops) 1))
+      ;; here we check if this subtree produces any solutions
+      (when (> (total child) 0)
+        ;; here we set the child to the current tree node
+        (setf (child tree-v-node) child
+              ;; here we set parent for child node
+              (parent child) tree-v-node))
+
+      ;; update result
+      (setf result (total child))
+
+    ;; here we set the total amount of neighbors a this node
+    (setf (total tree-v-node) result)
+    ;; and finally return v-node
+    tree-v-node))
+
+(defmethod count-neighbors ((op counting-op-select-vehicle-from-list)
+			    (sol counting-hfvrp-solution)
+			    other-ops default)
+  (let* ((result 0)
+	 (child nil)
+	
+	 (tree-z-node (make-instance 'z-node
+				     :node-id (operation-id op)
+                     :num-vehicles (num-vehicles sol))))
+   
+    (setf result (num-vehicles sol))
+   
+    (when (> result 0)
+     
+      (setf (possibilities tree-z-node) result)
+
+     
+      (setf (get (vehicle-symbol op) 'select-op-id) (operation-id op))
+
+      
+      (decf (num-vehicles sol))
+      ;; here we should compute everything else
+      (setf child (count-neighbors (first other-ops)
+				   sol
+				   (rest other-ops) 1))
+      ;; here we check if this subtree produces any solutions
+      (when (> (total child) 0)
+	;; here we set the child to the current tree node
+	(setf (child tree-z-node) child
+	      ;; here we set parent for child node
+	      (parent child) tree-z-node))
+
+      ;; update result
+      (setf result (* result (total child)))
+      ;; and we should fix what we broke in the solution
+      (incf (num-vehicles sol)))
+
+    ;; here we set the total amount of neighbors a this node
+   
+    (setf (total tree-z-node) result)
+    ;; and finally return x-node
+    tree-z-node))
+
+(defmethod count-neighbors ((op counting-op-swap-vehicles)
+                            (sol counting-basic-solution)
+                            other-ops default)
+  (let* ((child nil)
+         ;; then let's build the tree node
+         (tree-t-node (make-instance 't-node
+                                     :node-id (operation-id op)
+                                     :select-op1-id (get (vehicle-1-symbol op) 'select-op-id)
+                                     :select-op2-id (get (vehicle-2-symbol op) 'select-op-id))))
+
+    ;; here we should compute everything else
+    (setf child (count-neighbors (first other-ops)
+                                 sol
+                                 (rest other-ops) 1))
+
+    ;; here we check if this subtree produces any solutions
+    (when (> (total child) 0)
+      ;; here we set the child to the current tree node
+      (setf (child tree-t-node) child
+            ;; here we set parent for child node
+            (parent child) tree-t-node
+            ;; here we set the total amount of neighbors at this node
+            (total tree-t-node) (total child)))
+
+
+    ;; and finally return t-node
+    tree-t-node))
+
+(defmethod count-neighbors ((op counting-op-select-depot)
+                            (sol counting-basic-solution)
+                            other-ops default)
+  (let* ((result 0)
+         (child nil)
+         ;; here we get the index of the curent route
+         (current-route (get (route-symbol op) 'number))
+         ;; first let's build the tree node
+         (tree-d-node (make-instance 'd-node
+                                     :node-id (operation-id op)
+                                     :route-number current-route)))
+
+
+      ;; now let's save the select operation id for this 
+      ;; and the symbol of its route
+      (setf (get (depot-symbol op) 'select-op-id) (operation-id op)
+            (get (depot-symbol op) 'route-symbol) (route-symbol op))
+
+
+      ;; Here we extract the depot from the route
+      ; Code here 
+
+      ;; here we should compute everything else
+      (setf child (count-neighbors (first other-ops)
+                                   sol
+                                   (rest other-ops) 1))
+      ;; here we check if this subtree produces any solutions
+      (when (> (total child) 0)
+        ;; here we set the child to the current tree node
+        (setf (child tree-d-node) child
+              ;; here we set parent for child node
+              (parent child) tree-d-node))
+
+      ;; update result
+      (setf result (total child))
+
+    ;; here we set the total amount of neighbors a this node
+    ;(format t "El valor de result es ~a" result)
+    (setf (total tree-d-node) result)
+    ;; and finally return d-node
+    tree-d-node))
+
+(defmethod count-neighbors ((op counting-op-select-non-selected-depot)
+			    (sol counting-mdvrp-solution)
+			    other-ops default)
+  (let* ((result 0)
+	 (child nil)
+	
+	 (tree-x-node (make-instance 'x-node
+				     :node-id (operation-id op)
+                     :num-depots (num-depots sol))))
+   
+    (setf result (num-depots sol))
+   
+    (when (> result 0)
+     
+      (setf (possibilities tree-x-node) result)
+
+     
+      (setf (get (depot-symbol op) 'select-op-id) (operation-id op))
+
+      
+      (decf (num-depots sol))
+      ;; here we should compute everything else
+      (setf child (count-neighbors (first other-ops)
+				   sol
+				   (rest other-ops) 1))
+      ;; here we check if this subtree produces any solutions
+      (when (> (total child) 0)
+	;; here we set the child to the current tree node
+	(setf (child tree-x-node) child
+	      ;; here we set parent for child node
+	      (parent child) tree-x-node))
+
+      ;; update result
+      (setf result (* result (total child)))
+      ;; and we should fix what we broke in the solution
+      (incf (num-depots sol)))
+
+    ;; here we set the total amount of neighbors a this node
+   
+    (setf (total tree-x-node) result)
+    ;; and finally return x-node
+    tree-x-node))
+
+(defmethod count-neighbors ((op counting-op-swap-depots)
+                            (sol counting-mdvrp-solution)
+                            other-ops default)
+  (let* ((child nil)
+         ;; then let's build the tree node
+         (tree-s-node (make-instance 's-node
+                                     :node-id (operation-id op)
+                                     :select-op1-id (get (depot-1-symbol op) 'select-op-id)
+                                     :select-op2-id (get (depot-2-symbol op) 'select-op-id))))
+
+    ;; here we should compute everything else
+    (setf child (count-neighbors (first other-ops)
+                                 sol
+                                 (rest other-ops) 1))
+
+    ;; here we check if this subtree produces any solutions
+    (when (> (total child) 0)
+      ;; here we set the child to the current tree node
+      (setf (child tree-s-node) child
+            ;; here we set parent for child node
+            (parent child) tree-s-node
+            ;; here we set the total amount of neighbors at this node
+            (total tree-s-node) (total child)))
+
+
+    ;; and finally return s-node
+    tree-s-node))
+    
 (defun build-neighborhood-tree (code sol &optional probl)
   (let* ((operations (create-operation-instances-from code))
 	 (count-solution (transform-to-counting-solution sol))

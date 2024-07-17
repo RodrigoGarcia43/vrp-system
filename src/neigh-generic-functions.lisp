@@ -51,3 +51,9 @@
 (defgeneric is-exhausted-p (obj))
 
 (defgeneric count-neighbors (op sol other-ops default))
+
+(defgeneric initialize-counting-solution-from (counting-solution source-solution)
+  (:documentation "Initialize counting solution from a source solution."))
+
+(defgeneric make-counting-solution-from (vrp-solution)
+  (:documentation "Returns an instance of counting-basic-solution"))

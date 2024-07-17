@@ -106,6 +106,30 @@
       (error "In h-node nth-neighbor index is incorrect.")
       (cons (list 'h (select-op-id tree))
 	    (nth-neighbor (child tree) index))))
+(defmethod nth-neighbor ((tree v-node)
+                         index)
+    (if (> index (total(child tree))) 
+        (error "In a-node nth-neighbor index is incorrect.")
+        (cons (list 'v (route-number tree) (node-id tree))
+              (nth-neighbor (child tree) index ))))
+
+(defmethod nth-neighbor ((tree z-node)
+                         index)
+  (let* ((pos (1+ (truncate (/ index (total (child tree)))))))
+    (if (= index (* (total (child tree)) (1- pos)))
+        (decf pos))
+    (if (> pos (possibilities tree)) 
+        (error "In a-node nth-neighbor index is incorrect.")
+        (cons (list 'z  pos (node-id tree))
+              (nth-neighbor (child tree)
+                            (- index (* (1- pos) (total (child tree)))))))))
+
+(defmethod nth-neighbor ((tree t-node)
+                         index)
+  (if (> index (total tree))
+      (error "In s-node nth-neighbor index is incorrect.")
+      (cons (list 't (select-op1-id tree) (select-op2-id tree))
+            (nth-neighbor (child tree) index))))
 
 (defmethod nth-neighbor ((tree nil-node)
 			 index)
@@ -118,6 +142,31 @@
   (if (null (child tree))
       (error "In root-node ops-neighbor ops list is incorrect.")
       (ops-neighbor (child tree) ops 0)))
+
+(defmethod nth-neighbor ((tree d-node)
+                         index)
+    (if (> index (total(child tree))) 
+        (error "In a-node nth-neighbor index is incorrect.")
+        (cons (list 'd (route-number tree) (node-id tree))
+              (nth-neighbor (child tree) index ))))
+
+(defmethod nth-neighbor ((tree x-node)
+                         index)
+  (let* ((pos (1+ (truncate (/ index (total (child tree)))))))
+    (if (= index (* (total (child tree)) (1- pos)))
+        (decf pos))
+    (if (> pos (possibilities tree)) 
+        (error "In x-node nth-neighbor index is incorrect.")
+        (cons (list 'x  pos (node-id tree))
+              (nth-neighbor (child tree)
+                            (- index (* (1- pos) (total (child tree)))))))))
+
+(defmethod nth-neighbor ((tree s-node)
+                         index)
+  (if (> index (total tree))
+      (error "In s-node nth-neighbor index is incorrect.")
+      (cons (list 's (select-op1-id tree) (select-op2-id tree))
+            (nth-neighbor (child tree) index))))
 
 (defmethod ops-neighbor ((tree r-node)
 			 ops default)
@@ -314,6 +363,62 @@
 				index
 				branch-info branch-poss)
   (cons (list 'h (select-op-id tree))
+	(nth-branch-neighbor (child tree) index
+			     branch-info branch-poss)))
+
+(defmethod nth-branch-neighbor ((tree t-node)
+				index
+				branch-info branch-poss)
+  (cons (list 's (select-op1-id tree) (select-op2-id tree))
+	(nth-branch-neighbor (child tree) index
+			     branch-info branch-poss)))
+
+(defmethod nth-branch-neighbor ((tree v-node)
+				index
+				branch-info branch-poss)
+  (cons (list 'v (route-number tree) (node-id tree))
+	(nth-branch-neighbor (child tree) index
+			     branch-info branch-poss)))
+
+(defmethod nth-branch-neighbor ((tree z-node)
+				index
+				branch-info branch-poss)
+
+  (let* ((sol-for-poss (first branch-poss))
+	 (pos (1+ (truncate (/ index sol-for-poss)))))
+    (when (= index (* sol-for-poss (1- pos)))
+      (decf pos))
+    (cons (list 'x (num-depots tree) pos (node-id tree))
+	      (nth-branch-neighbor (child tree)
+				   (- index (* (1- pos) sol-for-poss))
+				   branch-info
+				   (rest branch-poss)))))
+
+(defmethod nth-branch-neighbor ((tree s-node)
+				index
+				branch-info branch-poss)
+  (cons (list 's (select-op1-id tree) (select-op2-id tree))
+	(nth-branch-neighbor (child tree) index
+			     branch-info branch-poss)))
+
+(defmethod nth-branch-neighbor ((tree x-node)
+				index
+				branch-info branch-poss)
+
+  (let* ((sol-for-poss (first branch-poss))
+	 (pos (1+ (truncate (/ index sol-for-poss)))))
+    (when (= index (* sol-for-poss (1- pos)))
+      (decf pos))
+    (cons (list 'x (num-depots tree) pos (node-id tree))
+	      (nth-branch-neighbor (child tree)
+				   (- index (* (1- pos) sol-for-poss))
+				   branch-info
+				   (rest branch-poss)))))
+
+(defmethod nth-branch-neighbor ((tree d-node)
+				index
+				branch-info branch-poss)
+  (cons (list 'd (route-number tree) (node-id tree))
 	(nth-branch-neighbor (child tree) index
 			     branch-info branch-poss)))
 
